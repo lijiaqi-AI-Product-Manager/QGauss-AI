@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete,Get, Param, Post, Put, Query,Res, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -6,10 +6,14 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { VoiceService } from './voice.service';
 import { VoiceConfigDto, VoiceCreateDto, VoiceQuoteDto } from './voice.dto';
 import { MAX_RECORDING_BYTES } from './voice-protocol';
+import {VoiceLibraryService} from './voice-library.service';
 
 @Controller('voice')
 export class VoiceController {
-  constructor(private readonly voice:VoiceService){}
+  constructor(private readonly voice:VoiceService,private readonly library:VoiceLibraryService){}
+  @Get('library') history(@CurrentUser() user:AuthUser,@Query() query:Record<string,unknown>){return this.library.list(user.id,query);}
+  @Get('library/:id') historicalDetail(@CurrentUser() user:AuthUser,@Param('id') id:string){return this.library.detail(user.id,id);}
+  @Delete('library/:id') removeHistory(@CurrentUser() user:AuthUser,@Param('id') id:string){return this.library.remove(user.id,id);}
   @Roles('ADMIN') @Get('admin/config') config(){return this.voice.adminConfig();}
   @Roles('ADMIN') @Put('admin/config') save(@Body() dto:VoiceConfigDto){return this.voice.saveConfig(dto);}
   @Roles('ADMIN') @Get('admin/receipts') receipts(){return this.voice.receipts();}

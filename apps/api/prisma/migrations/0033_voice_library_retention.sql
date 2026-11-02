@@ -1,0 +1,11 @@
+ALTER TABLE "voice_config" ADD COLUMN "retentionDays" INTEGER NOT NULL DEFAULT 0 CHECK ("retentionDays" BETWEEN 0 AND 3650);
+ALTER TABLE "voice_tasks" ADD COLUMN "label" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "voice_tasks" ADD COLUMN "retentionDays" INTEGER NOT NULL DEFAULT 0 CHECK ("retentionDays" BETWEEN 0 AND 3650);
+ALTER TABLE "voice_tasks" ADD COLUMN "expiresAt" DATETIME;
+ALTER TABLE "voice_tasks" ADD COLUMN "deletedAt" DATETIME;
+ALTER TABLE "voice_tasks" ADD COLUMN "purgedAt" DATETIME;
+ALTER TABLE "upload_files" ADD COLUMN "expiresAt" DATETIME;
+ALTER TABLE "upload_files" ADD COLUMN "purgedAt" DATETIME;
+CREATE INDEX "voice_tasks_userId_deletedAt_createdAt_idx" ON "voice_tasks"("userId","deletedAt","createdAt");
+CREATE INDEX "voice_tasks_expiresAt_purgedAt_idx" ON "voice_tasks"("expiresAt","purgedAt");
+CREATE INDEX "upload_files_scope_deletedAt_purgedAt_idx" ON "upload_files"("scope","deletedAt","purgedAt");

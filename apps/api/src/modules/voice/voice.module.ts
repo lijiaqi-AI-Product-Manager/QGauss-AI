@@ -7,5 +7,6 @@ import { SettingsModule } from '../settings/settings.module';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
 import { VoiceAccountingService } from './voice-accounting.service';
-@Module({imports:[ModelsModule,CommerceModule,StorageModule,ModerationModule,SettingsModule],controllers:[VoiceController],providers:[VoiceService,VoiceAccountingService],exports:[VoiceService]})
+import {VoiceLibraryService} from './voice-library.service';
+@Module({imports:[ModelsModule,CommerceModule,StorageModule,ModerationModule,SettingsModule],controllers:[VoiceController],providers:[VoiceService,VoiceAccountingService,VoiceLibraryService],exports:[VoiceService]})
 export class VoiceModule{}

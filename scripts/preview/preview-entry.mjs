@@ -29,6 +29,7 @@ import { installationFixtures } from './installation-fixture.mjs';
 import { mailFixtures, mailFixturePage } from './mail-fixture.mjs';
 import { webSearchMessage } from './web-search-fixture.mjs';
 import {agentFixtures,agentFixturePage} from './agent-fixture.mjs';
+import {voiceLibraryFixtures,voiceLibraryPage} from './voice-library-fixture.mjs';
 import {voiceFixtures} from './voice-fixture.mjs';
 import {emailVerificationFixtures,emailVerificationAction} from './email-verification-fixture.mjs';
 const installationState = new URL(location.href).searchParams.get('state');
@@ -117,10 +118,12 @@ if (referralState === 'referral-paused') fixtures['/api/sales/info'].enabled = f
 for (const app of fixtures['/api/apps']) fixtures['/api/apps/' + app.id] ||= app;
 Object.assign(fixtures,emailVerificationFixtures(fixtures,installationState));
 if(installationState?.startsWith('creator-')||installationState?.startsWith('review-'))Object.assign(fixtures,appStudioFixtures(installationState));
+if(installationState?.startsWith('voice-library-'))Object.assign(fixtures,voiceLibraryFixtures(installationState));
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
   const url = new URL(typeof input === 'string' ? input : input.url, location.href);
   if(url.origin===location.origin&&installationState?.startsWith('email-')){const sample=emailVerificationAction(installationState,url.pathname,init.method||'GET',typeof init.body==='string'?JSON.parse(init.body):{},fixtures);if(sample)return sample;}
+  if(installationState?.startsWith('voice-library-')&&/^\/api\/voice\/tasks\/qg-library-voice-\d+\/audio\/[01]$/.test(url.pathname))return nativeFetch('/qgauss-film-voice.wav');
   if(installationState?.startsWith('video-tools-')){
     const raw=/^\/api\/upload\/(qg-film-material-(image|video|audio))\/raw$/.exec(url.pathname);if(raw)return nativeFetch(({image:'/art/qgauss-companion.png',video:'/qgauss-film-material.mp4',audio:'/qgauss-film-voice.wav'})[raw[2]]);
     if((init.method||'GET')==='POST'&&url.pathname.startsWith('/api/video/materials/from-task/'))return new Response(JSON.stringify({code:0,data:filmMaterialSamples[1]}),{status:201,headers:{'Content-Type':'application/json'}});
@@ -158,6 +161,7 @@ window.fetch = async (input, init = {}) => {
   if ((installationState === 'install-error' && url.pathname === '/api/installation/status') || (installationState === 'welcome-error' && url.pathname === '/api/installation/readiness')) return new Response(JSON.stringify({code:503,message:'明确的本地启航清单读取失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});
   if ((new URL(location.href).searchParams.get('state') === 'account-error' && url.pathname === '/api/users/profile') || (new URL(location.href).searchParams.get('state') === 'account-logs-error' && url.pathname === '/api/users/logins')) return new Response(JSON.stringify({code:503,message:'明确的本地账户读取失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});
   let data = fixtures[url.pathname];
+  if(supported&&installationState?.startsWith('voice-library-')&&url.pathname==='/api/voice/library')data=voiceLibraryPage(data,url);
   if(supported&&(installationState?.startsWith('creator-')||installationState?.startsWith('review-')))data=appStudioPage(data,url);
   if(installationState==='agents-error'&&url.pathname==='/api/agents')return new Response(JSON.stringify({code:503,message:'本地搭档列表加载失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});
   if(supported&&url.pathname==='/api/agents')data=agentFixturePage(data,url);

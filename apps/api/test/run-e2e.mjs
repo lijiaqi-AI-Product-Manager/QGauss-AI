@@ -207,6 +207,7 @@ async function main() {
     { name: '智能体协作 agents.e2e.mjs', script: join(here, 'agents.e2e.mjs') },
     { name: '智能体进程恢复 agents-recovery.e2e.mjs', script: join(here, 'agents-recovery.e2e.mjs') },
     { name: '原生语音 voice.e2e.mjs', script: join(here, 'voice.e2e.mjs') },
+    { name: '声音收藏室 voice-library.e2e.mjs', script: join(here, 'voice-library.e2e.mjs') },
     { name: '语音进程恢复 voice-recovery.e2e.mjs', script: join(here, 'voice-recovery.e2e.mjs') },
     { name: '账户与密码 account-security.e2e.mjs', script: join(here, 'account-security.e2e.mjs') },
     { name: '注册与邮箱验证 email-verification.e2e.mjs', script: join(here, 'email-verification.e2e.mjs') },

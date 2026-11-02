@@ -108,7 +108,7 @@ export class StorageService {
   async saveBuffer(
     userId: string,
     buffer: Buffer,
-    opts: { mime: string; filename: string; scope?: string },
+    opts: { mime: string; filename: string; scope?: string;expiresAt?:Date|null },
   ) {
     const maximum = ['video','video-input'].includes(opts.scope || '') && opts.mime === 'video/mp4' ? 96 * 1024 * 1024 : 20 * 1024 * 1024;
     if (buffer.length > maximum) {
@@ -136,6 +136,7 @@ export class StorageService {
       data: {
         userId,
         scope: opts.scope ?? 'image',
+        expiresAt:opts.expiresAt??null,
         filename: opts.filename.slice(0, 200),
         storedKey: key,
         mime: opts.mime,
@@ -169,10 +170,10 @@ export class StorageService {
 
   private async findOwned(id: string, userId: string, role: string) {
     const row = await this.prisma.uploadFile.findUnique({ where: { id } });
-    if (!row || row.deletedAt) {
+    if (!row || row.deletedAt || row.purgedAt || row.expiresAt && row.expiresAt <= new Date()) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '文件不存在', 404);
     }
-    if (row.userId !== userId && role !== 'ADMIN') {
+    if (row.userId !== userId && (role !== 'ADMIN'||['voice-recording','voice-result'].includes(row.scope))) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '文件不存在', 404);
     }
     return row;
@@ -202,17 +203,27 @@ export class StorageService {
     return { ok: true };
   }
 
+  /** Dedicated voice files remain retryable until storage confirms removal. */
+  async purgeVoiceFile(id:string,userId:string,scope:'voice-recording'|'voice-result'){
+    const row=await this.prisma.uploadFile.findFirst({where:{id,userId,scope,mime:scope==='voice-recording'?'audio/wav':'audio/mpeg'}});
+    if(!row||row.purgedAt)return{purged:true};
+    if(!row.deletedAt)throw new Error('Voice file must be withdrawn before physical cleanup');
+    await this.driver.remove(row.storedKey);
+    await this.prisma.uploadFile.updateMany({where:{id,userId,scope,deletedAt:{not:null},purgedAt:null},data:{purgedAt:new Date()}});
+    return{purged:true};
+  }
+
   async listMine(userId: string, page = 1, pageSize = 20) {
     const safePage = Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
     const safeSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Math.floor(pageSize))) : 20;
     const [items, total] = await Promise.all([
       this.prisma.uploadFile.findMany({
-        where: { userId, deletedAt: null },
+        where: { userId, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] },
         orderBy: { createdAt: 'desc' },
         skip: (safePage - 1) * safeSize,
         take: safeSize,
       }),
-      this.prisma.uploadFile.count({ where: { userId, deletedAt: null } }),
+      this.prisma.uploadFile.count({ where: { userId, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] } }),
     ]);
     return { items: items.map((r) => this.view(r)), total, page: safePage, pageSize: safeSize };
   }
