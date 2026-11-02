@@ -1,0 +1,65 @@
+/* QGauss AI 对话视图：按参考 chatBase 的居中问候、790px 卡片与输入层次适配真实状态。 */
+body .qg-client-shell .qgc-chat .cv-main{display:flex;flex-direction:column;position:relative;min-height:0;overflow:hidden;background:#fff}
+html.dark body .qg-client-shell .qgc-chat .cv-main{background:#0f0f12}
+.qgc-chat-stage{display:contents}
+@media(min-width:640px){body .qg-client-shell.is-floating .qgc-chat{width:calc(100% + 6px)}}
+body .qg-client-shell .qgc-chat.is-new-chat .qgc-chat-stage{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:790px;max-width:calc(100% - 32px);display:flex;flex-direction:column;align-items:center;gap:12px}
+body .qg-client-shell .qgc-chat.is-new-chat .cv-top{display:none}
+body .qg-client-shell .qgc-chat.is-new-chat .cv-scroll{width:100%;height:auto;min-height:0;flex:none;overflow:visible;padding:0;scrollbar-gutter:auto}
+.qgc-chat-welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;max-width:790px;padding:24px 32px 0}
+.qgc-chat-greeting{display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:24px;min-height:28px}
+.qgc-chat-greeting h1{font-family:inherit;font-weight:700;font-size:28px;line-height:28px;text-align:center;margin:0;color:#000}
+.dark .qgc-chat-greeting h1{color:#fff}
+.qgc-chat-welcome p{font-size:14px;line-height:22.75px;text-align:center;margin:0 0 16px;color:#606060}
+.dark .qgc-chat-welcome p{color:#dbdbdb}
+body .qg-client-shell .qgc-chat .cv-dock{width:790px;max-width:calc(100% - 32px);padding:4px 0;margin:0 auto;flex:none;background:transparent;border:0}
+body .qg-client-shell .qgc-chat.is-new-chat .cv-dock{width:100%;max-width:none;margin:0;padding:0}
+body .qg-client-shell .qgc-chat .cv-composer{display:flex;flex-direction:column;justify-content:space-between;gap:0;width:100%;min-height:142px;padding:12px;margin:0 0 8px;border:1.5px solid #eaeaea;border-radius:24px;background:#f3f4f6;box-shadow:none;backdrop-filter:none;transform:none;transition:box-shadow .3s}
+html.dark body .qg-client-shell .qgc-chat .cv-composer{background:#2c2c2d;border-color:#333}
+body .qg-client-shell .qgc-chat .cv-composer.focus{box-shadow:0 4px 12px #00000014}
+html.dark body .qg-client-shell .qgc-chat .cv-composer.focus{box-shadow:0 4px 12px #0000004d}
+body .qg-client-shell .qgc-chat .cv-composer.dragging{outline:2px dashed #3e71f7;outline-offset:3px}
+body .qg-client-shell .qgc-chat .cv-inputrow{display:flex;align-items:flex-start;padding:0 12px .9px;gap:0;width:100%;position:relative}
+body .qg-client-shell .qgc-chat .cv-inputrow:after{content:'';display:block;flex:none;width:20px}
+body .qg-client-shell .qgc-chat .cv-input{flex:1;min-width:0;min-height:71.8px;height:71.8px;max-height:248.2px;padding:6.5px 0;border:0;border-radius:0;background:transparent;color:#333639;box-shadow:none;outline:none;resize:none;overflow-y:auto;overflow-x:hidden;transition:none;font:14px/1.4 QGaussSans,sans-serif}
+.qgc-input-mirror{position:absolute;top:0;left:12px;visibility:hidden;pointer-events:none;white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word;padding:6.5px 0;font:14px/19.6px QGaussSans,sans-serif;border:0}
+body .qg-client-shell .qgc-chat .cv-input::placeholder{color:#c2c2c2;opacity:1}
+html.dark body .qg-client-shell .qgc-chat .cv-input{color:rgba(255,255,255,.82)}
+html.dark body .qg-client-shell .qgc-chat .cv-input::placeholder{color:rgba(255,255,255,.38)}
+body .qg-client-shell .qgc-chat .cv-tools{display:flex;align-items:center;flex-wrap:nowrap;gap:8px;margin:0;padding:0;min-height:40px;color:#4c4c4c}
+html.dark body .qg-client-shell .qgc-chat .cv-tools{color:#dbdbdb}
+body .qg-client-shell .qgc-chat .cv-chip{display:inline-flex;align-items:center;gap:8px;flex:none;padding:8px 12px;height:auto;min-height:40px;max-width:50%;border:1px solid #e5e7eb;border-radius:16px;background:#fff;color:#1f2937;box-shadow:0 1px 2px #0000000d;font-size:14px;font-weight:500;line-height:22.4px}
+html.dark body .qg-client-shell .qgc-chat .cv-chip{background:#383838;color:#fff;border-color:transparent}
+body .qg-client-shell .qgc-chat .cv-chip-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body .qg-client-shell .qgc-chat .cv-tools>.cv-chip:not(.qgc-compact-tool){gap:0}
+body .qg-client-shell .qgc-chat .cv-tools>.cv-chip:not(.qgc-compact-tool)>.el-icon{font-size:16px;width:16px;height:16px;margin-right:8px}
+body .qg-client-shell .qgc-chat .cv-tools>.cv-chip:not(.qgc-compact-tool)>.qgc-model-caret{margin-right:0;margin-left:4px}
+body .qg-client-shell .qgc-chat .cv-chip.qgc-compact-tool,body .qg-client-shell .qgc-chat .cv-plus,body .qg-client-shell .qgc-chat .cv-mic{width:32px;height:32px;min-height:32px;padding:0;border:0;border-radius:12px;background:transparent;color:inherit;box-shadow:none;display:inline-flex;align-items:center;justify-content:center;flex:none}
+body .qg-client-shell .qgc-chat .qgc-compact-tool .cv-chip-text{display:none}
+body .qg-client-shell .qgc-chat .qgc-compact-tool.on,body .qg-client-shell .qgc-chat .cv-mic.on{color:#3e71f7;background:#3e71f71a}
+body .qg-client-shell .qgc-chat .cv-plus:hover,body .qg-client-shell .qgc-chat .cv-mic:hover{background:#0000000d;transform:none}
+html.dark body .qg-client-shell .qgc-chat .cv-plus:hover,html.dark body .qg-client-shell .qgc-chat .cv-mic:hover{background:#ffffff1a}
+body .qg-client-shell .qgc-chat .cv-send,body .qg-client-shell .qgc-chat .cv-stop{display:inline-flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;border:0;border-radius:50%;padding:0;box-shadow:0 1px 2px #0000000d;background:#070707;color:#fafafa;transform:none}
+html.dark body .qg-client-shell .qgc-chat .cv-send,html.dark body .qg-client-shell .qgc-chat .cv-stop{background:#f3f3f3;color:#0a0a0a}
+body .qg-client-shell .qgc-chat .cv-send:disabled{background:#d1d5db;color:#9ca3af;opacity:1;cursor:not-allowed}
+html.dark body .qg-client-shell .qgc-chat .cv-send:disabled{background:#4b5563;color:#9ca3af}
+body .qg-client-shell .qgc-chat .cv-send:not(:disabled):hover{background:#1f1f1f;transform:none}
+html.dark body .qg-client-shell .qgc-chat .cv-send:not(:disabled):hover{background:#e2e2e2}
+body .qg-client-shell .qgc-chat .cv-send .el-icon,body .qg-client-shell .qgc-chat .cv-stop .el-icon{font-size:16px}
+body .qg-client-shell .qgc-chat .cv-top .cv-model,body .qg-client-shell .qgc-chat .cv-top>.qg-icon-btn:last-child{display:none}
+.qgc-page-title{overflow:hidden;text-overflow:ellipsis;max-width:40vw}
+@media(max-width:639px){
+  body .qg-client-shell .qgc-content:has(>.qgc-chat){bottom:80px}
+  body .qg-client-shell .qgc-chat.is-new-chat .qgc-chat-stage{top:calc(50% - 46px);width:100%;max-width:100%;padding:0 12px;gap:8px}
+  .qgc-chat-welcome{margin-top:4px;padding:12px 20px}.qgc-chat-greeting{min-height:20px;margin-bottom:20px;width:100%}.qgc-chat-greeting h1{font-size:20px;line-height:20px;width:100%}.qgc-chat-greeting .typewriter-container{width:100%}.qgc-chat-welcome p{font-size:14px;line-height:22.4px;width:100%;margin:0}
+  .qgc-chat-welcome.is-near-input{padding:4px 20px 8px}.qgc-chat-welcome.is-near-input .qgc-chat-greeting{margin-bottom:4px}
+  .qgc-chat-welcome.is-collapsed{padding:8px 12px}
+  body .qg-client-shell .qgc-chat .cv-dock{width:100%;max-width:none;padding:4px 12px}
+  body .qg-client-shell .qgc-chat .cv-composer{padding:16px;min-height:0;margin-bottom:0}
+  body .qg-client-shell .qgc-chat .cv-inputrow{padding:0 12px .9px;min-height:0;margin-bottom:8px}
+  body .qg-client-shell .qgc-chat .cv-input{height:35.4px;min-height:35.4px;max-height:147.4px;padding:0}
+  .qgc-input-mirror{line-height:22.4px}
+  body .qg-client-shell .qgc-chat .cv-chip{font-size:13px;line-height:20.8px;padding:8px 12px;min-height:0;max-width:48%}
+  body .qg-client-shell .qgc-chat .cv-tools{gap:4px;min-height:38.8px}
+  body .qg-client-shell .qgc-chat .cv-chip.qgc-compact-tool,body .qg-client-shell .qgc-chat .cv-plus,body .qg-client-shell .qgc-chat .cv-mic{width:28px;min-width:28px}
+}

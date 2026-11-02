@@ -1,0 +1,3 @@
+import {createHmac,timingSafeEqual} from 'node:crypto';
+export function emailCodeHash(secret:string,row:{id:string;email:string;purpose:string},code:string){return createHmac('sha256',secret).update('qgauss-email-verification\0'+[row.id,row.email,row.purpose,code].join('\0')).digest('hex');}
+export function emailCodeMatches(secret:string,row:{id:string;email:string;purpose:string;codeHash:string},code:string){if(!secret||!/^\d{6}$/.test(code)||!/^[a-f0-9]{64}$/.test(row.codeHash))return false;return timingSafeEqual(Buffer.from(emailCodeHash(secret,row,code),'hex'),Buffer.from(row.codeHash,'hex'));}

@@ -1,0 +1,1297 @@
+// QGauss AI · 域模型 v2
+//
+// v2 相对 v1 的结构性修正（采纳架构评审）：
+//   1. 删除 Provider 表 —— 协议类型下沉为 Channel.type；upstreamName 移到 ModelChannel，
+//      同一逻辑模型可挂多个来源（官方/Azure/中转）。
+//   2. 删除 User.tenantId —— 半套多租户比没有更危险，归属边界统一用 userId。
+//   3. Channel 只存管理员意图（status），运行时健康度/熔断不落库。
+//   4. apiKey 加密存储（apiKeyEnc），只保留末 4 位用于掩码展示。
+//   5. Session 改名 RefreshToken，带 familyId / replacedById / usedAt，支持轮换链与盗用检测。
+//   6. Message 补齐 parentId / reasoning / parts / 输入输出 token / finishReason 等。
+//   7. 新增 UsageRecord（用量与价格快照）、ChatAttempt（每次上游尝试）。
+//   8. 主键统一 cuid；软删除统一 deletedAt。
+//
+// 仍保持 provider 无关：枚举用 String、JSON 用 TEXT、金额用整数（微单位）。
+// 切 PostgreSQL 只需改 datasource 两行。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  emailVerifiedAt DateTime?
+  username     String    @unique
+  passwordHash String
+  displayName  String?
+  avatar       String?
+  role         String    @default("USER") // USER | ADMIN | SUPER（SUPER 暂未启用）
+  status       String    @default("ACTIVE") // ACTIVE | DISABLED
+  tokenVersion Int       @default(0) // 改密/封禁时 +1，立即作废 access token
+  // ---- 分销----
+  inviteCode     String?  @unique // 邀请码，10 位；惰性生成
+  invitedBy      String   @default("") // 邀请人的 inviteCode
+  isDistribution Boolean  @default(false) // 是否具备分销资格（决定分销菜单可见性）
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  refreshTokens RefreshToken[]
+  agentFavorites AgentFavorite[]
+  agentFiles     AgentFileMapping[]
+  agentRuns      AgentRun[]
+  conversations Conversation[]
+  usageRecords  UsageRecord[]
+  uploads       UploadFile[]
+  passwordResets PasswordReset[]
+  emailVerifications EmailVerification[]
+  userBalance   UserBalance?
+  balance       Balance?
+  reservations  CountReservation[]
+  voiceTasks    VoiceTask[]
+
+  @@map("users")
+}
+
+model EmailVerification {
+  id String @id
+  email String
+  purpose String
+  userId String?
+  tokenVersion Int?
+  codeHash String
+  ipHash String
+  attempts Int @default(0)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  usedAt DateTime?
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([email, purpose, createdAt])
+  @@index([ipHash, createdAt])
+  @@map("email_verifications")
+}
+
+model RefreshToken {
+  id           String    @id @default(cuid())
+  userId       String
+  familyId     String // 同一次登录派生的整条轮换链
+  tokenHash    String    @unique // sha256(随机 32 字节)
+  replacedById String?
+  usedAt       DateTime?
+  revokedAt    DateTime?
+  expiresAt    DateTime
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+/// Native voice uses the existing encrypted channel credentials; no copied secrets.
+model VoiceConfig {
+  id                     String   @id @default("site")
+  enabled                Boolean  @default(false)
+  speechChannelId        String   @default("")
+  transcriptionChannelId String   @default("")
+  speechModel            String   @default("tts-1")
+  transcriptionModel     String   @default("whisper-1")
+  speechCost             Int      @default(0)
+  transcriptionCost      Int      @default(0)
+  pool                   String   @default("model3")
+  maxSpeechChars         Int      @default(16000)
+  version                Int      @default(1)
+  updatedAt              DateTime @updatedAt
+  @@map("voice_config")
+}
+
+/// Client intent, accepted quote and staged result survive disconnects and restarts.
+model VoiceTask {
+  id               String    @id @default(cuid())
+  userId           String
+  requestKey       String
+  requestHash      String
+  kind             String
+  messageId        String?
+  inputFileId      String?
+  sample           Boolean   @default(false)
+  voice            String    @default("fable")
+  model            String
+  channelId        String
+  configVersion    Int
+  status           String    @default("QUEUED")
+  progress         Int       @default(0)
+  inputChars       Int       @default(0)
+  inputSeconds     Float     @default(0)
+  segmentCount     Int       @default(1)
+  completedSegments Int      @default(0)
+  attemptedSegments Int      @default(0)
+  transcript       String    @default("")
+  resultJson       String    @default("[]")
+  pool             String    @default("model3")
+  reservedAmount   Int       @default(0)
+  chargedAmount    Int       @default(0)
+  returnedAmount   Int       @default(0)
+  expiredAmount    Int       @default(0)
+  billingState     String    @default("FREE")
+  errorCode        String?
+  errorMessage     String?
+  createdAt        DateTime  @default(now())
+  finishedAt       DateTime?
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@unique([userId, requestKey])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("voice_tasks")
+}
+
+model Channel {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  type        String    @default("CUSTOM") // OPENAI | OPENAI_RESPONSES | ANTHROPIC | GEMINI | CUSTOM | MOCK
+  baseUrl     String
+  apiKeyEnc   String    @default("") // "v1:" + base64(iv|tag|ciphertext)
+  apiKeyLast4 String    @default("")
+  priority    Int       @default(0) // 数字小的优先
+  weight      Int       @default(1)
+  status      String    @default("ENABLED")
+  timeoutMs   Int       @default(60000)
+  extra       String? // 协议特有参数（组织 ID、api-version 等），JSON 文本
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  models ModelChannel[]
+
+  @@map("channels")
+}
+
+model AiModel {
+  id           String    @id @default(cuid())
+  name         String    @unique // 对外逻辑名
+  displayName  String
+  // 模型广场的展示元数据（管理员在「模型管理」里维护）
+  vendor       String    @default("") // 厂商：OpenAI / Anthropic / DeepSeek / 自定义...
+  description  String    @default("") // 一句话介绍，广场卡片用
+  tags         String    @default("") // 逗号分隔：视觉,推理,工具,长上下文
+  badge        String    @default("") // 角标：HOT / NEW / 推荐，空串不显示
+  maxContext   Int       @default(8192)
+  maxOutput    Int       @default(2048)
+  capabilities String    @default("chat") // chat,vision,reasoning,tools
+  priceInPerM  Int       @default(0) // 微单位 / 百万 token
+  priceOutPerM Int       @default(0)
+  // 次数计费：
+  //   countPool 为空表示纯 token 计费；model3/model4 表示每次对话另扣该池次数
+  countPool    String    @default("")
+  countCost    Int       @default(0)
+  status       String    @default("ENABLED")
+  sort         Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  channels      ModelChannel[]
+  conversations Conversation[]
+
+  @@map("models")
+}
+
+/// 渠道的额外 Key（主 Key 仍在 channels.apiKeyEnc）。不建外键，随渠道软删一起过滤
+model ChannelKey {
+  id         String    @id @default(cuid())
+  channelId  String
+  keyEnc     String
+  /// sha256(明文)，同一渠道内去重
+  keyHash    String
+  last4      String    @default("")
+  weight     Int       @default(1)
+  /// ENABLED | DISABLED（上游 401/403 会自动置为 DISABLED）
+  status     String    @default("ENABLED")
+  failCount  Int       @default(0)
+  lastError  String?
+  lastUsedAt DateTime?
+  disabledAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([channelId, keyHash])
+  @@index([channelId, status])
+  @@map("channel_keys")
+}
+
+model ModelChannel {
+  modelId      String
+  channelId    String
+  upstreamName String // 该渠道上的真实模型名（Azure 是部署名）
+  weight       Int     @default(1)
+  enabled      Boolean @default(true)
+
+  model   AiModel @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([modelId, channelId])
+  @@index([channelId])
+  @@map("model_channels")
+}
+
+model Conversation {
+  id            String    @id @default(cuid())
+  userId        String
+  modelId       String?
+  folderId      String?
+  appId         String?
+  agentId       String?
+  title         String    @default("新对话")
+  systemPrompt  String?
+  params        String? // temperature 等，JSON 文本
+  pinnedAt      DateTime? // 比 Boolean 多一个排序维度
+  lastMessageAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  model    AiModel?  @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  app      App?      @relation(fields: [appId], references: [id], onDelete: SetNull)
+  agent    Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  messages Message[]
+
+  @@index([userId, lastMessageAt])
+  @@index([userId, appId, lastMessageAt])
+  @@index([userId, agentId, lastMessageAt])
+  @@map("conversations")
+}
+
+model Message {
+  id               String    @id @default(cuid())
+  conversationId   String
+  parentId         String? // 重新生成/编辑形成分支
+  clientMsgId      String? // 前端生成，幂等去重
+  role             String // SYSTEM | USER | ASSISTANT
+  status           String    @default("COMPLETED") // PENDING | STREAMING | SETTLING | COMPLETED | ABORTED | FAILED
+  content          String    @default("")
+  reasoning        String? // 推理模型的思考内容
+  parts            String? // 多模态/工具调用，JSON 文本
+  searchJson       String? // Normalized provider-managed search receipt; raw payloads are not stored.
+  agentJson        String? // Public activity receipt; provider identifiers live in AgentRun only.
+  modelName        String? // 快照，模型删除后仍可展示
+  modelId          String? // 不建外键
+  channelId        String? // 不建外键
+  promptTokens     Int?
+  completionTokens Int?
+  usageEstimated   Boolean   @default(false)
+  finishReason     String?
+  errorCode        String?
+  ttfbMs           Int?
+  durationMs       Int?
+  billingState     String    @default("LEGACY") // LEGACY | FREE | RESERVED | SETTLING | SETTLED | RELEASED
+  billingPool      String    @default("")
+  reservedAmount   Int       @default(0)
+  chargedAmount    Int       @default(0)
+  returnedAmount   Int       @default(0)
+  expiredAmount    Int       @default(0)
+  settlementJson   String? // 已保存回复的结算快照；不向客户端返回
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agentRun     AgentRun?
+
+  @@unique([conversationId, clientMsgId])
+  @@index([conversationId, createdAt])
+  @@index([status, updatedAt])
+  @@map("messages")
+}
+
+model UsageRecord {
+  id               String   @id @default(cuid())
+  userId           String
+  messageId        String?  @unique
+  kind             String   @default("chat") // chat / image / video
+  modelName        String
+  channelId        String?
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  priceInPerM      Int      @default(0) // 价格快照
+  priceOutPerM     Int      @default(0)
+  costMicros       Int      @default(0)
+  estimated        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("usage_records")
+}
+
+model ChatAttempt {
+  id         String   @id @default(cuid())
+  messageId  String
+  attemptNo  Int
+  channelId  String
+  outcome    String // ok | retryable | fatal
+  httpStatus Int?
+  errorCode  String?
+  ttfbMs     Int?
+  createdAt  DateTime @default(now())
+
+  @@index([messageId])
+  @@index([channelId, createdAt])
+  @@map("chat_attempts")
+}
+
+model GlobalConfig {
+  key       String   @id
+  value     String   @default("{}") // JSON；可编辑配置命中注册表，installation.state 仅供安装流程读写
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@map("global_configs")
+}
+
+model SensitiveWord {
+  id        String    @id @default(cuid())
+  word      String    @unique
+  category  String    @default("general")
+  action    String    @default("block") // block | review
+  enabled   Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([enabled])
+  @@map("sensitive_words")
+}
+
+model ModerationHit {
+  id             String   @id @default(cuid())
+  userId         String
+  word           String
+  source         String   @default("chat") // chat | profile
+  excerpt        String?
+  conversationId String?
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("moderation_hits")
+}
+
+model PresetGroup {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  presets Preset[]
+
+  @@map("preset_groups")
+}
+
+model Preset {
+  id        String    @id @default(cuid())
+  groupId   String?
+  title     String
+  prompt    String
+  icon      String?
+  sort      Int       @default(0)
+  enabled   Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  group PresetGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@index([groupId, sort])
+  @@map("presets")
+}
+
+model UploadFile {
+  id        String    @id @default(cuid())
+  userId    String
+  scope     String    @default("chat") // chat | avatar | other
+  filename  String // 用户原始文件名（仅展示）
+  storedKey String    @unique // 存储键，如 2026/10/uuid.png
+  mime      String
+  size      Int
+  sha256    String
+  backend   String    @default("local")
+  /// 对话附件的文本提取缓存（PDF / Word / Excel / 文本）；NULL = 尚未解析
+  extractedText String?
+  extractError  String?
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentFiles AgentFileMapping[]
+
+  @@index([userId, createdAt])
+  @@index([sha256])
+  @@map("upload_files")
+}
+
+model Menu {
+  id        String   @id @default(cuid())
+  parentId  String?
+  title     String
+  path      String
+  icon      String?
+  sort      Int      @default(0)
+  visible   Boolean  @default(true)
+  roles     String   @default("ADMIN") // 逗号分隔，如 "ADMIN" 或 "ADMIN"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId, sort])
+  @@map("menus")
+}
+
+model ConversationFolder {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, sort])
+  @@map("conversation_folders")
+}
+
+model MailOutbox {
+  id        String    @id @default(cuid())
+  to        String
+  subject   String
+  template  String
+  payload   String? // 模板变量 JSON
+  body      String? // 渲染后的正文
+  status    String    @default("queued") // queued | sending | sent | failed | skipped | suppressed | unknown
+  error     String?
+  /// 已尝试投递次数（含首发；达到上限后不再自动重试）
+  attempts   Int       @default(0)
+  /// 最后一次尝试时间，用于排查"卡了多久"
+  lastTriedAt DateTime?
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+
+  /// Admin delivery probes are bound to their initiating account and explicit request.
+  requestedById String?
+  requestKey    String?
+  /// Attempt ownership; never returned to a browser.
+  dispatchToken String?
+  /// A human acknowledgement, separate from SMTP acceptance.
+  confirmedAt   DateTime?
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([requestedById, createdAt])
+  @@unique([requestedById, requestKey])
+  @@map("mail_outbox")
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_resets")
+}
+
+model AgentConnection {
+  id          String    @id @default(cuid())
+  name        String
+  provider    String    @default("COZE")
+  baseUrl     String
+  authMode    String    @default("JWT")
+  appId       String?
+  publicKeyId String?
+  secretEnc   String    @default("")
+  spaceId     String?
+  enabled     Boolean   @default(true)
+  version     Int       @default(1)
+  timeoutMs   Int       @default(60000)
+  lastProbeAt DateTime?
+  lastProbeOk Boolean?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  agents      Agent[]
+  files       AgentFileMapping[]
+  runs        AgentRun[]
+
+  @@index([enabled, deletedAt])
+  @@map("agent_connections")
+}
+
+model Agent {
+  id                 String    @id @default(cuid())
+  connectionId       String
+  botId              String
+  name               String
+  description        String    @default("")
+  greeting           String    @default("")
+  tagsJson           String    @default("[]")
+  questionsJson      String    @default("[]")
+  metadataJson       String    @default("{}")
+  countCost          Int       @default(1)
+  published          Boolean   @default(false)
+  sort               Int       @default(0)
+  lastSyncAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+  connection         AgentConnection @relation(fields: [connectionId], references: [id])
+  favorites          AgentFavorite[]
+  conversations      Conversation[]
+  runs               AgentRun[]
+
+  @@unique([connectionId, botId])
+  @@index([published, deletedAt, sort])
+  @@map("agents")
+}
+
+model AgentFavorite {
+  userId    String
+  agentId   String
+  createdAt DateTime @default(now())
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent     Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, agentId])
+  @@index([userId, createdAt])
+  @@map("agent_favorites")
+}
+
+model AgentFileMapping {
+  id                String @id @default(cuid())
+  userId            String
+  connectionId      String
+  connectionVersion Int
+  uploadId          String
+  remoteFileId      String
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+  user              User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection        AgentConnection @relation(fields: [connectionId], references: [id])
+  upload            UploadFile @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, connectionId, connectionVersion, uploadId])
+  @@index([expiresAt])
+  @@map("agent_file_mappings")
+}
+
+model AgentRun {
+  id                   String @id @default(cuid())
+  messageId            String @unique
+  userId               String
+  agentId              String
+  connectionId         String
+  connectionVersion    Int
+  state                String @default("prepared")
+  contextUser          String
+  contextHash          String?
+  contextMode          String @default("fresh")
+  remoteConversationId String?
+  remoteChatId         String?
+  cancelState          String @default("none")
+  cancelToken          String?
+  cancelAttempts       Int @default(0)
+  cancelTriedAt        DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  message              Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user                 User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent                Agent @relation(fields: [agentId], references: [id])
+  connection           AgentConnection @relation(fields: [connectionId], references: [id])
+
+  @@index([cancelState, cancelTriedAt])
+  @@index([userId, createdAt])
+  @@index([remoteConversationId, createdAt])
+  @@map("agent_runs")
+}
+
+model AppCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sort      Int      @default(0)
+  createdAt DateTime @default(now())
+
+  apps App[]
+
+  @@map("app_categories")
+}
+
+model App {
+  id           String    @id @default(cuid())
+  categoryId   String?
+  name         String
+  description  String?
+  icon         String?
+  systemPrompt String
+  defaultModel String?
+  greeting     String?
+  published    Boolean   @default(true)
+  sort         Int       @default(0)
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  category AppCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  conversations Conversation[]
+
+  @@index([categoryId, sort])
+  @@index([published])
+  @@map("apps")
+}
+
+model AppFavorite {
+  userId    String
+  appId     String
+  createdAt DateTime @default(now())
+
+  @@id([userId, appId])
+  @@index([userId])
+  @@map("app_favorites")
+}
+
+model UserLoginLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  account   String
+  success   Boolean  @default(false)
+  reason    String?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@map("user_login_logs")
+}
+
+
+model MjPreset {
+  id              String @id @default(cuid())
+  name            String
+  profile         String
+  channelId       String @default("")
+  authMode        String @default("MJ_SECRET")
+  speed           String @default("fast")
+  featuresJson    String @default("{}")
+  pricesJson      String @default("{}")
+  hdMultiplier    Int @default(2)
+  highMotionMultiplier Int @default(2)
+  enabled         Boolean @default(false)
+  pool            String @default("drawMj")
+  maxWaitMinutes  Int @default(30)
+  version         Int @default(1)
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@map("mj_presets")
+}
+
+model MjTask {
+  id                String @id @default(cuid())
+  userId            String
+  requestKey        String
+  intentHash        String
+  presetId          String
+  presetName        String
+  profile           String
+  presetJson        String
+  intentJson        String
+  inputJson         String?
+  status            String @default("QUEUED")
+  progress          Int @default(0)
+  upstreamId        String?
+  upstreamStatus    String?
+  modalJson         String?
+  seed              String?
+  routeJson         String?
+  outputJson        String?
+  resultJson        String?
+  message           String?
+  errorCode         String?
+  nextCheckAt       DateTime @default(now())
+  attempts          Int @default(0)
+  deadlineAt        DateTime
+  pool              String
+  totalCost         Int
+  billingState      String @default("FREE")
+  reservedAmount    Int @default(0)
+  chargedAmount     Int @default(0)
+  returnedAmount    Int @default(0)
+  expiredAmount     Int @default(0)
+  remoteCancelState String @default("NONE")
+  published         Boolean @default(false)
+  deletedAt         DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@unique([userId, requestKey])
+  @@index([status, nextCheckAt])
+  @@index([userId, createdAt])
+  @@index([published, createdAt])
+  @@map("mj_tasks")
+}
+
+model MjTaskEvent {
+  id        String @id @default(cuid())
+  taskId    String
+  status    String
+  message   String
+  createdAt DateTime @default(now())
+  @@index([taskId, createdAt])
+  @@map("mj_task_events")
+}
+
+model VideoPreset {
+  id              String @id @default(cuid())
+  name            String
+  profile         String
+  channelId       String @default("")
+  upstreamModel   String @default("")
+  enabled         Boolean @default(false)
+  baseCost        Int @default(0)
+  perSecondCost   Int @default(0)
+  pool            String @default("drawMj")
+  maxWaitMinutes  Int @default(30)
+  publicBaseUrl   String @default("")
+  version         Int @default(1)
+  deletedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@map("video_presets")
+}
+
+model VideoTask {
+  id                String @id @default(cuid())
+  userId            String
+  requestKey        String
+  intentHash        String
+  presetId          String
+  presetName        String
+  profile           String
+  presetJson        String
+  intentJson        String
+  inputJson         String?
+  status            String @default("QUEUED")
+  progress          Int @default(0)
+  upstreamId        String?
+  upstreamStatus    String?
+  routeJson         String?
+  outputJson        String?
+  resultJson        String?
+  message           String?
+  errorCode         String?
+  nextCheckAt       DateTime @default(now())
+  attempts          Int @default(0)
+  deadlineAt        DateTime
+  pool              String
+  totalCost         Int
+  billingState      String @default("FREE")
+  reservedAmount    Int @default(0)
+  chargedAmount     Int @default(0)
+  returnedAmount    Int @default(0)
+  expiredAmount     Int @default(0)
+  remoteCancelState String @default("NONE")
+  published         Boolean @default(false)
+  deletedAt         DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@unique([userId, requestKey])
+  @@index([status, nextCheckAt])
+  @@index([userId, createdAt])
+  @@index([published, createdAt])
+  @@map("video_tasks")
+}
+
+model VideoTaskEvent {
+  id        String @id @default(cuid())
+  taskId    String
+  status    String
+  message   String
+  createdAt DateTime @default(now())
+  @@index([taskId, createdAt])
+  @@map("video_task_events")
+}
+
+model ImageTask {
+  id             String    @id @default(cuid())
+  userId         String
+  prompt         String
+  negativePrompt String?
+  model          String    @default("mock-image")
+  /// 模型版本（如 GPT Image 2 / GPT Image 2 Dev），作品详情「创意参数」串用它
+  versionName    String?
+  /// 生成模式：text2img | img2img
+  mode           String    @default("text2img")
+  /// 画面比例（1:1 / 3:4 / 16:9 …），与 resolution 共同决定实际像素
+  ratio          String    @default("1:1")
+  /// 分辨率档位 1K / 2K / 4K
+  resolution     String    @default("1K")
+  /// 画质 low / medium / high / auto，参与次数扣减倍率
+  quality        String    @default("auto")
+  seed           Int?
+  /// 作品风格分类（creation_cats.id）
+  catId          String?
+  /// 是否发布到绘画广场
+  published      Boolean   @default(false)
+  /// 系统推荐（广场置顶）
+  recommended    Boolean   @default(false)
+  /// 二级操作来源任务：变体 / 放大 / 局部重绘
+  parentId       String?
+  action         String?
+  deletedAt      DateTime?
+  size           String    @default("512x512")
+  n              Int       @default(1)
+  status         String    @default("QUEUED") // QUEUED RUNNING SETTLING SUCCESS FAILED CANCELED
+  progress       Int       @default(0)
+  provider       String    @default("mock") // mock | gptImage | nanoBanana
+  editOf         String? // 参考图文件 id（图生图）
+    inputJson      String? // Ordered owned image references, optional mask and SHA-256 snapshots
+  metaJson       String? // 供应商附加信息
+  resultJson     String? // [{ fileId, url }]
+  errorCode      String?
+  errorMessage   String?
+  channelId      String?
+  /// null 表示升级前任务；新任务在接受时冻结每张费用（含画质倍率）
+  billingUnitCost Int?
+  billingState    String    @default("LEGACY") // LEGACY FREE RESERVED SETTLED RELEASED
+  reservedAmount  Int       @default(0)
+  chargedAmount   Int       @default(0)
+  returnedAmount  Int       @default(0)
+  expiredAmount   Int       @default(0)
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+
+  @@index([userId, createdAt])
+  @@index([status, updatedAt])
+  @@index([published, createdAt])
+  @@map("image_tasks")
+}
+
+/// 作品风格分类（绘画广场 / 我的绘画 / 后台筛选用）
+model CreationCat {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sort      Int      @default(0)
+  status    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("creation_cats")
+}
+
+model ImageTaskEvent {
+  id        String   @id @default(cuid())
+  taskId    String
+  status    String
+  message   String?
+  createdAt DateTime @default(now())
+
+  @@index([taskId, createdAt])
+  @@map("image_task_events")
+}
+
+
+// ============================================================================
+// 商业化域（v1.1 批 1 · 账本与支付内核）
+//
+// 约定（与 v2 域模型一致，不引入浮点）：
+//   - 钱包/订单金额用整数「分」（*Cents），不用 Decimal / Float。
+//     上限 Int 21.47 亿分 ≈ 2147 万元，够用；单次用量成本仍用「微」（costMicros）。
+//   - 次数（count）是主要计费维度，四个池：model3 / model4 / drawMj / agent。
+//   - 余额只允许经 LedgerService 的事务改动，任何裸 update 都视为缺陷。
+//   - 账本日志不可变（不可更新/删除），只追加。
+// ============================================================================
+
+/// 次数余额：购买次数 + 会员每日次数 + 累计用量
+model UserBalance {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  /// 购买的剩余次数（永久有效，除套餐过期）
+  model3Count       Int       @default(0)
+  model4Count       Int       @default(0)
+  drawMjCount       Int       @default(0)
+  agentCount        Int       @default(0)
+  /// 会员每日额度（每天 0 点按 Asia/Shanghai 重置）
+  memberModel3Count Int       @default(0)
+  memberModel4Count Int       @default(0)
+  memberDrawMjCount Int       @default(0)
+  memberAgentCount  Int       @default(0)
+  /// 会员每日额度上限（重置时的目标值，来自套餐）
+  dailyModel3Count  Int       @default(0)
+  dailyModel4Count  Int       @default(0)
+  dailyDrawMjCount  Int       @default(0)
+  dailyAgentCount   Int       @default(0)
+  /// 累计已用（只增不减，用于统计与风控）
+  useModel3Count    Int       @default(0)
+  useModel4Count    Int       @default(0)
+  useModel3Token    Int       @default(0)
+  useModel4Token    Int       @default(0)
+  useDrawMjToken    Int       @default(0)
+  useAgentCount     Int       @default(0)
+  /// 当前套餐快照与会员到期时间
+  packageId         String    @default("")
+  extent            String    @default("")
+  expirationTime    DateTime?
+  /// 会员每日额度上次重置日期（yyyy-MM-dd，Asia/Shanghai）
+  memberResetOn     String    @default("")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_balances")
+}
+
+/// 账户余额：金额 + 绘图/工具次数
+model Balance {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  balanceCents Int      @default(0)
+  usesLeft     Int      @default(0)
+  paintCount   Int      @default(0)
+  useTokens    Int      @default(0)
+  useChats     Int      @default(0)
+  usePaints    Int      @default(0)
+  agentBalance Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("balances")
+}
+
+/// 消费流水：扣费与退款的唯一审计来源
+model BalanceConsumeLog {
+  id             String   @id @default(cuid())
+  userId         String
+  /// 1 消费结算 | 2 失败返还 | 3 失败免扣 | 4 次数预留 | 5 预留释放 | 6 预留到期
+  direction      Int      @default(1)
+  /// model3 | model4 | mjDraw | agent | money
+  deductionType  String
+  /// 正数
+  amount         Int
+  /// 实际变动的字段名，返还时按此加回
+  balanceKey     String
+  /// chat | draw | agent | video | other
+  bizType        String   @default("other")
+  model          String   @default("")
+  modelName      String   @default("")
+  useAmount      Int      @default(0)
+  /// 业务侧引用（messageId / imageTaskId / orderId）
+  refId          String   @default("")
+  /// 退款指向原扣费；预留结算 / 释放 / 到期指向原预留流水
+  sourceLogId    String?
+  refunded       Boolean  @default(false)
+  upstreamStatus Int?
+  /// 已脱敏、可展示给用户的说明
+  remark         String   @default("")
+  /// 流水号，用于对账与幂等
+  uid            String   @unique
+  createdAt      DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([refId])
+  @@index([deductionType, createdAt])
+  @@map("balance_consume_logs")
+}
+
+/// 已接受任务的次数授权。余额在预留时移出可用，结算不再次扣减。
+model CountReservation {
+  refId           String   @id
+  userId          String
+  pool            String
+  amount          Int
+  memberAmount    Int
+  paidAmount      Int
+  memberDay       String
+  memberExpiresAt DateTime?
+  memberLogId     String?
+  paidLogId       String?
+  status          String   @default("HELD") // HELD SETTLED RELEASED
+  settledAmount   Int      @default(0)
+  returnedAmount  Int      @default(0)
+  expiredAmount   Int      @default(0)
+  bizType         String
+  model           String   @default("")
+  modelName       String   @default("")
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("count_reservations")
+}
+
+/// 充值/发放流水
+model AccountLog {
+  id           String   @id @default(cuid())
+  userId       String
+  pkgName      String   @default("")
+  packageId    String   @default("")
+  memberDays   Int      @default(0)
+  /// admin | crami | order | gift | signin
+  rechargeType String   @default("admin")
+  model3Count  Int      @default(0)
+  model4Count  Int      @default(0)
+  drawMjCount  Int      @default(0)
+  agentCount   Int      @default(0)
+  days         Int      @default(0)
+  amountCents  Int      @default(0)
+  rebateUserId String   @default("")
+  uid          String   @unique
+  extent       String   @default("")
+  remark       String   @default("")
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([rechargeType, createdAt])
+  @@map("account_logs")
+}
+
+/// 套餐：卡密与直购共用的商品定义
+model CramiPackage {
+  id          String    @id @default(cuid())
+  name        String
+  nameEn      String    @default("")
+  nameTw      String    @default("")
+  des         String    @default("")
+  desEn       String    @default("")
+  desTw       String    @default("")
+  coverImg    String    @default("")
+  priceCents  Int       @default(0)
+  /// 越大越靠前
+  sort        Int       @default(100)
+  /// 1 上架 | 0 下架
+  status      Int       @default(1)
+  weight      Int       @default(0)
+  /// 会员天数；0 表示不送会员，-1 表示不限
+  days        Int       @default(0)
+  model3Count Int       @default(0)
+  model4Count Int       @default(0)
+  drawMjCount Int       @default(0)
+  agentCount  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([status, sort])
+  @@map("crami_packages")
+}
+
+/// 卡密
+model Crami {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  /// 1 普通（一码一用）| 2 单人一次（同一用户只可用一次）
+  cramiType   Int       @default(1)
+  packageId   String
+  /// 0 未使用 | 1 已使用 | 2 已作废
+  status      Int       @default(0)
+  useId       String    @default("")
+  days        Int       @default(0)
+  model3Count Int       @default(0)
+  model4Count Int       @default(0)
+  drawMjCount Int       @default(0)
+  agentCount  Int       @default(0)
+  createdAt   DateTime  @default(now())
+  usedAt      DateTime?
+
+  @@index([status, createdAt])
+  @@index([packageId])
+  @@map("cramis")
+}
+
+/// 卡密核销记录。cramiType=2（一人一次）靠 (cramiId,userId) 唯一键保证，
+/// 同时也作为「我的兑换记录」的数据源 —— 只靠 Crami.useId 无法表达多次核销。
+model CramiUse {
+  id        String   @id @default(cuid())
+  cramiId   String
+  cramiCode String
+  userId    String
+  packageId String   @default("")
+  /// 核销时的卡密类型快照：1 一码一用 | 2 同一用户限用一次
+  cramiType Int      @default(1)
+  /// 本次核销实际发放的快照（卡密被删也不丢失）
+  days        Int    @default(0)
+  model3Count Int    @default(0)
+  model4Count Int    @default(0)
+  drawMjCount Int    @default(0)
+  agentCount  Int    @default(0)
+  /// 对应的发放流水，便于对账（AccountLog.id）
+  accountLogId String @default("")
+  createdAt DateTime @default(now())
+
+  @@unique([cramiId, userId])
+  @@index([userId, createdAt])
+  @@map("crami_uses")
+}
+
+/// 订单
+model Order {
+  id          String    @id @default(cuid())
+  /// uuid v1 去横线，32 位
+  orderId     String    @unique
+  /// 第三方交易号
+  tradeId     String    @default("")
+  /// epay | hupi | mock | manual
+  payPlatform String    @default("")
+  userId      String
+  goodsId     String
+  /// package | crami | money
+  goodsType   String    @default("package")
+  goodsName   String    @default("")
+  count       Int       @default(1)
+  priceCents  Int
+  totalCents  Int
+  /// Client intent key: same user/key retries return the original accepted order.
+  requestKey  String?
+  requestHash String    @default("")
+  /// Immutable package entitlements accepted when the order was created.
+  goodsSnapshot String  @default("")
+  expiresAt   DateTime?
+  /// 0 未支付 | 1 已支付 | 2 支付失败 | 3 已超时 | 4 已退款
+  status      Int       @default(0)
+  paydAt      DateTime?
+  /// 支付渠道标识（alipay / wxpay / …）
+  channel     String    @default("")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@index([tradeId])
+  @@unique([userId, requestKey])
+  @@map("orders")
+}
+
+/// 支付回调原始记录：出问题时可重放、可对账
+model PayNotify {
+  id          String   @id @default(cuid())
+  provider    String
+  orderId     String   @default("")
+  tradeId     String   @default("")
+  verified    Boolean  @default(false)
+  handled     Boolean  @default(false)
+  amountCents Int      @default(0)
+  error       String   @default("")
+  ip          String   @default("")
+  raw         String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("pay_notifies")
+}
+
+/// 分销账户
+model SalesUser {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  /// 佣金比例，万分比（1000 = 10%）
+  performanceBps    Int      @default(0)
+  salesOutletName   String   @default("")
+  salesOutletNameEn String   @default("")
+  salesOutletNameTw String   @default("")
+  totalCents        Int      @default(0)
+  withdrawalCents   Int      @default(0)
+  /// 可提现余额
+  distributionCents Int      @default(0)
+  drawMoneyInCents  Int      @default(0)
+  orderCount        Int      @default(0)
+  enabled           Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("sales_users")
+}
+
+/// 佣金记录
+model SalesRecord {
+  id              String   @id @default(cuid())
+  inviterUserId   String
+  inviteeUserId   String
+  orderId         String
+  orderCents      Int
+  commissionCents Int
+  commissionBps   Int
+  settled         Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([inviterUserId, createdAt])
+  @@index([orderId])
+  @@map("sales_records")
+}
+
+/// 提现申请
+model SalesOrder {
+  id          String    @id @default(cuid())
+  userId      String
+  amountCents Int
+  /// Same user and intent retries return the original withdrawal without freezing twice.
+  requestKey  String?
+  requestHash String    @default("")
+  /// 0 待审核 | 1 已通过 | 2 已驳回
+  orderStatus Int       @default(0)
+  auditStatus Int       @default(0)
+  auditUserId String    @default("")
+  /// 0 未打款 | 1 已打款
+  paymentStatus Int     @default(0)
+  /// 1 支付宝 | 2 微信 | 3 银行卡
+  channels    Int       @default(1)
+  contact     String    @default("")
+  remark      String    @default("")
+  createdAt   DateTime  @default(now())
+  auditedAt   DateTime?
+
+  @@index([userId, createdAt])
+  @@index([orderStatus])
+  @@unique([userId, requestKey])
+  @@map("sales_orders")
+}
+
+/// 签到
+model Signin {
+  id         String   @id @default(cuid())
+  userId     String
+  /// yyyy-MM-dd（Asia/Shanghai）
+  signInDate String
+  signInTime DateTime @default(now())
+  /// 本次签到奖励的次数
+  reward     Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, signInDate])
+  @@index([userId, createdAt])
+  @@map("signins")
+}

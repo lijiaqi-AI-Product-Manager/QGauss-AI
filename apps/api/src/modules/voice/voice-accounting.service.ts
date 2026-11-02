@@ -1,0 +1,36 @@
+import { Injectable } from '@nestjs/common';
+import { Prisma, VoiceTask } from '@prisma/client';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { LedgerService, isPool } from '../commerce/ledger.service';
+
+export type VoiceResult={id:string;mime:string};
+export function voiceResults(raw:string):VoiceResult[]{try{const data=JSON.parse(raw);return Array.isArray(data)&&data.every(row=>row&&typeof row.id==='string'&&row.mime==='audio/mpeg')?data:[];}catch{return[];}}
+
+@Injectable()
+export class VoiceAccountingService {
+  constructor(private readonly prisma:PrismaService,private readonly ledger:LedgerService){}
+  async reserveTx(tx:Prisma.TransactionClient,task:VoiceTask,cost:number){
+    if(!isPool(task.pool))throw new Error('语音次数池无效');
+    if(cost)await this.ledger.reserveCountTx(tx,task.userId,{pool:task.pool,amount:cost,refId:task.id,bizType:'voice',model:task.model,modelName:task.kind==='speech'?'回答朗读':'录音转写'});
+    return tx.voiceTask.update({where:{id:task.id},data:{reservedAmount:cost,billingState:cost?'RESERVED':'FREE'}});
+  }
+  async stage(id:string,transcript:string,results:VoiceResult[]){
+    const changed=await this.prisma.voiceTask.updateMany({where:{id,status:'RUNNING'},data:{status:'SETTLING',progress:95,transcript,resultJson:JSON.stringify(results)}});return changed.count>0;
+  }
+  async complete(id:string){
+    return this.prisma.$transaction(async tx=>{
+      const claimed=await tx.voiceTask.updateMany({where:{id,status:'SETTLING'},data:{status:'COMPLETED'}});if(!claimed.count)return false;
+      const row=await tx.voiceTask.findUniqueOrThrow({where:{id}}),results=voiceResults(row.resultJson);
+      if(row.kind==='speech'&&(results.length!==row.segmentCount||row.completedSegments!==row.segmentCount)||row.kind==='transcription'&&!row.transcript.trim())throw new Error('语音结果尚未完整保存');
+      let returnedAmount=0,expiredAmount=0;
+      if(row.reservedAmount){const settled=await this.ledger.settleCountReservationTx(tx,id,row.reservedAmount);if(settled.userId!==row.userId||settled.pool!==row.pool||settled.amount!==row.reservedAmount||settled.bizType!=='voice')throw new Error('语音结果与次数预留不一致');returnedAmount=settled.returnedAmount;expiredAmount=settled.expiredAmount;}
+      await tx.voiceTask.update({where:{id},data:{progress:100,finishedAt:new Date(),chargedAmount:row.reservedAmount,returnedAmount,expiredAmount,billingState:row.reservedAmount?'SETTLED':'FREE',errorCode:null,errorMessage:null}});return true;
+    });
+  }
+  async stop(id:string,status:'FAILED'|'CANCELED',code:string,message:string){
+    return this.prisma.$transaction(async tx=>{
+      const changed=await tx.voiceTask.updateMany({where:{id,status:{in:['QUEUED','RUNNING']}},data:{status,errorCode:code,errorMessage:message,finishedAt:new Date()}});if(!changed.count)return false;
+      const row=await tx.voiceTask.findUniqueOrThrow({where:{id}});if(row.reservedAmount){const settled=await this.ledger.settleCountReservationTx(tx,id,0);if(settled.userId!==row.userId||settled.pool!==row.pool||settled.amount!==row.reservedAmount||settled.bizType!=='voice')throw new Error('语音次数预留不一致');await tx.voiceTask.update({where:{id},data:{billingState:'RELEASED',returnedAmount:settled.returnedAmount,expiredAmount:settled.expiredAmount}});}return true;
+    });
+  }
+}

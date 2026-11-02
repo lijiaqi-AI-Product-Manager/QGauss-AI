@@ -1,0 +1,65 @@
+{
+  "name": "qgauss-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QGauss AI — 自托管 AI 对话平台（多模型接入 / 会话 / 流式 / 后台）",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run start:dev -w @qgauss/api",
+    "dev:web": "npm run dev -w @qgauss/web",
+    "build": "npm run build -w @qgauss/api && npm run build -w @qgauss/web",
+    "build:api": "npm run build -w @qgauss/api",
+    "build:web": "npm run build -w @qgauss/web",
+    "web:measure": "node scripts/web/measure-initial-route.mjs",
+    "verify:publication": "node scripts/web/verify-live-publication.mjs",
+    "verify:compose": "node scripts/setup/verify-compose.mjs",
+    "setup": "npm run prisma:generate -w @qgauss/api && npm run db:init -w @qgauss/api && npm run seed -w @qgauss/api",
+    "setup:guided": "node scripts/setup/guided.mjs",
+    "serve:prod": "npm run build && npm run start -w @qgauss/api",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:init": "npm run db:init -w @qgauss/api",
+    "db:push": "npm run db:push -w @qgauss/api",
+    "seed": "npm run seed -w @qgauss/api",
+    "start": "npm run start -w @qgauss/api",
+    "test": "npm run test -w @qgauss/api && npm run test -w @qgauss/web",
+    "e2e": "npm run e2e -w @qgauss/api",
+    "typecheck": "npm run typecheck -w @qgauss/api",
+    "e2e:auto": "npm run e2e:auto -w @qgauss/api",
+    "verify": "npm run release:test && npm run release:check && npm run brand:check && npm run typecheck && npm run deadcode && npm run build && npm run brand:dist && npm run test && npm run e2e:auto",
+    "deadcode": "npm run deadcode -w @qgauss/api",
+    "brand:check": "node scripts/brand-check.mjs",
+    "brand:dist": "node scripts/brand-check.mjs --dist",
+    "ops:keygen": "node apps/api/scripts/operations/cli.mjs keygen",
+    "ops:backup": "node apps/api/scripts/operations/cli.mjs backup",
+    "ops:verify": "node apps/api/scripts/operations/cli.mjs verify",
+    "ops:restore": "node apps/api/scripts/operations/cli.mjs restore",
+    "ops:recover-admin": "node apps/api/scripts/operations/cli.mjs recover-admin",
+    "ops:inspect": "node apps/api/scripts/operations/cli.mjs inspect",
+    "preview": "node scripts/preview/serve-preview.mjs",
+    "release:check": "node scripts/release-check.mjs",
+    "release:test": "node --test scripts/test/publication.spec.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "acorn": "^8.19.0",
+    "acorn-walk": "^8.3.5",
+    "jszip": "^3.10.2",
+    "terser": "^5.51.2"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "overrides": {
+    "@nestjs/platform-express": {
+      "multer": "2.5.0"
+    },
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.2"
+    }
+  }
+}

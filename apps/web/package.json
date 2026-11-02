@@ -1,0 +1,36 @@
+{
+  "name": "@qgauss/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ../../scripts/web/build.mjs",
+    "watch": "node ../../scripts/web/build.mjs --watch",
+    "dev": "node dev-server.mjs",
+    "test": "node test/sse-parser.spec.mjs && node test/chat-stream.spec.mjs && node test/web-search.spec.mjs && node test/markdown.spec.mjs && node test/rich-assets.spec.mjs && node test/build-publication.spec.mjs && node test/rich-content.spec.mjs && node test/rich-message.spec.mjs && node test/api-client.spec.mjs && node test/auth-store.spec.mjs && node test/artwork-assets.spec.mjs && node test/referral-presentation.spec.mjs && node test/checkout-presentation.spec.mjs && node test/wallet-presentation.spec.mjs && node test/model-presentation.spec.mjs && node test/ledger-activity.spec.mjs && node test/client-shell.spec.mjs && node test/voice-session.spec.mjs && node test/image-mask.spec.mjs && node test/video-intent.spec.mjs && node test/midjourney-intent.spec.mjs && node test/precompress.spec.mjs && node test/video-tools.spec.mjs"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "dompurify": "^3.4.17",
+    "element-plus": "^2.9.0",
+    "highlight.js": "^11.11.0",
+    "katex": "0.19.1",
+    "marked": "^15.0.0",
+    "mermaid": "12.2.0",
+    "pinia": "^2.3.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.9",
+    "@rollup/plugin-node-resolve": "^15.3.1",
+    "@rollup/plugin-replace": "^6.0.3",
+    "@rollup/plugin-terser": "1.0.2",
+    "jsdom": "^25.0.1",
+    "postcss": "^8.5.31",
+    "rollup": "^4.65.0",
+    "rollup-plugin-postcss": "^4.0.2",
+    "rollup-plugin-vue": "^6.0.0",
+    "typescript": "^5.7.0"
+  }
+}

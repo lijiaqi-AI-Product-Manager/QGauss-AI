@@ -1,0 +1,4 @@
+:root{font-family:system-ui,-apple-system,'Microsoft YaHei',sans-serif;color:#1d2231;background:#f5f6f8;font-size:16px;line-height:1.85;color-scheme:light}
+body{max-width:840px;margin:40px auto;padding:36px 42px;background:#fff;border-radius:20px;box-shadow:0 8px 36px #00000008}
+h1{font-size:30px;line-height:1.4;margin:0 0 12px}h2{font-size:20px;margin:28px 0 8px}p,ul{margin:10px 0}.meta{color:#737373;font-size:13px}a{color:#5868ff}footer{margin-top:32px;padding-top:20px;border-top:1px solid #eee;font-size:14px}
+@media(max-width:640px){body{margin:0;border-radius:0;padding:24px 20px}h1{font-size:25px}}

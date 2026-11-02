@@ -1,0 +1,9 @@
+/* 液态层独立于磨砂底层；SVG 背景滤镜不可用时仍保留磨砂、高光与清晰文字。 */
+.qgd-glass-defs{position:fixed;width:0;height:0;overflow:hidden;pointer-events:none}
+html[data-qg-design] .qgd-liquid{isolation:isolate;-webkit-backdrop-filter:blur(12px) saturate(150%);backdrop-filter:blur(12px) saturate(150%)}
+html[data-qg-design] .qgd-primary-navigation>div.qgd-liquid{position:relative}
+html[data-qg-design] .qgd-liquid:before,html[data-qg-design] .qgd-liquid:after{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none}
+html[data-qg-design] .qgd-liquid:before{z-index:-1;background:#ffffff01}
+html[data-qg-design] .qgd-liquid:after{z-index:0;box-shadow:inset 1px 1px 1px #ffffff70,inset -1px -1px 2px #74758d20;background:linear-gradient(112deg,transparent 32%,#ffffff25 45%,#ffffff05 52%,transparent 65%);background-size:240% 100%;background-position:120% 0;animation:qgd-liquid-light 8s ease-in-out infinite}
+@supports(backdrop-filter:url('#qgd-liquid-refraction')){html[data-qg-design] .qgd-liquid:before{backdrop-filter:url('#qgd-liquid-refraction')}}
+@keyframes qgd-liquid-light{0%,28%{background-position:120% 0;opacity:.15}50%{opacity:.6}72%,100%{background-position:-120% 0;opacity:.15}}

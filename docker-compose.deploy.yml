@@ -1,0 +1,55 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: qgauss-ai:latest
+    container_name: qgauss-api
+    restart: unless-stopped
+    ports:
+      - "9520:9520"
+    environment:
+      # 默认 SQLite（数据在卷里）；要用 PostgreSQL 见 docs/DEPLOY.md
+      DATABASE_URL: "file:/app/data/qgauss.db"
+      PORT: "9520"
+      API_PREFIX: "api"
+      WEB_DIST: "/app/apps/web/dist"
+      TZ: "Asia/Shanghai"
+      NODE_ENV: "production"
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-}"
+      JWT_SECRET: "${JWT_SECRET:?Set a random JWT_SECRET with at least 32 characters}"
+      JWT_ACCESS_TTL: "${JWT_ACCESS_TTL:-15m}"
+      JWT_REFRESH_TTL: "${JWT_REFRESH_TTL:-30d}"
+      APP_ENCRYPTION_KEY: "${APP_ENCRYPTION_KEY:?Set an independent 32-byte base64 APP_ENCRYPTION_KEY}"
+      SEED_ADMIN_EMAIL: "${SEED_ADMIN_EMAIL:-admin@local.dev}"
+      SEED_ADMIN_USERNAME: "${SEED_ADMIN_USERNAME:-admin}"
+      # Fresh sites require this owner credential; installed sites can omit it.
+      QGAUSS_SETUP_TOKEN:
+      # Optional explicit seed workflow; the guided installation never runs seed.
+      SEED_ADMIN_PASSWORD:
+      # Omit unused mail values entirely; never coerce optional flags to empty strings.
+      MAIL_SMTP_HOST:
+      MAIL_SMTP_PORT:
+      MAIL_SMTP_SECURE:
+      MAIL_SMTP_REQUIRE_TLS:
+      MAIL_SMTP_USER:
+      MAIL_SMTP_PASS:
+      MAIL_FROM:
+      MAIL_CONNECTION_TIMEOUT_MS:
+      MAIL_GREETING_TIMEOUT_MS:
+      MAIL_SOCKET_TIMEOUT_MS:
+      MAIL_RETRY_INTERVAL_MS:
+    volumes:
+      - qgauss-data:/app/data
+      - qgauss-storage:/app/apps/api/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9520/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  qgauss-data:
+  qgauss-storage:

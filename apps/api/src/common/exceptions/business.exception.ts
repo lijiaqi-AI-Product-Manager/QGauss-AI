@@ -1,0 +1,60 @@
+import { HttpException, HttpStatus } from '@nestjs/common';
+
+/**
+ * 业务异常：携带业务码，前端按 code 分支处理。
+ * 约定：1xxx 通用 / 2xxx 鉴权 / 3xxx 模型渠道 / 4xxx 会话 / 5xxx 系统
+ */
+export class BusinessException extends HttpException {
+  constructor(
+    public readonly bizCode: number,
+    message: string,
+    httpStatus: number = HttpStatus.BAD_REQUEST,
+  ) {
+    super({ code: bizCode, message }, httpStatus);
+  }
+}
+
+export const ErrorCode = {
+  UNKNOWN: 1000,
+  PARAM_INVALID: 1001,
+  NOT_FOUND: 1002,
+  RATE_LIMITED: 1003,
+
+  UNAUTHORIZED: 2001,
+  TOKEN_EXPIRED: 2002,
+  FORBIDDEN: 2003,
+  ACCOUNT_BANNED: 2004,
+  CREDENTIAL_INVALID: 2005,
+  USER_EXISTS: 2006,
+
+  MODEL_NOT_FOUND: 3001,
+  CHANNEL_UNAVAILABLE: 3002,
+  UPSTREAM_ERROR: 3003,
+
+  CONVERSATION_NOT_FOUND: 4001,
+
+  QUOTA_EXCEEDED: 6001,
+  CONVERSATION_BUSY: 6002,
+
+  CONTENT_BLOCKED: 7001,
+  CONTENT_REVIEW: 7002,
+
+  // 8xxx 商业化
+  COMMERCE_DISABLED: 8001,
+  BALANCE_NOT_ENOUGH: 8002,
+  ORDER_NOT_FOUND: 8003,
+  ORDER_STATE_INVALID: 8004,
+  ORDER_AMOUNT_MISMATCH: 8005,
+  CRAMI_NOT_FOUND: 8006,
+  CRAMI_UNAVAILABLE: 8007,
+  ALREADY_SIGNED: 8008,
+  SALES_NOT_ENABLED: 8009,
+  WITHDRAWAL_INVALID: 8010,
+  PAY_PROVIDER_UNAVAILABLE: 8011,
+  RECHARGE_DISABLED: 8012,
+  PACKAGE_NOT_FOUND: 8013,
+  PAY_NOTIFY_INVALID: 8014,
+  CRAMI_ALREADY_USED: 8015,
+
+  INTERNAL: 5000,
+} as const;

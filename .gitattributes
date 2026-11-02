@@ -1,0 +1,7 @@
+# 保持视觉组件和二进制资源的稳定字节。
+apps/web/src/components/auth/QGaussAuthScene.js text eol=lf
+apps/web/src/components/auth/scene.css -text
+apps/web/public/fonts/*.woff2 -text
+apps/web/src/components/reference/*.js text eol=lf
+apps/web/src/components/reference/*.css text eol=lf
+apps/web/src/components/reference/typed-text.css -text

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <defs>
+    <linearGradient id="sky" x2="1" y2="1"><stop stop-color="#dcebc1"/><stop offset=".55" stop-color="#faf2dc"/><stop offset="1" stop-color="#ddebe9"/></linearGradient>
+    <linearGradient id="glass" x2="1" y2="1"><stop stop-color="#fff" stop-opacity=".9"/><stop offset=".6" stop-color="#e5ebd3" stop-opacity=".75"/><stop offset="1" stop-color="#adcc9e" stop-opacity=".55"/></linearGradient>
+    <radialGradient id="lime" cx=".3" cy=".2"><stop stop-color="#f3ffb6"/><stop offset=".5" stop-color="#bfd96b"/><stop offset="1" stop-color="#6f964c"/></radialGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#5c6c46" flood-opacity=".19"/></filter><filter id="soft"><feGaussianBlur stdDeviation="20"/></filter>
+  </defs>
+  <rect width="960" height="540" fill="url(#sky)"/><circle cx="754" cy="30" r="180" fill="#fff" opacity=".6" filter="url(#soft)"/>
+  <ellipse cx="480" cy="448" rx="174" ry="20" fill="#8c9f74" opacity=".15" filter="url(#soft)"/>
+  <g transform="translate(480 265) rotate(-13)" filter="url(#shadow)"><rect x="-156" y="-146" width="312" height="292" rx="73" fill="url(#glass)" stroke="#fff" stroke-opacity=".85" stroke-width="2"/><circle r="92" fill="none" stroke="url(#lime)" stroke-width="37"/><path d="m42 48 64 66" stroke="url(#lime)" stroke-width="37" stroke-linecap="round"/><path d="M-109-96h75" stroke="#fff" stroke-width="6" stroke-linecap="round" opacity=".8"/></g>
+  <g fill="#7e9c56"><path d="m735 182 6 19 19 6-19 6-6 19-6-19-19-6 19-6z"/><circle cx="202" cy="313" r="5" opacity=".5"/></g><path d="M185 171c33-32 49-27 53-5s-16 29-24 12" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+  <g font-family="Arial,sans-serif" fill="#59664a"><text x="42" y="48" font-size="13" letter-spacing="4">QGAUSS / MOTION STUDY</text><text x="42" y="502" font-size="12" letter-spacing="3">A LITTLE WIND. A LITTLE WONDER.</text><text x="900" y="502" text-anchor="end" font-size="12">02</text></g>
+</svg>

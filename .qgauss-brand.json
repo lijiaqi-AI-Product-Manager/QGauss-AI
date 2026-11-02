@@ -1,0 +1,205 @@
+{
+  "product": "QGauss AI",
+  "aliases": [
+    "QGauss"
+  ],
+  "preserveModelAndTechnicalIdentifiers": true,
+  "deniedProductTokens": [
+    {
+      "id": "publication-01",
+      "sha256": "c2e500e453c031380325e4eb160b6ad12ba358d6898a9f6621036faf0380d0af",
+      "length": 7,
+      "firstCodePoint": 115,
+      "lastCodePoint": 105
+    },
+    {
+      "id": "publication-02",
+      "sha256": "c857d09db23e6822e3600bc06ad8d58f92ed62bc8efd81c753f77048662cb97d",
+      "length": 6,
+      "firstCodePoint": 99,
+      "lastCodePoint": 101
+    },
+    {
+      "id": "publication-03",
+      "sha256": "57de4cf40144bdf7d00010f2f5557a7d642c2b9705309bfade167dd313e2ca93",
+      "length": 5,
+      "firstCodePoint": 99,
+      "lastCodePoint": 120
+    },
+    {
+      "id": "publication-04",
+      "sha256": "927bd71614f67a7b7b0a1a835420a0c6632d256cc5fb9fa790f0054ae590fcc3",
+      "length": 8,
+      "firstCodePoint": 97,
+      "lastCodePoint": 103
+    },
+    {
+      "id": "publication-05",
+      "sha256": "8c4f0a1f51161040c5ec45f98d1c5fd87dfbedf692db3e71c8c7cccb23fdb95a",
+      "length": 11,
+      "firstCodePoint": 97,
+      "lastCodePoint": 100
+    },
+    {
+      "id": "publication-06",
+      "sha256": "8168cbe23acc6eb855f20ae0fb55792431b31ce580644a787cdc2f323297f290",
+      "length": 9,
+      "firstCodePoint": 97,
+      "lastCodePoint": 110
+    },
+    {
+      "id": "publication-07",
+      "sha256": "ef7c66e0d6042da9ca21f251e49c21eecb2fc80963888ecfde19026cd5c3abed",
+      "length": 10,
+      "firstCodePoint": 97,
+      "lastCodePoint": 100
+    },
+    {
+      "id": "publication-08",
+      "sha256": "ce3390092c878f09933016c7f8bf25da6c57c614c937fb3cf5182552b552b7b4",
+      "length": 10,
+      "firstCodePoint": 97,
+      "lastCodePoint": 100
+    },
+    {
+      "id": "publication-09",
+      "sha256": "5f96370b2f42e6a1bfc73cb6f7abc566ccac03fc4cef176908b8a342192e3f9b",
+      "length": 14,
+      "firstCodePoint": 97,
+      "lastCodePoint": 110
+    },
+    {
+      "id": "publication-10",
+      "sha256": "24cbfd126a180dad374774c8892f81b7fe0a65e76e3bca5eac1217928606a7b2",
+      "length": 4,
+      "firstCodePoint": 97,
+      "lastCodePoint": 25104
+    },
+    {
+      "id": "publication-11",
+      "sha256": "6d645c74122e13d6f547e10aecfffa1be708aa4c32f488a81fa0c723fc2cae26",
+      "length": 4,
+      "firstCodePoint": 97,
+      "lastCodePoint": 20135
+    },
+    {
+      "id": "publication-12",
+      "sha256": "ad3f7b9b9f944a6d0100271031c506dd3b3ce2f58def2d09ba5e234039c71315",
+      "length": 4,
+      "firstCodePoint": 97,
+      "lastCodePoint": 31243
+    },
+    {
+      "id": "publication-13",
+      "sha256": "cd65cd767bf4bfed27115c96851e0e3f1661f442e66419ee8264c40232a6956f",
+      "length": 4,
+      "firstCodePoint": 97,
+      "lastCodePoint": 39564
+    },
+    {
+      "id": "publication-14",
+      "sha256": "244e3b96f6d62c9a4b70f6d101f93b7ced0080a0dc02f1b79288858b832019e8",
+      "length": 4,
+      "firstCodePoint": 97,
+      "lastCodePoint": 26816
+    },
+    {
+      "id": "publication-15",
+      "sha256": "f4111aab361d88091002f5da4f0bbcb1ee9dab7226b5496de76ab5a0f99ca02c",
+      "length": 6,
+      "firstCodePoint": 20154,
+      "lastCodePoint": 25104
+    },
+    {
+      "id": "publication-16",
+      "sha256": "0e628f7b7a7e3b633243650d199ee7c0da51d2fedaeaf3549da13365e13c0f6a",
+      "length": 4,
+      "firstCodePoint": 22806,
+      "lastCodePoint": 26816
+    },
+    {
+      "id": "publication-17",
+      "sha256": "47bdcd7a3e2eb86528b46c48ecea5e6260d5b37c66bc3f32d8451ece17114513",
+      "length": 7,
+      "firstCodePoint": 25105,
+      "lastCodePoint": 35805
+    },
+    {
+      "id": "publication-18",
+      "sha256": "b4019f595efe64dbd6a30ac5c715d9b9b589ef8bdb1746d9f9d54c7fa4b74205",
+      "length": 5,
+      "firstCodePoint": 25105,
+      "lastCodePoint": 35770
+    },
+    {
+      "id": "publication-19",
+      "sha256": "28aeddfbbff8170846c1b82cb96ccea6528ff26dd17329d9c627c489bcf53467",
+      "length": 4,
+      "firstCodePoint": 29992,
+      "lastCodePoint": 27714
+    },
+    {
+      "id": "publication-20",
+      "sha256": "7ab9d1a835ea9adfb984bb12eac51efd74a3553548340ca1164ee5bc88fce0c1",
+      "length": 6,
+      "firstCodePoint": 29992,
+      "lastCodePoint": 27714
+    },
+    {
+      "id": "publication-21",
+      "sha256": "dcdb3e89ffb0b12a56af2b345e60a2f4861ce3708e51245ca3f418d5ee3a57ca",
+      "length": 5,
+      "firstCodePoint": 36127,
+      "lastCodePoint": 27714
+    },
+    {
+      "id": "publication-22",
+      "sha256": "831c46459af2db57391d8d0fc14aa49fc99ee2e7ca61e03f1bdcb5b20a213a19",
+      "length": 5,
+      "firstCodePoint": 36127,
+      "lastCodePoint": 23450
+    },
+    {
+      "id": "publication-23",
+      "sha256": "059d9f619d6d6801985df77815210ecd1717bf72d1394fa70814996afb16d996",
+      "length": 7,
+      "firstCodePoint": 36127,
+      "lastCodePoint": 27714
+    },
+    {
+      "id": "publication-24",
+      "sha256": "33c2b569dbc02a3eb854a5d276f58c8d4d1c843f2bbca393221faa9789c045cf",
+      "length": 2,
+      "firstCodePoint": 22797,
+      "lastCodePoint": 21051
+    },
+    {
+      "id": "publication-25",
+      "sha256": "2e8ec0f082bcd5a7bbc417fb51c529b0e84b0181680cb304a886be9a3a6834c5",
+      "length": 2,
+      "firstCodePoint": 36870,
+      "lastCodePoint": 21521
+    },
+    {
+      "id": "publication-26",
+      "sha256": "11a8942075fba2e42041a363d5da8c7c757813d35dacd67bffb9103767ea536f",
+      "length": 2,
+      "firstCodePoint": 21407,
+      "lastCodePoint": 21253
+    },
+    {
+      "id": "publication-27",
+      "sha256": "94bd2f07523e1847146635dc14715ad67c40202fbffdd8c2fd55f028c247fc2a",
+      "length": 10,
+      "firstCodePoint": 21407,
+      "lastCodePoint": 54
+    },
+    {
+      "id": "publication-28",
+      "sha256": "fbb511884a9e73e30f7809bbf9dfef1c29092ff9f03b78284a4cb998fdaf0e2a",
+      "length": 5,
+      "firstCodePoint": 54,
+      "lastCodePoint": 54
+    }
+  ]
+}

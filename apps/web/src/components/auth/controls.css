@@ -1,0 +1,75 @@
+@font-face{font-family:QGaussSans;src:url('/fonts/QGaussSans-Medium.woff2') format('woff2');font-style:normal;font-weight:400 600;font-display:swap}
+@font-face{font-family:QGaussSans;src:url('/fonts/QGaussSans-Bold.woff2') format('woff2');font-style:normal;font-weight:700 900;font-display:swap}
+.login-page{font-family:QGaussSans,-apple-system,'Noto Sans','Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:14px;line-height:1.6;color:#1d2231}
+.login-page *{box-sizing:border-box}
+.login-page button,.login-page input,.login-page a{font-family:inherit}
+.login-page button{cursor:pointer}
+.login-page button:disabled{cursor:wait;opacity:.5}
+.login-page .qg-auth-form-flow{width:100%;font-size:14px;line-height:1.6}
+.login-page .login-form-container{padding:4px 50px 0;width:100%}
+.login-page .login-form-container.is-login{padding-top:8px}
+.login-page .n-form{margin:0;max-width:640px}
+.login-page .n-form-item{display:grid;grid-template-areas:'label' 'blank';margin-bottom:8px}
+.login-page .n-form-item-label{display:flex;align-items:flex-start;height:28px;line-height:22.4px;margin:0 0 4px;padding:0 0 4px 2px}
+.login-page .n-form-item-blank{display:flex;align-items:center;min-width:0}
+.login-page .n-input{display:flex;min-width:0;width:100%;height:44px;border:1px solid #d7d9e0;border-radius:999px;background:#fff;transition:box-shadow .2s,border-color .2s}
+.login-page .n-input-wrapper{display:flex;align-items:center;width:100%;min-width:0;padding:0 14px}
+.login-page .n-input__input-el{display:block;min-width:0;width:100%;height:40px;line-height:40px;background:transparent;border:0;outline:0;box-shadow:none;padding:0;font-size:13px;color:#1d2231;border-radius:0}
+.login-page .n-input__input-el::placeholder{opacity:1;color:#737373}
+.login-page .n-input.placeholder-error{border-color:#e88080!important}
+.login-page .n-input__eye{width:28px;min-width:28px;height:28px;padding:5px;border:0;background:transparent;display:inline-flex;align-items:center;justify-content:center;color:#5c6370}
+.login-page .n-input__eye svg{width:18px;height:18px}
+.login-page .n-input__eye:focus-visible{outline:2px solid #5868ff;border-radius:6px}
+.login-page .form-btn-item{margin:0;padding:0}
+.login-page .n-button--primary-type{width:100%;height:48px;display:flex;align-items:center;justify-content:center;padding:0 18px;background:#070707;color:#fafafa;border:0;border-radius:999px;font-size:13px;font-weight:600;line-height:13px}
+.login-page .n-button--primary-type:hover{background:#1f1f1f}
+.login-page .qg-auth-assist{display:flex;align-items:center;justify-content:space-between;width:100%;margin:4px 0 8px;color:#737373;font-size:12px;line-height:19.2px}
+.login-page .qg-auth-assist label{display:flex;align-items:center;gap:6px}
+.login-page .qg-auth-assist button,.login-page .qg-auth-return button{padding:0;border:0;background:transparent;color:#737373;font-size:12px;font-weight:600;line-height:19.2px}
+.login-page input[type=checkbox]{appearance:none;display:inline-grid;place-content:center;width:16px;height:16px;padding:0;margin:0;background:transparent;border:1px solid #171717;border-radius:6px;flex-shrink:0;cursor:pointer}
+.login-page input[type=checkbox]:checked{background:#070707}
+.login-page input[type=checkbox]:checked::after{content:'';width:8px;height:4px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:translateY(-1px) rotate(-45deg)}
+.login-page input[type=checkbox]:focus-visible{outline:2px solid #5868ff;outline-offset:3px}
+.login-page .login-type-switch-slot{margin:8px 0 4px}
+.login-page .qg-auth-form-footer{display:flex;flex-direction:column;justify-content:flex-end;margin-top:4px;padding-bottom:4px}
+.login-page .box-agreement{display:flex;align-items:flex-start;justify-content:center;width:100%;margin:10px 0 12px;padding:0 50px;font-size:12px;line-height:19.2px;color:#737373}
+.login-page .qg-auth-agreement-check{display:flex;align-items:center;margin-right:8px;height:17.2px}
+.login-page .box-agreement .content{flex:1;min-width:0;text-align:center;line-height:16.2px}
+.login-page .agreement-text{color:#5868ff;text-decoration:none;cursor:pointer}
+.login-page .signup-bottom{display:flex;align-items:center;justify-content:center;gap:6px;margin:6px auto 0;padding-bottom:2px;max-width:360px;flex-wrap:wrap;min-height:18px;font-size:12px;line-height:19.2px;color:#737373}
+.login-page .signup-bottom button{border:0;background:transparent;padding:0;color:#5868ff;font-size:14px;font-weight:700;line-height:14px}
+.login-page .signup-bottom.is-hidden{visibility:hidden;pointer-events:none}
+.login-page .qg-auth-return{display:flex;justify-content:center;margin-top:8px}
+.login-page .qg-auth-captcha-row{gap:8px}
+.login-page .qg-auth-captcha{display:flex;align-items:center;justify-content:center;width:104px;height:44px;flex-shrink:0;border:0;border-radius:8px;padding:0;background:#f5f7fa;overflow:hidden}
+.login-page .qg-auth-captcha svg{max-width:104px;height:40px}
+.login-page .qg-auth-error,.login-page .qg-auth-notice{margin:0 0 8px;color:#c94444;font-size:12px;line-height:18px;text-align:left}
+.login-page .qg-auth-notice{color:#2a7c52}
+.login-page .qg-auth-popover{position:relative}
+.login-page .qg-auth-popover-content{position:absolute;top:48px;left:12px;min-width:150px;padding:6px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 8px 32px #0002;pointer-events:auto}
+.qg-auth-consent-mask{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.5);font-family:QGaussSans,-apple-system,'Microsoft YaHei',sans-serif}
+.qg-auth-consent{width:300px;max-width:100%;background:#fff;border-radius:14px;overflow:hidden;animation:qg-consent-enter .2s ease}
+.qg-auth-consent-body{padding:24px 20px 18px;text-align:center}
+.qg-auth-consent h2{margin:0 0 12px;font-size:17px;font-weight:600;color:#1d1d1f;line-height:1.3}
+.qg-auth-consent p{margin:0;font-size:14px;line-height:1.5;color:#666}
+.qg-auth-consent a{color:#3478f6;text-decoration:none}
+.qg-auth-consent-actions{display:flex;border-top:.5px solid #e5e5e5}
+.qg-auth-consent button{flex:1;padding:14px 0;border:0;border-radius:0;background:transparent;font-family:inherit;font-size:16px;line-height:1.6;font-weight:400;cursor:pointer;color:#666}
+.qg-auth-consent button:first-child{border-right:.5px solid #e5e5e5}
+.qg-auth-consent button:last-child{color:#3478f6;font-weight:600}
+.qg-auth-consent button:active{background:#0000000a}
+.qg-auth-consent :focus-visible{outline:2px solid #3478f6;outline-offset:-3px}
+@keyframes qg-consent-enter{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+/* 手机端采用单栏布局，保留完整认证表单。 */
+/* body 提升优先级，避免并行构建中 scoped 样式的收集顺序改变后覆盖手机规则。 */
+@media(max-width:640px){
+  body .login-page{padding:12px!important}
+  body .login-page .login-shell{grid-template-columns:minmax(0,1fr);height:calc(100vh - 24px);height:calc(100dvh - 24px);max-height:none;border-radius:24px}
+  body .login-page .left-panel{display:none}
+  body .login-page .right-panel{padding:6px;min-width:0}
+  body .login-page .form-card{padding:64px 24px max(28px,env(safe-area-inset-bottom));border-radius:20px;min-width:0}
+  body .login-page .form-card h1{font-size:24px}
+  body .login-page .login-form-container{padding-left:0;padding-right:0}
+  body .login-page .content-wrap .box-agreement{padding-left:0!important;padding-right:0!important}
+}
+@media(prefers-reduced-motion:reduce){.login-page *,.login-page *::before,.login-page *::after,.qg-auth-consent{animation:none!important;transition:none!important}}

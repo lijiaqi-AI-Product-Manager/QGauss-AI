@@ -1,0 +1,27 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+logs
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+apps/api/prisma/*.db-wal
+apps/api/prisma/*.db-shm
+apps/api/storage
+*.log
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Local build leases, stages and scratch work never enter the image context.
+apps/web/.qgauss-build-*
+apps/web/.qgauss-build.lock
+research/
+apps/api/prisma/backups/
+.qgauss-installation-*
+apps/api/prisma/*.qgauss-lock.sqlite*
+.qgauss-operations-*/

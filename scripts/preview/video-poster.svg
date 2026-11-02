@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <defs>
+    <linearGradient id="sky" x2="1" y2="1"><stop stop-color="#dfe4fb"/><stop offset=".5" stop-color="#f6edfc"/><stop offset="1" stop-color="#c5ecea"/></linearGradient>
+    <radialGradient id="sphere" cx=".3" cy=".22" r=".82"><stop stop-color="#fff" stop-opacity=".98"/><stop offset=".26" stop-color="#dbf7fb" stop-opacity=".82"/><stop offset=".62" stop-color="#b7a3ed" stop-opacity=".66"/><stop offset=".9" stop-color="#6b73c2" stop-opacity=".78"/><stop offset="1" stop-color="#dae9ff"/></radialGradient>
+    <linearGradient id="ring"><stop stop-color="#ae98ed"/><stop offset=".5" stop-color="#fff"/><stop offset="1" stop-color="#7ad4da"/></linearGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="23"/></filter><filter id="shadow"><feDropShadow dx="0" dy="22" stdDeviation="18" flood-color="#6366a2" flood-opacity=".23"/></filter>
+  </defs>
+  <rect width="960" height="540" fill="url(#sky)"/>
+  <circle cx="840" cy="40" r="160" fill="#fff" opacity=".4" filter="url(#blur)"/><ellipse cx="470" cy="461" rx="189" ry="20" fill="#7466a5" opacity=".16" filter="url(#blur)"/>
+  <g transform="translate(480 260) rotate(-23)"><ellipse rx="275" ry="73" fill="none" stroke="url(#ring)" stroke-width="12" opacity=".45"/><circle r="146" fill="url(#sphere)" filter="url(#shadow)"/><ellipse cx="-38" cy="-59" rx="68" ry="28" fill="#fff" opacity=".42" transform="rotate(-25)"/><path d="M-275 0a275 73 0 0 0 550 0" fill="none" stroke="url(#ring)" stroke-width="12" opacity=".9"/></g>
+  <g fill="#fff"><circle cx="177" cy="125" r="4"/><circle cx="764" cy="350" r="5"/><circle cx="687" cy="107" r="3"/><path d="m239 358 4 12 12 4-12 4-4 12-4-12-12-4 12-4z"/><path d="m731 175 5 17 17 5-17 5-5 17-5-17-17-5 17-5z"/></g>
+  <g font-family="Arial,sans-serif" fill="#5e5a79"><text x="42" y="48" font-size="13" letter-spacing="4">QGAUSS / MOTION STUDY</text><text x="42" y="502" font-size="12" letter-spacing="3">LIGHT, IN A LITTLE ORBIT.</text><text x="900" y="502" text-anchor="end" font-size="12">01</text></g>
+</svg>
