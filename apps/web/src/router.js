@@ -10,6 +10,7 @@ const routes = [
   { path: '/welcome', name: 'welcome', component: () => import('./views/Welcome.vue'), meta: { admin: true, ownTitle: true } },
   { path: '/mail', name: 'mail', component: () => import('./views/admin/MailStudio.vue'), meta: { admin: true, ownTitle: true } },
   { path: '/voice/manage', name: 'voiceStudio', component: () => import('./views/admin/VoiceControl.vue'), meta: { admin: true, ownTitle: true } },
+  { path: '/voice',name:'voiceLibrary',component:()=>import('./views/VoiceHistory.vue'),meta:{ownTitle:true,title:'声音收藏室'} },
   { path: '/video/manage', name: 'videoStudio', component: () => import('./views/admin/VideoControl.vue'), meta: { admin: true, ownTitle: true } },
   { path: '/agents/manage', alias:['/agentcoze/config','/agentcoze/manage','/agentcoze/import','/agentcoze/chatlog'], name: 'agentStudio', component: () => import('./views/admin/AgentStudio.vue'), meta: { admin: true, ownTitle: true } },
   { path: '/login', name: 'login', component: () => import('./views/Login.vue'), meta: { public: true, authSurface: true } },

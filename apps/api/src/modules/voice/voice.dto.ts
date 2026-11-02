@@ -13,6 +13,7 @@ export class VoiceConfigDto {
   @Raw() @IsInt() @Min(0) @Max(1000000) transcriptionCost:number;
   @Raw() @IsIn(['model3','model4','drawMj','agent']) pool:string;
   @Raw() @IsInt() @Min(100) @Max(32768) maxSpeechChars:number;
+  @Raw() @ValidateIf((_,value)=>value!==undefined) @IsInt() @Min(0) @Max(3650) retentionDays?:number;
 }
 export class VoiceQuoteDto {
   @Raw() @IsIn(['speech','transcription']) kind:'speech'|'transcription';

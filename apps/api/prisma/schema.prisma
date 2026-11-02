@@ -110,6 +110,7 @@ model VoiceConfig {
   transcriptionCost      Int      @default(0)
   pool                   String   @default("model3")
   maxSpeechChars         Int      @default(16000)
+  retentionDays          Int      @default(0)
   version                Int      @default(1)
   updatedAt              DateTime @updatedAt
   @@map("voice_config")
@@ -121,6 +122,11 @@ model VoiceTask {
   userId           String
   requestKey       String
   requestHash      String
+  label            String    @default("")
+  retentionDays    Int       @default(0)
+  expiresAt        DateTime?
+  deletedAt        DateTime?
+  purgedAt         DateTime?
   kind             String
   messageId        String?
   inputFileId      String?
@@ -152,6 +158,8 @@ model VoiceTask {
   @@unique([userId, requestKey])
   @@index([userId, createdAt])
   @@index([status, createdAt])
+  @@index([userId, deletedAt, createdAt])
+  @@index([expiresAt, purgedAt])
   @@map("voice_tasks")
 }
 
@@ -434,12 +442,15 @@ model UploadFile {
   extractError  String?
   createdAt DateTime  @default(now())
   deletedAt DateTime?
+  expiresAt DateTime?
+  purgedAt  DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   agentFiles AgentFileMapping[]
 
   @@index([userId, createdAt])
   @@index([sha256])
+  @@index([scope, deletedAt, purgedAt])
   @@map("upload_files")
 }
 

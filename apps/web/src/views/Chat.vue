@@ -304,6 +304,7 @@
               :rows="compactComposer ? 1 : 3"
               :placeholder="composerPlaceholder"
               aria-label="消息输入框"
+              :disabled="entryPending||loadingDetail"
               @input="autosize"
               @paste="onPaste"
               @keydown.enter.exact="onEnter"
@@ -318,6 +319,7 @@
             style="display: none"
             @change="onPickFiles"
           />
+        <p v-if="entryPending||entryError" class="qgc-model-cost-note qag-composer-quote" :role="entryError?'alert':'status'"><ClientIcon name="sound"/><span>{{ entryPending?'正在打开指定的创作空间…':entryError }}</span><button v-if="entryError" type="button" @click="applyRouteEntry">重新打开</button><button v-if="entryError" type="button" @click="leaveEntry">开始普通对话</button></p>
         <p v-if="agentId" class="qgc-model-cost-note qag-composer-quote"><ClientIcon name="agent" /><span>{{ agentQuote(currentAgent).label }}</span><small>{{ agentLoading?'正在核对搭档资料…':agentError||'问题与所选附件将交给搭档服务处理' }}</small><button type="button" :disabled="agentLoading||streaming" @click="loadCurrentAgent">刷新资料</button></p>
         <p v-if="appId||appError||appLoading" class="qgc-model-cost-note qag-composer-quote" :role="appError?'alert':'status'"><ClientIcon name="apps"/><span>{{ appName||'应用资料' }}</span><small>{{ appLoading?'正在核对应用设定…':appError||'已核对第 '+appVersion+' 版设定，发送时再开始生成' }}</small><button v-if="appId" type="button" :disabled="appLoading||streaming||loadingDetail" @click="loadCurrentApp()">刷新应用资料</button><button v-else type="button" @click="leaveApp">返回普通对话</button></p>
         <p v-else-if="auth.isLoggedIn && currentModel" class="qgc-model-cost-note"><ClientIcon name="wallet" /><span>{{ modelBilling(currentModel).title }}</span><small>发送时按站点设置</small></p>
@@ -437,6 +439,8 @@ watch(inputEl, element => {
   inputResizeObserver.observe(element);
 });
 const quota = ref({ limit: 0, used: 0 });
+const entryKeys=['conversation','voiceTask','agent','app','voice'];
+const entryPending=ref(entryKeys.some(key=>route.query[key]!==undefined)),entryError=ref('');let entryRead=null;
 const appId = ref('');
 const appName = ref('');
 const appVersion=ref(null),appLoading=ref(false),appError=ref('');let appRead=null;
@@ -480,7 +484,7 @@ const objectUrls = new Set();
 
 const uploading = computed(() => pendingFiles.value.some((f) => f.status === 'uploading'));
 const readyFiles = computed(() => pendingFiles.value.filter((f) => f.status === 'done'));
-const canSend = computed(() => !appLoading.value&&!appError.value&&(!appId.value||Number.isInteger(appVersion.value))&&!uploading.value && !loadingDetail.value && !modelSaving.value && (!agentId.value||!agentLoading.value&&currentAgent.value?.ready&&!!currentAgent.value.offerRevision) && (!webSearchOn.value||currentModel.value?.webSearchAvailable) && (!!input.value.trim() || readyFiles.value.length > 0));
+const canSend = computed(() => !entryPending.value&&!entryError.value&&!appLoading.value&&!appError.value&&(!appId.value||Number.isInteger(appVersion.value))&&!uploading.value && !loadingDetail.value && !modelSaving.value && (!agentId.value||!agentLoading.value&&currentAgent.value?.ready&&!!currentAgent.value.offerRevision) && (!webSearchOn.value||currentModel.value?.webSearchAvailable) && (!!input.value.trim() || readyFiles.value.length > 0));
 
 function extOf(name = '') {
   const m = /\.([a-z0-9]{1,5})$/i.exec(name);
@@ -499,6 +503,7 @@ function trackUrl(url) {
 }
 
 async function addFiles(list) {
+  if(entryPending.value||entryError.value||loadingDetail.value)return ElMessage.info('请等待当前创作空间打开后再添加附件。');
   const files = [...list];
   if (!files.length) return;
   const room = 9 - pendingFiles.value.length;
@@ -606,7 +611,7 @@ function botMood(m, i) {
 }
 
 /* Voice input is reviewed before insertion; only newly generated replies may autoplay. */
-const voice = useVoiceSession({ auth, context:computed(()=>conversationId.value || `draft:${agentId.value || appId.value || 'chat'}`), disabled:computed(()=>streaming.value || loadingDetail.value||appLoading.value||!!appError.value), refreshBalance, insert(text){ input.value += `${input.value && !/\s$/.test(input.value)?'\n':''}${text}`; nextTick(()=>{autosize();inputEl.value?.focus();}); } });
+const voice = useVoiceSession({ auth, context:computed(()=>conversationId.value || `draft:${agentId.value || appId.value || 'chat'}`), disabled:computed(()=>streaming.value || loadingDetail.value||entryPending.value||!!entryError.value||appLoading.value||!!appError.value), refreshBalance, insert(text){ input.value += `${input.value && !/\s$/.test(input.value)?'\n':''}${text}`; nextTick(()=>{autosize();inputEl.value?.focus();}); } });
 function openVoice(){ if(!auth.isLoggedIn){saveGuestDraft(input.value);router.push('/login?redirect=/chat');return;}void voice.show(); }
 async function openHomeVoice(seed){if(!auth.isLoggedIn){saveGuestDraft(seed);await router.push({path:'/login',query:{redirect:'/chat?new=1'}});return;}newChat(seed);await nextTick();await voice.show();}
 
@@ -909,6 +914,7 @@ async function selectModel(m) {
 }
 
 function changeConversationView() {
+  entryRead?.abort();entryRead=null;entryPending.value=false;entryError.value='';
   appRead?.abort();appRead=null;appLoading.value=false;
   voice.reset();
   detachStream();
@@ -1003,10 +1009,10 @@ function clearApp(){appRead?.abort();appRead=null;appId.value='';appName.value='
 function leaveApp() { clearApp();conversationKind.value = 'chat'; newChat();if(route.query.app!==undefined){const query={...route.query};delete query.app;void router.replace({path:route.path,query});} }
 async function loadCurrentApp({opening=false}={}){
  appRead?.abort();const id=appId.value;if(!id||!auth.isLoggedIn)return;
- const request=new AbortController(),identity=auth.identityRevision,view=conversationViewRevision;appRead=request;appLoading.value=true;appError.value='';
+ const request=new AbortController(),identity=auth.identityRevision,view=conversationViewRevision,choice=modelSelectionRevision;appRead=request;appLoading.value=true;appError.value='';
  const current=()=>viewActive&&!request.signal.aborted&&auth.isLoggedIn&&auth.identityRevision===identity&&appId.value===id&&view===conversationViewRevision;
  try{const row=await api.get('/apps/'+encodeURIComponent(id),{signal:request.signal,retry:false});if(!current())return;if(row?.id!==id||!Number.isInteger(row.version)||row.version<1)throw Error('应用资料不完整，请重新核对。');appName.value=row.name;appVersion.value=row.version;
-  if(opening){if(row.defaultModel)model.value=row.defaultModel;if(row.greeting)messages.value=[{role:'assistant',content:row.greeting}];}
+  if(opening){if(row.defaultModel&&choice===modelSelectionRevision)model.value=row.defaultModel;if(row.greeting)messages.value=[{role:'assistant',content:row.greeting}];}
  }catch(error){if(current()){appVersion.value=null;appError.value=error.status===404?'这位搭档当前不可用。已有对话保留；可以刷新核对，或退出应用后开始普通对话。':error.message||'应用资料暂未确认，请刷新后继续。';}}
  finally{if(appRead===request){appLoading.value=false;appRead=null;}}
 }
@@ -1014,6 +1020,43 @@ async function startApp(id){
  if(!auth.isLoggedIn)return;agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';agentLoading.value=false;clearApp();conversationKind.value='app';newChat();
  if(typeof id!=='string'||!id||id.length>128){appError.value='应用入口不完整，请回到应用广场重新选择。';return;}
  appId.value=id;await loadCurrentApp({opening:true});
+}
+function clearEntryAgent(){agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';agentLoading.value=false;}
+function validEntryId(id){return typeof id==='string'&&id.length>0&&id.length<=128;}
+async function savedTranscript(id){
+ clearApp();clearEntryAgent();conversationKind.value='chat';newChat();entryPending.value=true;entryError.value='';
+ if(!validEntryId(id)){entryPending.value=false;entryError.value='声音记录入口不完整，请回到声音收藏室重新选择。';return;}
+ const request=new AbortController(),identity=auth.identityRevision,view=conversationViewRevision;entryRead=request;
+ const current=()=>viewActive&&!request.signal.aborted&&auth.isLoggedIn&&auth.identityRevision===identity&&conversationViewRevision===view;
+ try{const row=await api.get('/voice/library/'+encodeURIComponent(id),{signal:request.signal,retry:false});if(!current())return;
+  if(row?.id!==id||row.kind!=='transcription'||row.availability!=='ready'||typeof row.transcript!=='string'||!row.transcript.trim()||row.transcript.length>30000)throw Error(row?.availability==='expired'?'这份转写已过保留期限，无法带入对话。':'这份记录当前没有可读取的转写文字。');
+  input.value=row.transcript;entryPending.value=false;await nextTick();if(current()){autosize();inputEl.value?.focus();}
+ }catch(error){if(current())entryError.value=error.status===404?'这份转写已被清理或当前不可用。':error.message||'转写文字暂未打开，请重试。';}
+ finally{if(entryRead===request){entryRead=null;entryPending.value=false;}}
+}
+async function applyRouteEntry(){
+ if(!auth.isLoggedIn)return;const query={...route.query};let opening=Promise.resolve();
+ if(query.conversation!==undefined){clearApp();clearEntryAgent();conversationKind.value='chat';newChat();if(!validEntryId(query.conversation)){entryPending.value=false;entryError.value='原对话入口不完整，请重新选择。';return;}opening=openConversation(query.conversation,{fromEntry:true});}
+ else if(query.voiceTask!==undefined)opening=savedTranscript(query.voiceTask);
+ else if(query.agent)opening=startAgent(query.agent);
+ else if(query.app!==undefined)opening=startApp(query.app);
+ else if(query.voice!==undefined&&!draftStarted.value&&!conversationId.value)newChat();
+ const identity=auth.identityRevision,view=conversationViewRevision,choice=modelSelectionRevision;
+ await opening;if(!viewActive||!auth.isLoggedIn||auth.identityRevision!==identity||conversationViewRevision!==view)return;
+ if(query.model&&!query.conversation&&!agentId.value&&choice===modelSelectionRevision)applyModelParam(query.model);
+ if(query.voice!==undefined){if(!['record','voices'].includes(query.voice)){entryError.value='声音功能入口不完整，请重新选择。';entryPending.value=false;return;}await voice.show(query.voice);}
+ if(viewActive&&auth.identityRevision===identity&&conversationViewRevision===view)entryPending.value=false;
+}
+function leaveEntry(){clearApp();clearEntryAgent();conversationKind.value='chat';newChat();const query={...route.query};for(const key of entryKeys)delete query[key];void router.replace({path:'/chat',query});}
+async function initializeChat(){
+ if(!auth.isLoggedIn){loadingConvs.value=false;if(entryKeys.some(key=>route.query[key]!==undefined))void router.replace({path:'/login',query:{redirect:route.fullPath}});return;}
+ if(route.query.new==='1'){newChat(takeGuestDraft());const query={...route.query};delete query.new;void router.replace({path:route.path,query});}
+ const identity=auth.identityRevision,opening=applyRouteEntry(),view=conversationViewRevision,choice=modelSelectionRevision;
+ const results=await Promise.allSettled([loadConversations(),loadMeta(),loadFolders(),opening]);
+ if(!viewActive||!auth.isLoggedIn||auth.identityRevision!==identity||view!==conversationViewRevision)return;
+ if(route.path==='/agent/chat'&&!agentId.value){void router.replace('/agent');return;}
+ if(route.query.model&&!route.query.conversation&&!agentId.value&&choice===modelSelectionRevision)applyModelParam(route.query.model);
+ if(results.some(result=>result.status==='rejected'))ElMessage.error('部分创作资料暂未加载，请刷新后再试。');
 }
 function markAppUnavailable(error){if(appId.value&&/应用/.test(error.message||'')&&/变化|不存在|不可用|下架/.test(error.message||'')){appError.value=error.message;appVersion.value=null;}}
 
@@ -1030,8 +1073,9 @@ async function startAgent(id){
 function fillAgentQuestion(question){if(streaming.value||loadingDetail.value)return;input.value=question;nextTick(()=>{autosize();inputEl.value?.focus();});}
 function agentPayload(history){const parent=history.slice(0,-1).at(-1);return{agentId:agentId.value,agentOfferRevision:currentAgent.value?.offerRevision,...(contextOn.value&&parent?.role==='assistant'&&parent.status==='COMPLETED'&&parent.serverId?{agentParentId:parent.serverId}:{})};}
 
-async function openConversation(id) {
+async function openConversation(id,{fromEntry=false}={}) {
   changeConversationView();
+  if(fromEntry)entryPending.value=true;
   const viewRevision = conversationViewRevision;
   const sessionRevision = auth.sessionRevision;
   const isCurrent = () => viewActive && auth.isLoggedIn && auth.sessionRevision === sessionRevision && viewRevision === conversationViewRevision;
@@ -1077,9 +1121,9 @@ async function openConversation(id) {
     webSearchOn.value=!agentId.value&&!!messages.value.findLast(message=>message.role==='assistant')?.webSearch?.requested;
     messages.value.forEach((m) => m.attachments?.forEach(ensureThumb));
   } catch (e) {
-    if (isCurrent()) ElMessage.error(e?.message || '会话加载失败');
+    if(isCurrent()){if(fromEntry)entryError.value=e.status===404?'这段对话已被移除，无法继续打开。':e.message||'原对话暂未打开，请重试。';else ElMessage.error(e?.message || '会话加载失败');}
   } finally {
-    if (isCurrent()) loadingDetail.value = false;
+    if(isCurrent()){loadingDetail.value=false;if(fromEntry)entryPending.value=false;}
   }
   if (isCurrent()) {
     scrollToBottom(true);
@@ -1355,6 +1399,7 @@ async function send() {
 async function regenerate(message) {
   const viewRevision = conversationViewRevision, sessionRevision = auth.sessionRevision;
   if (streaming.value) return;
+  if(entryPending.value||entryError.value)return ElMessage.warning('请先打开并核对当前创作空间');
   if(appLoading.value||appError.value||appId.value&&!Number.isInteger(appVersion.value))return ElMessage.warning('请先刷新并核对应用资料');
   if(agentId.value&&(!currentAgent.value?.ready||!currentAgent.value.offerRevision||agentLoading.value))return ElMessage.warning('请先刷新并核对搭档资料与费用');
   if(webSearchOn.value&&!currentModel.value?.webSearchAvailable)return ElMessage.warning('请关闭联网或先选择支持联网的模型');
@@ -1408,7 +1453,7 @@ watch(()=>auth.identityRevision,()=>{
   model.value='';input.value='';pendingFiles.value=[];clearApp();agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';agentLoading.value=false;draftStarted.value=false;
   loadingConvs.value=false;loadingDetail.value=false;quota.value={limit:0,used:0};
   for(const url of objectUrls)URL.revokeObjectURL(url);objectUrls.clear();for(const key of Object.keys(thumbs))delete thumbs[key];
-  if(auth.isLoggedIn){const identity=auth.identityRevision;void Promise.allSettled([loadConversations(),loadMeta(),loadFolders()]).then(()=>{if(!viewActive||!auth.isLoggedIn||identity!==auth.identityRevision)return;if(route.query.agent)void startAgent(route.query.agent);else if(route.query.app!==undefined)void startApp(route.query.app);});}
+  if(auth.isLoggedIn)void initializeChat();
 });
 async function refreshBackgroundState() {
   if (!viewActive || !auth.isLoggedIn || document.hidden) return;
@@ -1422,31 +1467,7 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', refreshBackgroundState);
   editorMedia.addEventListener('change', updateEditorSize);
   window.addEventListener('keydown', onKeydown);
-  if (!auth.isLoggedIn) { loadingConvs.value = false; return; }
-  const openingIdentity=auth.identityRevision;
-  if(route.query.agent){
-    const opening=startAgent(route.query.agent);
-    await Promise.allSettled([loadConversations(),loadMeta(),loadFolders(),opening]);
-    return;
-  }
-  try {
-    await Promise.all([loadConversations(), loadMeta(), loadFolders()]);
-  } catch (error) {
-    // 退出登录时首屏请求可能仍在飞；组件已离开时不再冒出未处理拒绝或错误提示。
-    if (viewActive && auth.isLoggedIn) ElMessage.error(error.message || '加载对话失败，请刷新页面重试');
-
-  }
-  if (!viewActive || !auth.isLoggedIn || openingIdentity!==auth.identityRevision) return;
-  if(route.query.agent){await startAgent(route.query.agent);return;}
-  if(route.path==='/agent/chat'){void router.replace('/agent');return;}
-  applyModelParam(route.query.model);
-  if (route.query.new === '1') {
-    newChat(takeGuestDraft());
-    const query = { ...route.query }; delete query.new;
-    router.replace({ path: route.path, query });
-  }
-
-  if(route.query.app!==undefined){await startApp(route.query.app);applyModelParam(route.query.model);}
+  await initializeChat();
 });
 
 /** 模型广场点「开始对话」会带上 ?model=；已在对话页时也要跟随 */
@@ -1463,8 +1484,11 @@ watch(
   (name) => applyModelParam(name),
 );
 watch(conversationKind, () => { selected.value = []; });
-watch(()=>route.query.app,(id,previous)=>{if(!auth.isLoggedIn)return;if(id!==undefined)void startApp(id);else if(previous!==undefined&&(appId.value||appError.value))leaveApp();});
-watch(()=>route.query.agent,(id,previous)=>{if(!auth.isLoggedIn)return;if(id&&String(id)!==agentId.value)void startAgent(id);else if(!id&&previous&&agentId.value){agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';conversationKind.value='chat';newChat();}});
+watch(()=>entryKeys.map(key=>route.query[key]),(values,previous)=>{
+ if(!auth.isLoggedIn||previous&&values.every((value,index)=>value===previous[index]))return;
+ if(values.some(value=>value!==undefined)){void applyRouteEntry();return;}
+ if(previous?.slice(0,4).some(value=>value!==undefined)&&(appId.value||agentId.value||conversationId.value||entryError.value||input.value)){clearApp();clearEntryAgent();conversationKind.value='chat';newChat();}
+});
 
 function onKeydown(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -1480,7 +1504,7 @@ function onKeydown(e) {
 }
 
 onUnmounted(() => {
-  appRead?.abort();agentRead?.abort();
+  entryRead?.abort();appRead?.abort();agentRead?.abort();
   inputResizeObserver?.disconnect();
   if (historyPoll) clearInterval(historyPoll);
   document.removeEventListener('visibilitychange', refreshBackgroundState);

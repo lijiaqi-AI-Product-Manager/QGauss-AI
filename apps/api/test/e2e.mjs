@@ -1043,7 +1043,7 @@ const health = await api('/models/channels/health');
   for (let i = 0; i < 40 && cutMeta?.messageId; i += 1) {
     const r = await api(`/conversations/${cutMeta.conversationId}/messages/${cutMeta.messageId}`);
     const st = r.body?.data?.status;
-    if (st && st !== 'PENDING' && st !== 'STREAMING') {
+    if (st && !['PENDING', 'STREAMING', 'SETTLING'].includes(st)) {
       settled = r.body.data;
       break;
     }
