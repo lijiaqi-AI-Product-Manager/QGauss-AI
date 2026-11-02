@@ -15,6 +15,6 @@ export function appDiscoveryFixtures() {
     ['story', '故事搭建师', 0, '角色、世界、冲突和转折。陪你把一句“如果”，写成一个新世界。', '我们从一个“如果”开始吧。\n你想写怎样的角色，或一个怎样的世界？', false],
     ['palette', '配色灵感师', 3, '给想法一点颜色。一起讨论色彩情绪、搭配关系和适合的使用场景。', '想用颜色表达什么感觉？\n告诉我项目和使用场景，我们试着比较几种配色方向。', false],
   ];
-  const apps = entries.map(([key, name, category, description, greeting, favorited], index) => ({ id: 'qg-' + key, name, categoryId: categories[category].id, category: categories[category], description, greeting, defaultModel: index % 3 === 1 ? 'qgauss-reason' : 'qgauss-reference', favorited, published: true }));
+  const apps = entries.map(([key, name, category, description, greeting, favorited], index) => ({ id: 'qg-' + key,version:1, name, categoryId: categories[category].id, category: categories[category], description, greeting, defaultModel: index % 3 === 1 ? 'qgauss-reason' : 'qgauss-reference', favorited, published: true }));
   return { '/api/apps': apps, '/api/apps/categories': categories, ...Object.fromEntries(apps.map(app => ['/api/apps/' + app.id, app])) };
 }

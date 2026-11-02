@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@ne
 import type { Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import {accessibleAppWhere} from '../apps/app-visibility';
 import { ModelsService, ResolvedChannel } from '../models/models.service';
 import { KeyPoolService } from '../models/key-pool.service';
 import { AttachmentsService, ResolvedMessage } from './attachments.service';
@@ -205,7 +206,8 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
 
     // ---- 应用（智能体）：决定模型与 system prompt ----
     const appId = conversation?.appId || dto.appId;
-    const app = appId ? await this.apps.getForChat(appId) : null;
+    const app = appId ? await this.apps.getForChat(appId,userId) : null;
+    if(app&&dto.appVersion!==undefined&&dto.appVersion!==app.version)throw new BusinessException(ErrorCode.PARAM_INVALID,'应用设定已变化，请重新打开并核对',409);
     const modelName =
       dto.model ||
       conversation?.model?.name ||
@@ -332,6 +334,7 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
       const eligible = await tx.user.findFirst({ where: { id: userId, status: 'ACTIVE', deletedAt: null }, select: { id: true } });
       if (!eligible) throw new BusinessException(ErrorCode.FORBIDDEN, '账户不可用', 403);
       if(agent)await this.agents!.assertOfferTx(tx,agent);
+      if(app){const eligibleApp=await tx.app.findFirst({where:{AND:[accessibleAppWhere(userId,app.id),{version:app.version}]},select:{id:true}});if(!eligibleApp)throw new BusinessException(ErrorCode.PARAM_INVALID,'应用内容或公开状态已变化，请重新打开',409);if(app.origin==='USER'){const restricted=await this.moderation.checkTx(tx,[app.name,app.description,app.systemPrompt,app.greeting].filter(Boolean).join('\n'));if(restricted)throw new BusinessException(restricted.action==='block'?ErrorCode.CONTENT_BLOCKED:ErrorCode.CONTENT_REVIEW,'应用设定命中当前内容限制，请联系创作者调整',400);}}
       if (newConversation) await tx.conversation.create({ data: { id: conversationId, userId, modelId: demoMode ? null : model.id, appId: app?.id ?? null, agentId:agent?.agent.id??null,title } });
       else {
         const locked = await tx.conversation.updateMany({ where: { id: conversationId, userId, deletedAt: null }, data: { lastMessageAt: new Date() } });

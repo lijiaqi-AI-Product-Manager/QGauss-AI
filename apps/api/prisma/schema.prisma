@@ -51,6 +51,7 @@ model User {
   uploads       UploadFile[]
   passwordResets PasswordReset[]
   emailVerifications EmailVerification[]
+  createdApps App[] @relation("UserCreatedApps")
   userBalance   UserBalance?
   balance       Balance?
   reservations  CountReservation[]
@@ -651,15 +652,33 @@ model App {
   published    Boolean   @default(true)
   sort         Int       @default(0)
   createdBy    String?
+  ownerId      String?
+  origin       String @default("CURATED")
+  reviewStatus String @default("NONE")
+  version      Int @default(1)
+  reviewNote   String?
+  reviewedAt   DateTime?
+  shareId      String? @unique
+  createRequestKey String?
+  createSignature String?
+  lastActionKey String?
+  lastActionSignature String?
+  rewardGrantedAt DateTime?
+  rewardJson String?
+  eventsJson String @default("[]")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
   category AppCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   conversations Conversation[]
+  owner User? @relation("UserCreatedApps",fields:[ownerId],references:[id],onDelete:Cascade)
 
   @@index([categoryId, sort])
   @@index([published])
+  @@unique([ownerId, createRequestKey])
+  @@index([ownerId, origin, deletedAt])
+  @@index([origin, reviewStatus, updatedAt])
   @@map("apps")
 }
 

@@ -16,6 +16,7 @@ import { videoFixtures } from './video-fixture.mjs';
 import {videoToolFixtures,filmMaterialSamples} from './video-tools-fixture.mjs';
 import { midjourneyFixtures } from './midjourney-fixture.mjs';
 import { imageBillingFixtures } from './image-billing-fixture.mjs';
+import {appStudioFixtures,appStudioPage} from './app-creator-fixture.mjs';
 import { appDiscoveryFixtures } from './app-discovery-fixture.mjs';
 import { modelDiscoveryFixtures } from './model-discovery-fixture.mjs';
 import { walletEnergyFixtures, walletFixturePage } from './wallet-energy-fixture.mjs';
@@ -39,7 +40,7 @@ const webSearchMode = installationState?.startsWith('web-search');
 const runningMode = chatSettlingMode || installationState === 'web-search-progress' || new URL(location.href).searchParams.get('state') === 'running';
 const nativeProtocolMode = new URL(location.href).searchParams.get('state') === 'native-protocols';
 const historyMode = installationState?.startsWith('voice-') || webSearchMode || nativeProtocolMode || chatCountMode || richMode || runningMode || new URL(location.href).searchParams.get('state') === 'history';
-const adminMode = new URL(location.href).searchParams.get('persona') === 'admin' || installationState?.startsWith('welcome-') || installationState?.startsWith('mail-');
+const adminMode = new URL(location.href).searchParams.get('persona') === 'admin' || installationState?.startsWith('welcome-') || installationState?.startsWith('mail-') || installationState?.startsWith('review-');
 const artworkMode = new URL(location.href).searchParams.get('state')?.startsWith('artworks');
 const artworkData = artworkFixtures();
 let imageEditUploads = 0;
@@ -115,6 +116,7 @@ if (referralState === 'referral-disabled') fixtures['/api/settings/public']['com
 if (referralState === 'referral-paused') fixtures['/api/sales/info'].enabled = false;
 for (const app of fixtures['/api/apps']) fixtures['/api/apps/' + app.id] ||= app;
 Object.assign(fixtures,emailVerificationFixtures(fixtures,installationState));
+if(installationState?.startsWith('creator-')||installationState?.startsWith('review-'))Object.assign(fixtures,appStudioFixtures(installationState));
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
   const url = new URL(typeof input === 'string' ? input : input.url, location.href);
@@ -156,6 +158,7 @@ window.fetch = async (input, init = {}) => {
   if ((installationState === 'install-error' && url.pathname === '/api/installation/status') || (installationState === 'welcome-error' && url.pathname === '/api/installation/readiness')) return new Response(JSON.stringify({code:503,message:'明确的本地启航清单读取失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});
   if ((new URL(location.href).searchParams.get('state') === 'account-error' && url.pathname === '/api/users/profile') || (new URL(location.href).searchParams.get('state') === 'account-logs-error' && url.pathname === '/api/users/logins')) return new Response(JSON.stringify({code:503,message:'明确的本地账户读取失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});
   let data = fixtures[url.pathname];
+  if(supported&&(installationState?.startsWith('creator-')||installationState?.startsWith('review-')))data=appStudioPage(data,url);
   if(installationState==='agents-error'&&url.pathname==='/api/agents')return new Response(JSON.stringify({code:503,message:'本地搭档列表加载失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});
   if(supported&&url.pathname==='/api/agents')data=agentFixturePage(data,url);
   if(supported && url.pathname === '/api/mail/outbox')data=mailFixturePage(data,url);
@@ -174,7 +177,7 @@ window.fetch = async (input, init = {}) => {
 const pinia = createPinia();
 const auth = useAuth(pinia);
 auth.remember = false;
-if (!installationState?.startsWith('install-') && installationState !== 'email-register') auth.apply({ accessToken: 'qgauss-reference-only', refreshToken: 'qgauss-reference-only', user: { id: 'qgauss-reference-only', username: 'QGauss 观察员', role: adminMode ? 'ADMIN' : 'USER' } });
+if (!installationState?.startsWith('install-') && installationState !== 'email-register' && installationState !== 'creator-guest') auth.apply({ accessToken: 'qgauss-reference-only', refreshToken: 'qgauss-reference-only', user: { id: 'qgauss-reference-only', username: 'QGauss 观察员', role: adminMode ? 'ADMIN' : 'USER' } });
 if(['voice-transcript','voice-player','voice-interrupted'].includes(installationState))sessionStorage.setItem('qg:voice:qgauss-reference-only:qg-reference-conversation',JSON.stringify({requestKey:'qg-voice-visual-intent',taskId:'qg-voice-result',payload:{kind:installationState==='voice-transcript'?'transcription':'speech'},quoteRevision:'a'.repeat(64)}));
 const app = createApp(App);
 app.use(pinia).use(router);

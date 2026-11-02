@@ -25,6 +25,7 @@ export interface ConfigDef {
 }
 
 export const CONFIG_REGISTRY: ConfigDef[] = [
+  ...(['model3','model4','drawMj','agent'] as const).map(pool=>({key:'apps.reviewReward.'+pool,type:'number' as const,default:0,group:'apps',description:'用户应用首次审核通过赠送'+({model3:'基础次数',model4:'高级次数',drawMj:'绘画次数',agent:'应用次数'})[pool],min:0,max:10000})),
   { key:'security.voiceRateLimit',type:'number',default:20,group:'security',description:'单用户每分钟最多发起的语音生成次数',min:1,max:1000 },
   { key:'security.videoRateLimit',type:'number',default:10,group:'security',description:'单用户每分钟最多发起的视频创作次数',min:1,max:1000 },
   { key:'security.mjRateLimit',type:'number',default:10,group:'security',description:'单用户每分钟最多发起的 MJ 创作次数',min:1,max:1000 },

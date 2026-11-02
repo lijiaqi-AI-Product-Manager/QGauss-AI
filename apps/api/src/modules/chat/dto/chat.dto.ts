@@ -5,6 +5,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -54,6 +55,8 @@ export class ChatCompletionDto {
   @IsOptional()
   @IsString()
   appId?: string;
+
+  @Transform(({obj,key})=>obj[key]) @ValidateIf((_o,v)=>v!==undefined) @IsInt() @Min(1) @Max(2147483647) appVersion?:number;
 
   /** 重新生成：传入要重生成的助手消息 id，会挂在其父节点下形成分支 */
   @IsOptional()

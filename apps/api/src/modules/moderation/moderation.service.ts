@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type {Prisma} from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { BusinessException, ErrorCode } from '../../common/exceptions/business.exception';
 
@@ -44,6 +45,14 @@ export class ModerationService {
         return { word: item.word, action: item.action === 'review' ? 'review' : 'block' };
       }
     }
+    return null;
+  }
+
+  async checkTx(tx:Prisma.TransactionClient,text:string):Promise<ModerationResult|null>{
+    if(!text)return null;
+    const rows=await tx.sensitiveWord.findMany({where:{enabled:true,deletedAt:null},select:{word:true,action:true}});
+    rows.sort((a,b)=>b.word.length-a.word.length);const lower=text.toLowerCase();
+    for(const row of rows)if(lower.includes(row.word.toLowerCase()))return{word:row.word,action:row.action==='block'?'block':'review'};
     return null;
   }
 
