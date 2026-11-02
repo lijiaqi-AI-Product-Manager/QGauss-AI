@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
-import { PrismaClient } from '@prisma/client';
+import {SqliteClient as PrismaClient} from '../dist/common/prisma/sqlite-client.js';
 import { JwtService } from '@nestjs/jwt';
 import { ValidationPipe } from '@nestjs/common';
 import { AuthService } from '../dist/modules/auth/auth.service.js';

@@ -15,6 +15,16 @@ const git=args=>execFileSync('git',args,{cwd:root,encoding:'utf8',windowsHide:tr
 const files=git(['ls-files','-z','--cached','--others','--exclude-standard']).split('\0').filter(Boolean),failures=[];
 for(const file of files){if(!existsSync(join(root,file)))continue;if(denied(file))failures.push(file+' (path)');if(/(?:^|\/)(?:research|local|artifacts)\/|(?:^|\/)\.env(?:$|\.(?!example$))|\.(?:db(?:-wal|-shm|-journal)?|qgb|key|pem|zip|7z|rar)$/i.test(file))failures.push(file+' (private material)');}
 const branch=git(['branch','--show-current']).trim();if(denied(branch))failures.push('branch name');
+const metadataOption=process.argv.indexOf('--metadata-file'),metadataPath=metadataOption>=0?process.argv[metadataOption+1]:process.env.GITHUB_EVENT_PATH;
+if(metadataOption>=0&&!metadataPath)throw Error('A metadata file path is required');
+if(metadataPath){
+ const event=JSON.parse(readFileSync(metadataPath,'utf8'));
+ const records=[event,event.issue,event.pull_request,event.comment,event.review].filter(Boolean);
+ for(const record of records){
+  const fields={title:record.title,body:record.body,head:typeof record.head==='string'?record.head:record.head?.ref,base:typeof record.base==='string'?record.base:record.base?.ref,author:record.user?.login,application:record.performed_via_github_app?.name,applicationSlug:record.performed_via_github_app?.slug};
+  for(const[field,value]of Object.entries(fields))if(typeof value==='string'&&denied(value))failures.push('public metadata: '+field);
+ }
+}
 let commits=[];try{git(['rev-parse','--verify','HEAD']);commits=git(['log','--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%B%x00','HEAD']).split('\0');}catch(error){if(!/unknown revision|Needed a single revision|bad revision/i.test(String(error.stderr)))throw error;}
 for(let index=0;index+5<commits.length;index+=6){if(commits.slice(index+1,index+6).some(denied))failures.push('commit '+commits[index].trim());}
 if(failures.length){console.error('QGauss publication checks failed:\n'+[...new Set(failures)].join('\n'));process.exitCode=1;}else console.log(`QGauss publication checks passed: ${files.length} paths; ${Math.floor(commits.length/6)} commits.`);

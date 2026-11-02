@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@prisma/client';
+import {SqliteClient as PrismaClient} from '../dist/common/prisma/sqlite-client.js';
 import { ValidationPipe } from '@nestjs/common';
 import { ModelsService } from '../dist/modules/models/models.service.js';
 import { ModelCatalogService } from '../dist/modules/models/model-catalog.service.js';

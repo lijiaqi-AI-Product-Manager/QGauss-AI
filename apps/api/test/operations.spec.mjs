@@ -13,7 +13,7 @@ import { createRequire } from 'node:module';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
-import { PrismaClient } from '@prisma/client';
+import {SqliteClient as PrismaClient} from '../dist/common/prisma/sqlite-client.js';
 import bcrypt from 'bcryptjs';
 import leases from '../prisma/data-lease.cjs';
 import { createEncryptedBackup, verifyEncryptedBackup, restoreEncryptedBackup, recoverAdministrator, inspectLocalDatabase } from '../scripts/operations/operations.mjs';

@@ -1,0 +1,22 @@
+name: 功能改进
+description: 提出有明确验收条件的产品改进
+title: "[功能] "
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: 使用场景与问题
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 期望的操作与结果
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收条件
+    validations:
+      required: true
