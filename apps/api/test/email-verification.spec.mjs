@@ -8,7 +8,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {resolve,join,sep,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {PrismaClient} from '@prisma/client';
+import {SqliteClient as PrismaClient} from '../dist/common/prisma/sqlite-client.js';
 import {JwtService} from '@nestjs/jwt';
 import {ValidationPipe} from '@nestjs/common';
 import {EmailVerificationService} from '../dist/modules/auth/email-verification.service.js';

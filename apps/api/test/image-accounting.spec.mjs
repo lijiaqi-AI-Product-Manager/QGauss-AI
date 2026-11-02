@@ -8,7 +8,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@prisma/client';
+import {SqliteClient as PrismaClient} from '../dist/common/prisma/sqlite-client.js';
 import { LedgerService } from '../dist/modules/commerce/ledger.service.js';
 import { ImageAccountingService } from '../dist/modules/image/image-accounting.service.js';
 import { ImageService } from '../dist/modules/image/image.service.js';

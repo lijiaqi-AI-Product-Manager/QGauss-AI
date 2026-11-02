@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { PrismaClient } from '@prisma/client';
+import {SqliteClient as PrismaClient} from '../dist/common/prisma/sqlite-client.js';
 import { LedgerService, shanghaiDate } from '../dist/modules/commerce/ledger.service.js';
 import { WalletService } from '../dist/modules/commerce/wallet.service.js';
 import { SigninService } from '../dist/modules/commerce/signin.service.js';

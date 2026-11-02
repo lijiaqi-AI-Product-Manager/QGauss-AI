@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { PrismaClient } from '@prisma/client';
+import {SqliteClient as PrismaClient} from '../dist/common/prisma/sqlite-client.js';
 import { MailService } from '../dist/modules/mail/mail.service.js';
 import { MailOperationsService } from '../dist/modules/mail/mail-operations.service.js';
 import { RateLimitService } from '../dist/common/ratelimit/rate-limit.service.js';

@@ -7,7 +7,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@prisma/client';
+import {SqliteClient as PrismaClient} from '../dist/common/prisma/sqlite-client.js';
 import { OrderService } from '../dist/modules/commerce/order.service.js';
 import { PayService } from '../dist/modules/commerce/pay.service.js';
 import { CramiService } from '../dist/modules/commerce/crami.service.js';

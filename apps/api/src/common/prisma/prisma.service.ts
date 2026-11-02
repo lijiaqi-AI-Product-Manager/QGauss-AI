@@ -1,8 +1,8 @@
 import { Injectable, Logger, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { SqliteClient } from './sqlite-client';
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit, OnApplicationShutdown {
+export class PrismaService extends SqliteClient implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(PrismaService.name);
   private dataLease?: { close(): void };
 
@@ -17,7 +17,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnAppli
 
   // Workers finish their module shutdown hooks before database access and its lease close.
   async onApplicationShutdown() {
-    try { await this.$disconnect(); }
+    try { await this.drainTransactions(); await this.$disconnect(); }
     finally { this.dataLease?.close(); this.dataLease = undefined; }
   }
 }
