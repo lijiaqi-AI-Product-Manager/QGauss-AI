@@ -1,8 +1,18 @@
-<template><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path v-for="(path, index) in paths" :key="index" :d="path" /></svg></template>
+<template><svg class="qg-client-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path v-for="(path, index) in paths" :key="index" :d="path" /></svg></template>
 <script setup>
 import { computed } from 'vue';
 const props = defineProps({ name: String });
 const icons = {
+  mindmap:['M3 8h6v8H3zM15 2h6v6h-6zM15 16h6v6h-6zM9 12h3V5h3M12 12v7h3'],
+  folder:['M3 5h6l2 2h10v13H3V5Z'],
+  save:['M4 3h13l3 3v15H4V3ZM8 3v6h8V3M8 21v-8h8v8'],
+  trash:['M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7'],
+  upload:['M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6'],
+  minus:['M4 12h16'],
+  fit:['M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M7 7h10v10H7Z'],
+  fullscreen:['M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5'],
+  expand:['M4 9h16M4 15h16M12 2v4m-3-3 3 3 3-3M12 22v-4m-3 3 3-3 3 3'],
+  collapse:['M4 3v7h7M20 21v-7h-7M4 10l7-7M20 14l-7 7'],
   gallery:['M4 4h16v16H4zM4 14l5-5 6 6 2-2 3 3M15 8h.01'],
   heart:['M20.8 4.7a5.3 5.3 0 0 0-7.5 0L12 6l-1.3-1.3a5.3 5.3 0 0 0-7.5 7.5L12 21l8.8-8.8a5.3 5.3 0 0 0 0-7.5Z'],
   video: ['M3 5h18v14H3zM3 9h18M7 5l3 4M14 5l3 4M10 12l5 3-5 3z'],

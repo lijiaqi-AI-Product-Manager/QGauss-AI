@@ -5,7 +5,7 @@ export const MAX_DIAGRAM_LENGTH = 20000;
 export function mathHtml(engine, source, display, purify) {
   if (source.length > MAX_MATH_LENGTH) throw new Error('公式过长，已保留源码');
   const html = engine.renderToString(source, { ...MATH_OPTIONS, displayMode: display, macros: {} });
-  return purify.sanitize(html, { USE_PROFILES: { html: true, mathMl: true }, ADD_TAGS: ['annotation'], ADD_ATTR: ['encoding'], FORBID_TAGS: ['style'] });
+  return purify.sanitize(html, { USE_PROFILES: { html: true, mathMl: true, svg: true }, ADD_TAGS: ['annotation'], ADD_ATTR: ['encoding'], FORBID_TAGS: ['style','script','foreignObject','image','a','use','animate','animateMotion','animateTransform','set'], FORBID_ATTR: ['href','xlink:href'] });
 }
 
 export function diagramSource(source) {

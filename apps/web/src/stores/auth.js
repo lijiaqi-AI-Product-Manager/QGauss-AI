@@ -151,6 +151,7 @@ export const useAuth = defineStore('auth', {
 
     /** 只清本地状态，不通知服务端（服务端已判定失效，或别的标签已经登出） */
     clearLocal(notice = '') {
+      try { if(this.user?.id)sessionStorage.removeItem('qg:mindmap:draft:'+this.user.id); } catch { /* Signing out still clears the authenticated session. */ }
       this.sessionRevision += 1;
       this.identityRevision += 1;
       this.sessionNotice = ['password-changed', 'password-unknown'].includes(notice) ? notice : '';

@@ -32,9 +32,11 @@ import {agentFixtures,agentFixturePage} from './agent-fixture.mjs';
 import {voiceLibraryFixtures,voiceLibraryPage} from './voice-library-fixture.mjs';
 import {voiceFixtures} from './voice-fixture.mjs';
 import {galleryFixtures,galleryPage,galleryFavorite} from './gallery-fixture.mjs';
+import {mindmapFixtures,mindmapFixtureReply} from './mindmap-fixture.mjs';
 import {emailVerificationFixtures,emailVerificationAction} from './email-verification-fixture.mjs';
 const installationState = new URL(location.href).searchParams.get('state');
 const galleryMode=installationState?.startsWith('gallery-');
+const mindmapData=installationState?.startsWith('mindmap-')?mindmapFixtures(installationState):null;
 
 const richMode = new URL(location.href).searchParams.get('state')?.startsWith('rich');
 const chatCountMode = new URL(location.href).searchParams.get('state')?.startsWith('chat-count');
@@ -124,7 +126,9 @@ if(installationState?.startsWith('voice-library-'))Object.assign(fixtures,voiceL
 if(galleryMode)Object.assign(fixtures,galleryFixtures(installationState));
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
-  const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+  const url = new URL(typeof input?.url==='string'?input.url:String(input), location.href);
+  if(url.origin===location.origin&&!url.pathname.startsWith('/api/'))return nativeFetch(input,init);
+  if(mindmapData&&url.origin===location.origin&&url.pathname.startsWith('/api/mindmap/')){const body=typeof init.body==='string'?JSON.parse(init.body):{};const result=mindmapFixtureReply(mindmapData,url,init.method||'GET',body);return new Response(JSON.stringify(result.error?{code:result.status,message:result.error}:{code:0,data:result.data}),{status:result.status,headers:{'Content-Type':'application/json'}});}
   if(galleryMode&&url.origin===location.origin){
     if(installationState==='gallery-error'&&url.pathname==='/api/gallery/works')return new Response(JSON.stringify({code:503,message:'本地作品列表加载失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});
     if((init.method||'GET')==='GET'&&/^\/api\/gallery\/works\/(image|mj|video)\/qg-gallery-\d+\/assets\/\d+$/.test(url.pathname))return new Response(fixtures[url.pathname]||'',{status:Object.hasOwn(fixtures,url.pathname)?200:404,headers:{'Content-Type':'image/svg+xml'}});
