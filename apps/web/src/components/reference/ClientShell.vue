@@ -72,7 +72,7 @@ const pageTitle = computed(() => isChat.value ? clientChatTitle.value || (curren
 const languages = [{ key: 'zh', title: '简体中文' }, { key: 'zh-TW', title: '繁體中文' }, { key: 'en', title: 'English' }];
 const languageLabel = computed(() => languages.find((item) => item.key === currentLang.value)?.title || '简体中文');
 const navigation = computed(() => {
-  const base = [{ path: '/chat', title: '对话聊天', icon: 'chat' }, { path: '/apps', title: '应用广场', icon: 'apps' }, { path: '/agent', title: '行动搭档', icon: 'agent' }, { path: '/painting', title: '智能绘画', icon: 'image' }, { path: '/video', title: '视频创作', icon: 'video' }, { path: '/plaza', title: '模型广场', icon: 'model' }];
+  const base = [{ path: '/chat', title: '对话聊天', icon: 'chat' }, { path: '/apps', title: '应用广场', icon: 'apps' }, { path: '/agent', title: '行动搭档', icon: 'agent' }, { path: '/painting', title: '智能绘画', icon: 'image' }, { path: '/market', title: '创意广场', icon: 'gallery' }, { path: '/video', title: '视频创作', icon: 'video' }, { path: '/plaza', title: '模型广场', icon: 'model' }];
   const paths = new Set(base.map((item) => item.path));
   function include(rows) {
     for (const row of rows) {

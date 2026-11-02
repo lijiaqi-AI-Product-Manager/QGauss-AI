@@ -28,7 +28,7 @@ export class MjController {
   @Post('tasks/:id/cancel') cancel(@CurrentUser() u:AuthUser,@Param('id') id:string){return this.mj.cancel(u.id,id);}
   @Post('tasks/:id/modal') modal(@CurrentUser() u:AuthUser,@Param('id') id:string,@Body() dto:MjModalDto){return this.mj.resumeModal(u.id,id,dto);}
   @Post('tasks/:id/seed') seed(@CurrentUser() u:AuthUser,@Param('id') id:string){return this.mj.seed(u.id,id);}
-  @Patch('tasks/:id/publish') publish(@CurrentUser() u:AuthUser,@Param('id') id:string,@Body() dto:MjPublishDto){return this.mj.publish(u.id,id,dto.published);}
+  @Patch('tasks/:id/publish') publish(@CurrentUser() u:AuthUser,@Param('id') id:string,@Body() dto:MjPublishDto){return this.mj.publish(u.id,id,dto.published,dto.catId,dto.expectedUpdatedAt);}
   @Delete('tasks/:id') remove(@CurrentUser() u:AuthUser,@Param('id') id:string){return this.mj.remove(u.id,id);}
   @Post('tasks/:id/restore') restore(@CurrentUser() u:AuthUser,@Param('id') id:string){return this.mj.restore(u.id,id);}
   @Get('tasks/:id/playback') async playback(@CurrentUser() u:AuthUser,@Param('id') id:string,@Query('index') index='0'){return this.media.playback(u.id,await this.mj.visible(u.id,id),Number(index));}

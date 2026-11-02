@@ -51,7 +51,8 @@ const server = createServer(async (req, res) => {
     res.setHeader('X-QGauss-Reference-Fixture', 'client-preview');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; frame-ancestors 'none'");
-    const pathname = decodeURIComponent(url.pathname);
+    const requested = decodeURIComponent(url.pathname);
+    const pathname = /^\/api\/(video|mj)\/media\/qg-gallery-\d+(?:\/(?:\d+|video|poster))?$/.test(requested) ? '/qgauss-motion-fixture.mp4' : requested;
     const root = /^\/(fonts|brand|agreement|art)\//.test(pathname) ? publicRoot : output;
     const target = resolve(root, `.${pathname}`), within = relative(root, target);
     if (within.startsWith('..') || /^[A-Za-z]:|^\//.test(within)) { res.statusCode = 403; return res.end(); }

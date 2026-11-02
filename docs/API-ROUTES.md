@@ -1,7 +1,7 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **254** 条路由，分布在 **28** 个控制器。
+> 共 **262** 条路由，分布在 **29** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
@@ -14,6 +14,7 @@
 | `/conversations` | 9 | `src/modules/conversations/conversations.controller.ts` |
 | `/crami` | 11 | `src/modules/commerce/crami.controller.ts` |
 | `/folders` | 4 | `src/modules/folders/folders.controller.ts` |
+| `/gallery` | 8 | `src/modules/gallery/gallery.controller.ts` |
 | `/health` | 2 | `src/modules/health/health.controller.ts` |
 | `/image` | 9 | `src/modules/image/image.controller.ts` |
 | `/installation` | 4 | `src/modules/installation/installation.controller.ts` |
@@ -170,6 +171,19 @@
 | POST | `/folders` | 登录 |
 | PATCH | `/folders/:id` | 登录 |
 | DELETE | `/folders/:id` | 登录 |
+
+## /gallery
+
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| GET | `/gallery/options` | 登录 |
+| GET | `/gallery/works` | 登录 |
+| GET | `/gallery/works/:kind/:id` | 登录 |
+| GET | `/gallery/works/:kind/:id/reuse` | 登录 |
+| PUT | `/gallery/works/:kind/:id/favorite` | 登录 |
+| PUT | `/gallery/works/:kind/:id/feature` | ADMIN |
+| GET | `/gallery/works/:kind/:id/playback` | 登录 |
+| GET | `/gallery/works/:kind/:id/assets/:index` | 登录 |
 
 ## /health
 

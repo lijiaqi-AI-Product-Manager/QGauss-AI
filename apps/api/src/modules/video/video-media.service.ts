@@ -19,7 +19,7 @@ export class VideoMediaService {
   private seal(value: Ticket) { return this.box.encrypt(JSON.stringify(value)); }
   private open(raw: unknown): Ticket { try { if (typeof raw !== 'string' || raw.length < 40 || raw.length > 3000) throw absent(); const t = JSON.parse(this.box.decrypt(raw)); if (t.v !== 1 || !['input', 'playback'].includes(t.purpose) || typeof t.taskId !== 'string' || typeof t.fileId !== 'string' || typeof t.actor !== 'string' || typeof t.kind !== 'string' || !Number.isInteger(t.version) || !Number.isSafeInteger(t.expires) || t.expires < Date.now() || t.expires > Date.now() + 121 * 60000) throw absent(); return t; } catch { throw absent(); } }
   async playback(userId: string, task: VideoTask) {
-    if (task.status !== 'SUCCESS' || task.deletedAt || task.userId !== userId && !task.published) throw absent();
+    if (task.status !== 'SUCCESS' || task.deletedAt || task.userId !== userId && !task.published) throw absent();await this.actor(task.userId);
     const files = videoFiles(task.resultJson); if (!files) throw absent(); const actor = await this.actor(userId), expires = Date.now() + 5 * 60000;
     const link = (fileId: string, kind: string) => this.prefix + '/video/media/' + encodeURIComponent(task.id) + '/' + kind + '?ticket=' + encodeURIComponent(this.seal({ v: 1, purpose: 'playback', taskId: task.id, fileId, kind, actor: userId, version: actor.tokenVersion, expires }));
     const videoUrl = link(files.videoFileId, 'video'); return { videoUrl, downloadUrl: videoUrl + '&download=1', posterUrl: files.posterFileId ? link(files.posterFileId, 'poster') : null, expiresAt: new Date(expires).toISOString() };
@@ -36,6 +36,7 @@ export class VideoMediaService {
     const actor = await this.actor(ticket.actor); if (actor.tokenVersion !== ticket.version) throw absent();
     const task = await this.prisma.videoTask.findUnique({ where: { id } }); if (!task || task.deletedAt) throw absent();
     if (purpose === 'playback') {
+      await this.actor(task.userId);
       if (task.status !== 'SUCCESS' || task.userId !== actor.id && !task.published || !['video', 'poster'].includes(kind)) throw absent();
       const files = videoFiles(task.resultJson), fileId = kind === 'video' ? files?.videoFileId : files?.posterFileId; if (!fileId || fileId !== ticket.fileId) throw absent();
       const file = await this.storage.detail(fileId, task.userId, 'USER'); if (kind === 'video' ? file.mime !== 'video/mp4' || file.scope !== 'video' : !/^image\/(png|jpeg|webp)$/.test(file.mime) || file.scope !== 'video-poster') throw absent();

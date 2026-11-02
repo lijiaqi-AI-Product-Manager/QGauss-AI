@@ -80,4 +80,4 @@ export class MjModalDto {
   @Raw() @IsString() @Matches(/^[A-Za-z0-9_-]{8,100}$/) requestKey:string;
   @Raw() @IsString() @Length(1,4000) prompt:string;
 }
-export class MjPublishDto { @Raw() @IsBoolean() published:boolean; }
+export class MjPublishDto { @Raw() @IsBoolean() published:boolean; @Optional() @Raw() @IsString() @Length(0,128) catId?:string; @Optional() @Raw() @IsString() @Length(20,40) expectedUpdatedAt?:string; }

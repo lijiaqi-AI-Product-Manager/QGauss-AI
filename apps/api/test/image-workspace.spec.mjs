@@ -4,12 +4,20 @@ import { ImageService, sizeOf } from '../dist/modules/image/image.service.js';
 import { ImageWorker } from '../dist/modules/image/image.worker.js';
 import { ImageRunsService } from '../dist/modules/image/image-runs.service.js';
 
+test('公开图像详情保留文字与画面，来源身份和私有附加记录只对作者开放',async()=>{
+ const f=fixture({status:'SUCCESS',published:true,parentId:'private-parent',metaJson:JSON.stringify({private:'private-generation-record'}),resultJson:'[]'}),publicRow=await f.service.detail('viewer','art-1'),owned=await f.service.detail('owner','art-1');
+ assert.equal(publicRow.parentId,null);assert.equal(publicRow.meta,undefined);assert.equal(publicRow.billing,undefined);assert.equal(publicRow.prompt,owned.prompt);assert.equal(owned.parentId,'private-parent');assert.deepEqual(owned.meta,{private:'private-generation-record'});
+});
+test('图片结果入口拒绝把参考素材当作生成结果读取',async()=>{
+ const f=fixture({status:'SUCCESS',resultJson:JSON.stringify([{fileId:'private-input',mime:'image/png'}])});f.storage.detail=async()=>({id:'private-input',scope:'chat'});await assert.rejects(f.service.result('owner','art-1','private-input'),error=>error.getStatus()===404);assert.equal(f.calls.reads.length,0);
+});
+
 function fixture(overrides = {}) {
   const task = { id: 'art-1', userId: 'owner', model: 'logical-image', versionName: 'QGauss Image', prompt: 'a glass studio', n: 2, ratio: '1:1', resolution: '1K', size: '1024x1024', quality: 'high', seed: 0, status: 'RUNNING', deletedAt: null, published: false, resultJson: null, ...overrides };
   const calls = { generated: [], saved: [], removed: [], charged: [], events: [], reads: [], created: [] };
   const settingsMap = { 'commerce.enabled': true, 'demo.siteEnabled': false, 'commerce.imageCost': 3, 'image.defaultChannel': 'site-default', 'image.model': 'site-upstream' };
   const settings = { get: async key => settingsMap[key] };
-  const prisma = { imageTask: {
+  const prisma = { user:{findFirst:async()=>({id:'owner'})}, imageTask: {
     findUnique: async () => ({ ...task }), findFirst: async () => ({ ...task }), count: async () => 0,
     create: async ({ data }) => { calls.created.push(data); return Object.assign(task, data); },
     update: async ({ data }) => Object.assign(task, data),
@@ -21,6 +29,7 @@ function fixture(overrides = {}) {
   }, imageTaskEvent: { create: async ({ data }) => { calls.events.push(data); }, findMany: async () => calls.events }, aiModel: { findUnique: async () => null }, uploadFile: { findFirst: async () => null }, channel: { findFirst: async () => ({ id: 'site-default', type: 'MOCK', apiKeyEnc: '', baseUrl: 'mock://image', timeoutMs: 1000 }) } };
   prisma.$transaction = async fn => fn(prisma);
   const storage = {
+    detail: async id=>({id,scope:'image'}),
     read: async (id, owner, role) => { calls.reads.push({ id, owner, role }); return { buffer: Buffer.from('image fixture'), mime: 'image/png', filename: 'qgauss.png' }; },
     saveBuffer: async (owner, buffer, options) => { const id = 'file-' + (calls.saved.length + 1); calls.saved.push({ id, owner, options }); await fixtureState.onSave?.(id); return { id, url: '/api/upload/' + id + '/raw', mime: options.mime }; },
     remove: async (id, owner, role) => { calls.removed.push({ id, owner, role }); },

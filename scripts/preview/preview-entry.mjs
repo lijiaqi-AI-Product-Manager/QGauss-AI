@@ -31,8 +31,10 @@ import { webSearchMessage } from './web-search-fixture.mjs';
 import {agentFixtures,agentFixturePage} from './agent-fixture.mjs';
 import {voiceLibraryFixtures,voiceLibraryPage} from './voice-library-fixture.mjs';
 import {voiceFixtures} from './voice-fixture.mjs';
+import {galleryFixtures,galleryPage,galleryFavorite} from './gallery-fixture.mjs';
 import {emailVerificationFixtures,emailVerificationAction} from './email-verification-fixture.mjs';
 const installationState = new URL(location.href).searchParams.get('state');
+const galleryMode=installationState?.startsWith('gallery-');
 
 const richMode = new URL(location.href).searchParams.get('state')?.startsWith('rich');
 const chatCountMode = new URL(location.href).searchParams.get('state')?.startsWith('chat-count');
@@ -119,9 +121,16 @@ for (const app of fixtures['/api/apps']) fixtures['/api/apps/' + app.id] ||= app
 Object.assign(fixtures,emailVerificationFixtures(fixtures,installationState));
 if(installationState?.startsWith('creator-')||installationState?.startsWith('review-'))Object.assign(fixtures,appStudioFixtures(installationState));
 if(installationState?.startsWith('voice-library-'))Object.assign(fixtures,voiceLibraryFixtures(installationState));
+if(galleryMode)Object.assign(fixtures,galleryFixtures(installationState));
 const nativeFetch = window.fetch.bind(window);
 window.fetch = async (input, init = {}) => {
   const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+  if(galleryMode&&url.origin===location.origin){
+    if(installationState==='gallery-error'&&url.pathname==='/api/gallery/works')return new Response(JSON.stringify({code:503,message:'本地作品列表加载失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});
+    if((init.method||'GET')==='GET'&&/^\/api\/gallery\/works\/(image|mj|video)\/qg-gallery-\d+\/assets\/\d+$/.test(url.pathname))return new Response(fixtures[url.pathname]||'',{status:Object.hasOwn(fixtures,url.pathname)?200:404,headers:{'Content-Type':'image/svg+xml'}});
+    const target=/^\/api\/gallery\/works\/(image|mj|video)\/(qg-gallery-\d+)\/favorite$/.exec(url.pathname);
+    if(target&&(init.method||'GET')==='PUT'){const value=galleryFavorite(fixtures,target[1]+':'+target[2],JSON.parse(init.body||'{}').favorite);return new Response(JSON.stringify(value?{code:0,data:value}:{code:404,message:'作品不可用'}),{status:value?200:404,headers:{'Content-Type':'application/json'}});}
+  }
   if(url.origin===location.origin&&installationState?.startsWith('email-')){const sample=emailVerificationAction(installationState,url.pathname,init.method||'GET',typeof init.body==='string'?JSON.parse(init.body):{},fixtures);if(sample)return sample;}
   if(installationState?.startsWith('voice-library-')&&/^\/api\/voice\/tasks\/qg-library-voice-\d+\/audio\/[01]$/.test(url.pathname))return nativeFetch('/qgauss-film-voice.wav');
   if(installationState?.startsWith('video-tools-')){
@@ -161,6 +170,8 @@ window.fetch = async (input, init = {}) => {
   if ((installationState === 'install-error' && url.pathname === '/api/installation/status') || (installationState === 'welcome-error' && url.pathname === '/api/installation/readiness')) return new Response(JSON.stringify({code:503,message:'明确的本地启航清单读取失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});
   if ((new URL(location.href).searchParams.get('state') === 'account-error' && url.pathname === '/api/users/profile') || (new URL(location.href).searchParams.get('state') === 'account-logs-error' && url.pathname === '/api/users/logins')) return new Response(JSON.stringify({code:503,message:'明确的本地账户读取失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});
   let data = fixtures[url.pathname];
+  if(supported&&galleryMode&&url.pathname==='/api/gallery/works')data=galleryPage(data,url.search);
+  if(supported&&galleryMode&&url.pathname.endsWith('/playback')&&url.pathname.includes('/works/mj/'))data={...data,videoUrl:data.videoUrl.replace(/\/0\?ticket=/,'/'+(url.searchParams.get('index')||'0')+'?ticket=')};
   if(supported&&installationState?.startsWith('voice-library-')&&url.pathname==='/api/voice/library')data=voiceLibraryPage(data,url);
   if(supported&&(installationState?.startsWith('creator-')||installationState?.startsWith('review-')))data=appStudioPage(data,url);
   if(installationState==='agents-error'&&url.pathname==='/api/agents')return new Response(JSON.stringify({code:503,message:'本地搭档列表加载失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});

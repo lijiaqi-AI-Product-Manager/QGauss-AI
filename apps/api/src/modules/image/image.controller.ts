@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ImageService } from './image.service';
 
@@ -30,7 +30,9 @@ class CreateImageTaskDto {
 }
 
 class PublishDto {
-  @IsBoolean() published: boolean;
+ @Transform(({obj,key})=>obj[key]) @IsBoolean() published:boolean;
+ @IsOptional() @Transform(({obj,key})=>obj[key]) @IsString() @Length(0,128) catId?:string;
+ @IsOptional() @Transform(({obj,key})=>obj[key]) @IsString() @Length(20,40) expectedUpdatedAt?:string;
 }
 
 @Controller('image')
@@ -88,7 +90,7 @@ export class ImageController {
 
   @Patch('tasks/:id/publish')
   publish(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: PublishDto) {
-    return this.image.publish(user.id, id, dto.published);
+    return this.image.publish(user.id, id, dto.published,dto.catId,dto.expectedUpdatedAt);
   }
 
   /** 取消排队/执行中的任务 */
