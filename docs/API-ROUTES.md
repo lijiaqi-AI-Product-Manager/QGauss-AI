@@ -1,12 +1,12 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **236** 条路由，分布在 **28** 个控制器。
+> 共 **251** 条路由，分布在 **28** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
 | `/agents` | 16 | `src/modules/agents/agents.controller.ts` |
-| `/apps` | 12 | `src/modules/apps/apps.controller.ts` |
+| `/apps` | 27 | `src/modules/apps/apps.controller.ts` |
 | `/auth` | 12 | `src/modules/auth/auth.controller.ts` |
 | `/balance` | 7 | `src/modules/commerce/wallet.controller.ts` |
 | `/chat` | 4 | `src/modules/chat/chat.controller.ts` |
@@ -59,10 +59,25 @@
 
 | 方法 | 路径 | 权限 |
 |---|---|---|
-| GET | `/apps/categories` | 登录 |
-| GET | `/apps` | 登录 |
+| GET | `/apps/mine` | 登录 |
+| GET | `/apps/mine/by-request/:key` | 登录 |
+| GET | `/apps/mine/:id` | 登录 |
+| POST | `/apps/mine` | 登录 |
+| PUT | `/apps/mine/:id` | 登录 |
+| POST | `/apps/mine/:id/submit` | 登录 |
+| POST | `/apps/mine/:id/withdraw` | 登录 |
+| POST | `/apps/mine/:id/trash` | 登录 |
+| POST | `/apps/mine/:id/restore` | 登录 |
+| POST | `/apps/mine/:id/reconcile` | 登录 |
+| GET | `/apps/shared/:shareId` | 访客可读，携带凭据时校验身份 |
+| GET | `/apps/admin/review` | ADMIN |
+| GET | `/apps/admin/review/:id` | ADMIN |
+| POST | `/apps/admin/review/:id` | ADMIN |
+| POST | `/apps/admin/review/:id/reconcile` | ADMIN |
+| GET | `/apps/categories` | 访客可读，携带凭据时校验身份 |
+| GET | `/apps` | 访客可读，携带凭据时校验身份 |
 | GET | `/apps/favorites` | 登录 |
-| GET | `/apps/:id` | 登录 |
+| GET | `/apps/:id` | 访客可读，携带凭据时校验身份 |
 | POST | `/apps/:id/favorite` | 登录 |
 | GET | `/apps/admin/list` | ADMIN |
 | POST | `/apps/admin/categories` | ADMIN |
@@ -79,7 +94,7 @@
 | GET | `/auth/captcha` | 公开 |
 | GET | `/auth/registration-policy` | 公开 |
 | POST | `/auth/registration-code` | 公开 |
-| POST | `/auth/email-verification/send` | 公开 |
+| POST | `/auth/email-verification/send` | 登录 |
 | POST | `/auth/email-verification/confirm` | 登录 |
 | POST | `/auth/register` | 公开 |
 | POST | `/auth/login` | 公开 |
@@ -136,7 +151,7 @@
 | 方法 | 路径 | 权限 |
 |---|---|---|
 | GET | `/crami/packages` | 公开 |
-| POST | `/crami/package/create` | 公开 |
+| POST | `/crami/package/create` | ADMIN |
 | GET | `/crami/package/list` | ADMIN |
 | PATCH | `/crami/package/:id` | ADMIN |
 | DELETE | `/crami/package/:id` | ADMIN |
@@ -183,7 +198,7 @@
 |---|---|---|
 | GET | `/installation/status` | 公开 |
 | POST | `/installation` | 公开 |
-| GET | `/installation/readiness` | 公开 |
+| GET | `/installation/readiness` | ADMIN |
 | POST | `/installation/demo` | ADMIN |
 
 ## /mail
@@ -191,11 +206,11 @@
 | 方法 | 路径 | 权限 |
 |---|---|---|
 | GET | `/mail/outbox` | ADMIN |
-| GET | `/mail/status` | 登录 |
-| GET | `/mail/templates` | 登录 |
-| POST | `/mail/probes` | 登录 |
-| GET | `/mail/probes/:requestKey` | 登录 |
-| POST | `/mail/probes/:id/confirm` | 登录 |
+| GET | `/mail/status` | ADMIN |
+| GET | `/mail/templates` | ADMIN |
+| POST | `/mail/probes` | ADMIN |
+| GET | `/mail/probes/:requestKey` | ADMIN |
+| POST | `/mail/probes/:id/confirm` | ADMIN |
 
 ## /menus
 
@@ -323,7 +338,7 @@
 | 方法 | 路径 | 权限 |
 |---|---|---|
 | GET | `/settings/public` | 公开 |
-| GET | `/settings` | 公开 |
+| GET | `/settings` | ADMIN |
 | PUT | `/settings` | ADMIN |
 
 ## /signin

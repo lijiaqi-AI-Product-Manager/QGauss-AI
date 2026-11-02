@@ -1,7 +1,10 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import {OptionalAuth} from '../../common/decorators/optional-auth.decorator';
 import { AppsService } from './apps.service';
+import {AppCreatorService} from './app-creator.service';
+import {AppActionDto,CreateOwnedAppDto,ReviewOwnedAppDto,UpdateOwnedAppDto} from './dto/creator-app.dto';
 import {
   CreateAppDto,
   CreateCategoryDto,
@@ -12,17 +15,33 @@ import {
 
 @Controller('apps')
 export class AppsController {
-  constructor(private readonly apps: AppsService) {}
+  constructor(private readonly apps: AppsService,private readonly creator:AppCreatorService) {}
+
+  @Get('mine') mine(@CurrentUser() user:AuthUser,@Query('view') view?:string){return this.creator.listMine(user.id,view);}
+  @Get('mine/by-request/:key') createdByRequest(@CurrentUser() user:AuthUser,@Param('key') key:string){return this.creator.byRequest(user.id,key);}
+  @Get('mine/:id') ownedDetail(@CurrentUser() user:AuthUser,@Param('id') id:string){return this.creator.mine(user.id,id);}
+  @Post('mine') createOwned(@CurrentUser() user:AuthUser,@Body() dto:CreateOwnedAppDto){return this.creator.create(user.id,dto);}
+  @Put('mine/:id') updateOwned(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:UpdateOwnedAppDto){return this.creator.update(user.id,id,dto);}
+  @Post('mine/:id/submit') submitOwned(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:AppActionDto){return this.creator.action(user.id,id,dto,'submit');}
+  @Post('mine/:id/withdraw') withdrawOwned(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:AppActionDto){return this.creator.action(user.id,id,dto,'withdraw');}
+  @Post('mine/:id/trash') trashOwned(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:AppActionDto){return this.creator.action(user.id,id,dto,'trash');}
+  @Post('mine/:id/restore') restoreOwned(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:AppActionDto){return this.creator.action(user.id,id,dto,'restore');}
+  @Post('mine/:id/reconcile') reconcileOwned(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:AppActionDto){return this.creator.reconcile(user.id,id,dto);}
+  @OptionalAuth() @Get('shared/:shareId') shared(@CurrentUser() user:AuthUser|undefined,@Param('shareId') id:string){return this.creator.shared(user?.id,id);}
+  @Roles('ADMIN') @Get('admin/review') reviewList(@Query('status') status?:string,@Query('page') page?:string,@Query('pageSize') size?:string){return this.creator.reviews(status,page,size);}
+  @Roles('ADMIN') @Get('admin/review/:id') reviewDetail(@Param('id') id:string){return this.creator.reviewDetail(id);}
+  @Roles('ADMIN') @Post('admin/review/:id') review(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:ReviewOwnedAppDto){return this.creator.review(user.id,id,dto);}
+  @Roles('ADMIN') @Post('admin/review/:id/reconcile') reconcileReview(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:AppActionDto){return this.creator.reconcile(user.id,id,dto,true);}
 
   // ---------- 前台 ----------
-  @Get('categories')
+  @OptionalAuth() @Get('categories')
   listCategories() {
     return this.apps.listCategories();
   }
 
-  @Get()
-  list(@CurrentUser() user: AuthUser, @Query('categoryId') categoryId?: string) {
-    return this.apps.listPublished(user.id, categoryId);
+  @OptionalAuth() @Get()
+  list(@CurrentUser() user: AuthUser|undefined, @Query('categoryId') categoryId?: string) {
+    return this.apps.listPublished(user?.id, categoryId);
   }
 
   @Get('favorites')
@@ -30,9 +49,9 @@ export class AppsController {
     return this.apps.listFavorites(user.id);
   }
 
-  @Get(':id')
-  detail(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.apps.detail(id, user.id);
+  @OptionalAuth() @Get(':id')
+  detail(@CurrentUser() user: AuthUser|undefined, @Param('id') id: string) {
+    return this.apps.detail(id, user?.id);
   }
 
   @Post(':id/favorite')

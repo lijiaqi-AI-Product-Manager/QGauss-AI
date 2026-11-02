@@ -12,6 +12,7 @@
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
@@ -31,31 +32,22 @@ function walk(dir) {
 }
 
 const modules = [];
+const decorators=node=>(ts.canHaveDecorators(node)?ts.getDecorators(node)||[]:[]).map(d=>d.expression).filter(ts.isCallExpression);
+const named=(items,name)=>items.find(item=>ts.isIdentifier(item.expression)&&item.expression.text===name);
+const literal=node=>node&&ts.isStringLiteralLike(node)?node.text:'';
 for (const file of walk(SRC)) {
   const src = readFileSync(file, 'utf8');
-  const ctrl = src.match(/@Controller\(\s*['"`]([^'"`]*)['"`]\s*\)/);
-  if (!ctrl) continue;
-  const prefix = ctrl[1];
-
-  // 逐个方法抓：装饰器行 + 紧跟的方法名
-  const routes = [];
-  const re = /@(Get|Post|Patch|Put|Delete)\(\s*(?:['"`]([^'"`]*)['"`])?\s*\)/g;
-  let m;
-  while ((m = re.exec(src)) !== null) {
-    const method = VERB[m[1]];
-    const path = m[2] ?? '';
-    // 取装饰器前后 200 字符判断守卫
-    const before = src.slice(Math.max(0, m.index - 200), m.index);
-    const isPublic = /@Public\(\)/.test(before);
-    const roleMatch = before.match(/@Roles\(\s*'([^']+)'\s*\)\s*$/);
-    routes.push({ method, path, isPublic, role: roleMatch?.[1] ?? '' });
+  const source=ts.createSourceFile(file,src,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+  for(const declaration of source.statements.filter(ts.isClassDeclaration)){
+    const shared=decorators(declaration),ctrl=named(shared,'Controller');if(!ctrl)continue;
+    const prefix=literal(ctrl.arguments[0]),routes=[];
+    for(const member of declaration.members){
+      if(!ts.isMethodDeclaration(member))continue;const own=decorators(member),all=[...own,...shared];
+      const route=own.find(item=>ts.isIdentifier(item.expression)&&VERB[item.expression.text]);if(!route)continue;
+      routes.push({method:VERB[route.expression.text],path:literal(route.arguments[0]),isPublic:!!named(all,'Public'),optional:!!named(all,'OptionalAuth'),role:literal(named(all,'Roles')?.arguments[0])});
+    }
+    modules.push({file:relative(root,file).split('\\').join('/'),prefix,routes});
   }
-
-  modules.push({
-    file: relative(root, file).split('\\').join('/'),
-    prefix,
-    routes,
-  });
 }
 
 modules.sort((a, b) => a.prefix.localeCompare(b.prefix));
@@ -75,13 +67,13 @@ for (const m of modules) {
   md += `| 方法 | 路径 | 权限 |\n|---|---|---|\n`;
   for (const r of m.routes) {
     const full = `/${m.prefix}${r.path ? `/${r.path}` : ''}`.replace(/\/$/, '');
-    const perm = r.isPublic ? '公开' : r.role ? r.role : '登录';
+    const perm = r.isPublic ? '公开' : r.role ? r.role : r.optional?'访客可读，携带凭据时校验身份':'登录';
     md += `| ${r.method} | \`${full}\` | ${perm} |\n`;
   }
   md += `\n`;
 }
 
-writeFileSync(OUT, md, 'utf8');
+writeFileSync(OUT, md.trimEnd()+'\n', 'utf8');
 
 console.log(`路由总数 ${total}，控制器 ${modules.length} 个`);
 for (const m of modules) console.log(`  /${m.prefix}`.padEnd(28) + `${m.routes.length}`);

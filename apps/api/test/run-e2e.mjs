@@ -191,6 +191,7 @@ async function main() {
     { name: '主题套件 e2e.mjs', script: join(here, 'e2e.mjs') },
     { name: '商业套件 commerce.e2e.mjs', script: join(here, 'commerce.e2e.mjs') },
     { name: '后台契约 admin-contract.mjs', script: join(root, '..', 'web', 'test', 'admin-contract.mjs') },
+    { name: '自建应用 app-creator.e2e.mjs', script: join(here, 'app-creator.e2e.mjs') },
     { name: '生成任务 chat-runs.e2e.mjs', script: join(here, 'chat-runs.e2e.mjs') },
     { name: '绘画工作台 image-workspace.e2e.mjs', script: join(here, 'image-workspace.e2e.mjs') },
     { name: '多图与局部重绘 image-edit.e2e.mjs', script: join(here, 'image-edit.e2e.mjs') },

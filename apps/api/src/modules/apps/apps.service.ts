@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { BusinessException, ErrorCode } from '../../common/exceptions/business.exception';
+import {accessibleAppWhere,publicAppWhere} from './app-visibility';
 
 @Injectable()
 export class AppsService {
@@ -47,21 +48,20 @@ export class AppsService {
 
   // ---------------- 应用 ----------------
   /** 前台：已发布 + 分类组织 */
-  async listPublished(userId: string, categoryId?: string) {
+  async listPublished(userId: string|undefined, categoryId?: string) {
     const apps = await this.prisma.app.findMany({
       where: {
-        published: true,
-        deletedAt: null,
+        ...publicAppWhere(),
         ...(categoryId ? { categoryId } : {}),
       },
       orderBy: [{ sort: 'asc' }, { createdAt: 'asc' }],
       include: { category: { select: { id: true, name: true } } },
     });
 
-    const favorites = await this.prisma.appFavorite.findMany({
+    const favorites = userId?await this.prisma.appFavorite.findMany({
       where: { userId },
       select: { appId: true },
-    });
+    }):[];
     const favSet = new Set(favorites.map((f) => f.appId));
 
     return apps.map((a) => ({
@@ -76,10 +76,10 @@ export class AppsService {
     }));
   }
 
-  async detail(id: string, userId: string) {
+  async detail(id: string, userId: string|undefined) {
     // 只暴露前台该看到的字段：systemPrompt 是内部提示词，绝不能随详情接口下发
     const app = await this.prisma.app.findFirst({
-      where: { id, deletedAt: null, published: true },
+      where: userId?accessibleAppWhere(userId,id):{...publicAppWhere(),id},
       select: {
         id: true,
         name: true,
@@ -89,22 +89,22 @@ export class AppsService {
         defaultModel: true,
         sort: true,
         published: true,
+        version:true,
+        shareId:true,
         category: { select: { id: true, name: true } },
       },
     });
     if (!app) throw new BusinessException(ErrorCode.NOT_FOUND, '应用不存在', 404);
-    const fav = await this.prisma.appFavorite.findUnique({
+    const fav = userId?await this.prisma.appFavorite.findUnique({
       where: { userId_appId: { userId, appId: id } },
-    });
+    }):null;
     return { ...app, favorited: !!fav };
   }
 
   /** 内部使用：取 systemPrompt / 默认模型 */
-  async getForChat(id: string) {
-    const app = await this.prisma.app.findFirst({ where: { id, deletedAt: null } });
-    if (!app) throw new BusinessException(ErrorCode.NOT_FOUND, '应用不存在', 404);
-    if (!app.published) throw new BusinessException(ErrorCode.NOT_FOUND, '应用已下架', 404);
-    return app;
+  async getForChat(id:string,userId?:string){
+    const app=await this.prisma.app.findFirst({where:userId?accessibleAppWhere(userId,id):{...publicAppWhere(),id}});
+    if(!app)throw new BusinessException(ErrorCode.NOT_FOUND,'应用不存在或当前不可用',404);return app;
   }
 
   async toggleFavorite(userId: string, appId: string, wanted?: boolean) {
@@ -113,7 +113,7 @@ export class AppsService {
       // A raw no-op leaves the application's updatedAt and display order intact.
       await tx.$executeRaw`UPDATE "apps" SET "id" = "id" WHERE "id" = ${appId}`;
       const app = await tx.app.findFirst({
-        where: { id: appId, deletedAt: null, published: true },
+        where: {...publicAppWhere(),id:appId},
         select: { id: true },
       });
       if (!app) throw new BusinessException(ErrorCode.NOT_FOUND, '应用不存在', 404);
@@ -133,7 +133,7 @@ export class AppsService {
       orderBy: { createdAt: 'desc' },
     });
     const apps = await this.prisma.app.findMany({
-      where: { id: { in: rows.map((r) => r.appId) }, deletedAt: null, published: true },
+      where: { ...publicAppWhere(),id: { in: rows.map((r) => r.appId) } },
     });
     const map = new Map(apps.map((a) => [a.id, a]));
     return rows
@@ -145,7 +145,7 @@ export class AppsService {
   // ---------------- 后台 ----------------
   adminList() {
     return this.prisma.app.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null,origin:'CURATED' },
       orderBy: [{ sort: 'asc' }, { createdAt: 'desc' }],
       include: { category: { select: { id: true, name: true } } },
     });
@@ -180,16 +180,18 @@ export class AppsService {
       sort?: number;
     },
   ) {
-    const exists = await this.prisma.app.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    const exists = await this.prisma.app.findFirst({ where: { id, deletedAt: null }, select: { id: true,origin:true } });
     if (!exists) throw new BusinessException(ErrorCode.NOT_FOUND, '应用不存在', 404);
+    if(exists.origin==='USER')throw new BusinessException(ErrorCode.PARAM_INVALID,'用户创建的应用请通过审核工作台处理',409);
     await this.assertCategory(data.categoryId);
-    return this.prisma.app.update({ where: { id }, data });
+    return this.prisma.app.update({ where: { id }, data:{...data,version:{increment:1}} });
   }
 
   async remove(id: string) {
-    const exists = await this.prisma.app.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    const exists = await this.prisma.app.findFirst({ where: { id, deletedAt: null }, select: { id: true,origin:true } });
     if (!exists) throw new BusinessException(ErrorCode.NOT_FOUND, '应用不存在', 404);
-    await this.prisma.app.update({ where: { id }, data: { deletedAt: new Date(), published: false } });
+    if(exists.origin==='USER')throw new BusinessException(ErrorCode.PARAM_INVALID,'用户创建的应用请通过审核工作台处理',409);
+    await this.prisma.app.update({ where: { id }, data: { deletedAt: new Date(), published: false,version:{increment:1} } });
     return { ok: true };
   }
 }

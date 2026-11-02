@@ -55,7 +55,7 @@ const groups = computed(() => {
 });
 
 function groupLabel(name) {
-  return { site: '站点', chat: '对话', security: '安全', quota: '配额', upstream: '上游', upload: '上传' }[name] ?? name;
+  return { apps:'应用与创作者', site: '站点', chat: '对话', security: '安全', quota: '配额', upstream: '上游', upload: '上传' }[name] ?? name;
 }
 
 async function load() {

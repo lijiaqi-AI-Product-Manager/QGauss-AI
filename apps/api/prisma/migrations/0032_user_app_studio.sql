@@ -1,0 +1,18 @@
+ALTER TABLE "apps" ADD COLUMN "ownerId" TEXT REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "apps" ADD COLUMN "origin" TEXT NOT NULL DEFAULT 'CURATED' CHECK ("origin" IN ('CURATED','USER'));
+ALTER TABLE "apps" ADD COLUMN "reviewStatus" TEXT NOT NULL DEFAULT 'NONE' CHECK ("reviewStatus" IN ('NONE','DRAFT','PENDING','APPROVED','REJECTED'));
+ALTER TABLE "apps" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1 CHECK ("version" >= 1);
+ALTER TABLE "apps" ADD COLUMN "reviewNote" TEXT;
+ALTER TABLE "apps" ADD COLUMN "reviewedAt" DATETIME;
+ALTER TABLE "apps" ADD COLUMN "shareId" TEXT;
+ALTER TABLE "apps" ADD COLUMN "createRequestKey" TEXT;
+ALTER TABLE "apps" ADD COLUMN "createSignature" TEXT;
+ALTER TABLE "apps" ADD COLUMN "lastActionKey" TEXT;
+ALTER TABLE "apps" ADD COLUMN "lastActionSignature" TEXT;
+ALTER TABLE "apps" ADD COLUMN "rewardGrantedAt" DATETIME;
+ALTER TABLE "apps" ADD COLUMN "rewardJson" TEXT;
+ALTER TABLE "apps" ADD COLUMN "eventsJson" TEXT NOT NULL DEFAULT '[]';
+CREATE UNIQUE INDEX "apps_shareId_key" ON "apps"("shareId");
+CREATE UNIQUE INDEX "apps_ownerId_createRequestKey_key" ON "apps"("ownerId","createRequestKey");
+CREATE INDEX "apps_ownerId_origin_deletedAt_idx" ON "apps"("ownerId","origin","deletedAt");
+CREATE INDEX "apps_origin_reviewStatus_updatedAt_idx" ON "apps"("origin","reviewStatus","updatedAt");

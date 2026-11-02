@@ -123,8 +123,8 @@
           <span class="cv-model-name">{{ currentModel ? currentModel.displayName : t('chat.model') }}</span>
           <el-icon class="cv-model-caret"><ArrowDown /></el-icon>
         </button>
-        <span v-if="appName" class="cv-app">
-          <el-icon><Grid /></el-icon>{{ appName }}
+        <span v-if="appId||appError||appLoading" class="cv-app">
+          <el-icon><Grid /></el-icon>{{ appName||(appLoading?'正在打开应用':'应用暂不可用') }}
           <button type="button" aria-label="退出应用" @click="leaveApp">
             <el-icon><Close /></el-icon>
           </button>
@@ -319,6 +319,7 @@
             @change="onPickFiles"
           />
         <p v-if="agentId" class="qgc-model-cost-note qag-composer-quote"><ClientIcon name="agent" /><span>{{ agentQuote(currentAgent).label }}</span><small>{{ agentLoading?'正在核对搭档资料…':agentError||'问题与所选附件将交给搭档服务处理' }}</small><button type="button" :disabled="agentLoading||streaming" @click="loadCurrentAgent">刷新资料</button></p>
+        <p v-if="appId||appError||appLoading" class="qgc-model-cost-note qag-composer-quote" :role="appError?'alert':'status'"><ClientIcon name="apps"/><span>{{ appName||'应用资料' }}</span><small>{{ appLoading?'正在核对应用设定…':appError||'已核对第 '+appVersion+' 版设定，发送时再开始生成' }}</small><button v-if="appId" type="button" :disabled="appLoading||streaming||loadingDetail" @click="loadCurrentApp()">刷新应用资料</button><button v-else type="button" @click="leaveApp">返回普通对话</button></p>
         <p v-else-if="auth.isLoggedIn && currentModel" class="qgc-model-cost-note"><ClientIcon name="wallet" /><span>{{ modelBilling(currentModel).title }}</span><small>发送时按站点设置</small></p>
         <p v-if="webSearchOn" class="cv-web-search-note" role="status"><ClientIcon name="globe" />{{ currentModel?.webSearchAvailable ? '本轮允许模型按需要联网，仅发送当前问题和附件；仍按当前模型设置结算。' : '当前模型尚未接入联网，请关闭联网或选择支持的模型后发送。' }}</p>
         <div class="cv-tools">
@@ -438,6 +439,7 @@ watch(inputEl, element => {
 const quota = ref({ limit: 0, used: 0 });
 const appId = ref('');
 const appName = ref('');
+const appVersion=ref(null),appLoading=ref(false),appError=ref('');let appRead=null;
 const agentId=ref(String(route.query.agent||'')),currentAgent=ref(null),agentLoading=ref(!!route.query.agent),agentError=ref('');let agentRead=null;
 const activeTitle = computed(() => !draftStarted.value && !conversationId.value ? '' : conversations.value.find(c => c.id === conversationId.value)?.title || currentAgent.value?.name || appName.value || (currentLang.value === 'en' ? 'New chat' : currentLang.value === 'zh-TW' ? '新對話' : '新对话'));
 watch(activeTitle, value => { clientChatTitle.value = value; }, { immediate: true });
@@ -478,7 +480,7 @@ const objectUrls = new Set();
 
 const uploading = computed(() => pendingFiles.value.some((f) => f.status === 'uploading'));
 const readyFiles = computed(() => pendingFiles.value.filter((f) => f.status === 'done'));
-const canSend = computed(() => !uploading.value && !loadingDetail.value && !modelSaving.value && (!agentId.value||!agentLoading.value&&currentAgent.value?.ready&&!!currentAgent.value.offerRevision) && (!webSearchOn.value||currentModel.value?.webSearchAvailable) && (!!input.value.trim() || readyFiles.value.length > 0));
+const canSend = computed(() => !appLoading.value&&!appError.value&&(!appId.value||Number.isInteger(appVersion.value))&&!uploading.value && !loadingDetail.value && !modelSaving.value && (!agentId.value||!agentLoading.value&&currentAgent.value?.ready&&!!currentAgent.value.offerRevision) && (!webSearchOn.value||currentModel.value?.webSearchAvailable) && (!!input.value.trim() || readyFiles.value.length > 0));
 
 function extOf(name = '') {
   const m = /\.([a-z0-9]{1,5})$/i.exec(name);
@@ -604,7 +606,7 @@ function botMood(m, i) {
 }
 
 /* Voice input is reviewed before insertion; only newly generated replies may autoplay. */
-const voice = useVoiceSession({ auth, context:computed(()=>conversationId.value || `draft:${agentId.value || appId.value || 'chat'}`), disabled:computed(()=>streaming.value || loadingDetail.value), refreshBalance, insert(text){ input.value += `${input.value && !/\s$/.test(input.value)?'\n':''}${text}`; nextTick(()=>{autosize();inputEl.value?.focus();}); } });
+const voice = useVoiceSession({ auth, context:computed(()=>conversationId.value || `draft:${agentId.value || appId.value || 'chat'}`), disabled:computed(()=>streaming.value || loadingDetail.value||appLoading.value||!!appError.value), refreshBalance, insert(text){ input.value += `${input.value && !/\s$/.test(input.value)?'\n':''}${text}`; nextTick(()=>{autosize();inputEl.value?.focus();}); } });
 function openVoice(){ if(!auth.isLoggedIn){saveGuestDraft(input.value);router.push('/login?redirect=/chat');return;}void voice.show(); }
 async function openHomeVoice(seed){if(!auth.isLoggedIn){saveGuestDraft(seed);await router.push({path:'/login',query:{redirect:'/chat?new=1'}});return;}newChat(seed);await nextTick();await voice.show();}
 
@@ -907,6 +909,7 @@ async function selectModel(m) {
 }
 
 function changeConversationView() {
+  appRead?.abort();appRead=null;appLoading.value=false;
   voice.reset();
   detachStream();
   conversationViewRevision += 1;
@@ -996,7 +999,23 @@ function newChat(seed) {
   nextTick(() => { autosize(); if (!compactComposer.value) inputEl.value?.focus(); });
 }
 
-function leaveApp() { appId.value = ''; appName.value = ''; conversationKind.value = 'chat'; newChat(); }
+function clearApp(){appRead?.abort();appRead=null;appId.value='';appName.value='';appVersion.value=null;appLoading.value=false;appError.value='';}
+function leaveApp() { clearApp();conversationKind.value = 'chat'; newChat();if(route.query.app!==undefined){const query={...route.query};delete query.app;void router.replace({path:route.path,query});} }
+async function loadCurrentApp({opening=false}={}){
+ appRead?.abort();const id=appId.value;if(!id||!auth.isLoggedIn)return;
+ const request=new AbortController(),identity=auth.identityRevision,view=conversationViewRevision;appRead=request;appLoading.value=true;appError.value='';
+ const current=()=>viewActive&&!request.signal.aborted&&auth.isLoggedIn&&auth.identityRevision===identity&&appId.value===id&&view===conversationViewRevision;
+ try{const row=await api.get('/apps/'+encodeURIComponent(id),{signal:request.signal,retry:false});if(!current())return;if(row?.id!==id||!Number.isInteger(row.version)||row.version<1)throw Error('应用资料不完整，请重新核对。');appName.value=row.name;appVersion.value=row.version;
+  if(opening){if(row.defaultModel)model.value=row.defaultModel;if(row.greeting)messages.value=[{role:'assistant',content:row.greeting}];}
+ }catch(error){if(current()){appVersion.value=null;appError.value=error.status===404?'这位搭档当前不可用。已有对话保留；可以刷新核对，或退出应用后开始普通对话。':error.message||'应用资料暂未确认，请刷新后继续。';}}
+ finally{if(appRead===request){appLoading.value=false;appRead=null;}}
+}
+async function startApp(id){
+ if(!auth.isLoggedIn)return;agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';agentLoading.value=false;clearApp();conversationKind.value='app';newChat();
+ if(typeof id!=='string'||!id||id.length>128){appError.value='应用入口不完整，请回到应用广场重新选择。';return;}
+ appId.value=id;await loadCurrentApp({opening:true});
+}
+function markAppUnavailable(error){if(appId.value&&/应用/.test(error.message||'')&&/变化|不存在|不可用|下架/.test(error.message||'')){appError.value=error.message;appVersion.value=null;}}
 
 async function loadCurrentAgent(){
   agentRead?.abort();const request=new AbortController(),id=agentId.value,identity=auth.identityRevision,view=conversationViewRevision;agentRead=request;if(!id||!auth.isLoggedIn)return;agentLoading.value=true;agentError.value='';
@@ -1006,7 +1025,7 @@ async function loadCurrentAgent(){
   finally{if(agentRead===request){agentLoading.value=false;agentRead=null;}}
 }
 async function startAgent(id){
-  agentRead?.abort();agentId.value=String(id||'');currentAgent.value=null;agentError.value='';appId.value=appName.value='';conversationKind.value='agent';newChat(typeof route.query.draft==='string'?route.query.draft.slice(0,20000):'');webSearchOn.value=false;await loadCurrentAgent();
+  agentRead?.abort();agentId.value=String(id||'');currentAgent.value=null;agentError.value='';clearApp();conversationKind.value='agent';newChat(typeof route.query.draft==='string'?route.query.draft.slice(0,20000):'');webSearchOn.value=false;await loadCurrentAgent();
 }
 function fillAgentQuestion(question){if(streaming.value||loadingDetail.value)return;input.value=question;nextTick(()=>{autosize();inputEl.value?.focus();});}
 function agentPayload(history){const parent=history.slice(0,-1).at(-1);return{agentId:agentId.value,agentOfferRevision:currentAgent.value?.offerRevision,...(contextOn.value&&parent?.role==='assistant'&&parent.status==='COMPLETED'&&parent.serverId?{agentParentId:parent.serverId}:{})};}
@@ -1024,8 +1043,11 @@ async function openConversation(id) {
     const detail = await api.get(`/conversations/${id}`);
     if (!isCurrent()) return;
     conversationId.value = detail.id;
-    appId.value = detail.appId || '';
+    clearApp();appId.value = detail.appId || '';
     appName.value = detail.app?.name || '';
+    appVersion.value=detail.app?.version||null;
+    if(appId.value&&!detail.app)appError.value='这位搭档当前不可用。已有对话保留；可以刷新核对，或退出应用后开始普通对话。';
+    else if(appId.value&&!Number.isInteger(appVersion.value))void loadCurrentApp();
     agentRead?.abort();agentId.value=detail.agentId||'';currentAgent.value=null;agentError.value='';agentLoading.value=false;
     conversationKind.value = detail.agentId?'agent':detail.appId ? 'app' : 'chat';
     if(detail.agentId)void loadCurrentAgent();
@@ -1228,7 +1250,7 @@ async function streamInto(payload, target, resumeId) {
     onSearch(value) { if(isCurrent()) {target.webSearch=webSearchReport(value);scrollToBottom();} },
     onAgent(value) {if(isCurrent()){target.agentActivity=agentRunReport(value);scrollToBottom();}},
     onReasoning(value) { if (isCurrent()) { target.reasoning = (target.reasoning || '') + value; target.status = 'STREAMING'; scrollToBottom(); } },
-    onError(error) { if (isCurrent()) { target.notice = error.message || '请求失败'; target.noticeType = 'error'; target.status = 'FAILED'; } },
+    onError(error) { if (isCurrent()) { markAppUnavailable(error);target.notice = error.message || '请求失败'; target.noticeType = 'error'; target.status = 'FAILED'; } },
     async onDone(data) {
       if (!isCurrent()) return;
       if(Object.hasOwn(data,'webSearch'))target.webSearch=webSearchReport(data.webSearch);
@@ -1268,7 +1290,7 @@ async function streamInto(payload, target, resumeId) {
       } else { target.notice = '暂时无法续接，稍后重新打开此会话即可查看'; target.noticeType = 'warn'; }
     }
   } catch (error) {
-    if (isCurrent()) { target.notice = error.message || '请求失败'; target.noticeType = 'error'; }
+    if (isCurrent()) { markAppUnavailable(error);target.notice = error.message || '请求失败'; target.noticeType = 'error'; }
   } finally {
     if (isCurrent()) { streaming.value = false; stopping.value = false; controller = null; activeRun = null; target.streaming = false; }
   }
@@ -1320,6 +1342,7 @@ async function send() {
     ...(agentId.value?agentPayload(history):{model:model.value}),
     webSearch:webSearchOn.value,
     appId: appId.value || undefined,
+    appVersion:appId.value?appVersion.value:undefined,
     conversationId: conversationId.value || undefined,
     clientMsgId: `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     messages: history.map(toPayloadMessage),
@@ -1332,6 +1355,7 @@ async function send() {
 async function regenerate(message) {
   const viewRevision = conversationViewRevision, sessionRevision = auth.sessionRevision;
   if (streaming.value) return;
+  if(appLoading.value||appError.value||appId.value&&!Number.isInteger(appVersion.value))return ElMessage.warning('请先刷新并核对应用资料');
   if(agentId.value&&(!currentAgent.value?.ready||!currentAgent.value.offerRevision||agentLoading.value))return ElMessage.warning('请先刷新并核对搭档资料与费用');
   if(webSearchOn.value&&!currentModel.value?.webSearchAvailable)return ElMessage.warning('请关闭联网或先选择支持联网的模型');
   if (!message.serverId) return ElMessage.warning('这条消息还不能重新生成');
@@ -1349,6 +1373,7 @@ async function regenerate(message) {
   const payload = {
     ...(agentId.value?agentPayload(history):{model:model.value}),
     appId: appId.value || undefined,
+    appVersion:appId.value?appVersion.value:undefined,
     conversationId: conversationId.value,
     regenerateOf: message.serverId,
     webSearch:webSearchOn.value,
@@ -1380,10 +1405,10 @@ watch(()=>auth.identityRevision,()=>{
   changeConversationView();conversationListRevision+=1;webSearchOn.value=false;
   conversationId.value=null;messages.value=[];conversations.value=[];historicalModel.value=null;branchChoice.value={};
   models.value=[];presets.value=[];folders.value=[];folderFilter.value='';selected.value=[];
-  model.value='';input.value='';pendingFiles.value=[];appId.value='';appName.value='';agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';agentLoading.value=false;draftStarted.value=false;
+  model.value='';input.value='';pendingFiles.value=[];clearApp();agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';agentLoading.value=false;draftStarted.value=false;
   loadingConvs.value=false;loadingDetail.value=false;quota.value={limit:0,used:0};
   for(const url of objectUrls)URL.revokeObjectURL(url);objectUrls.clear();for(const key of Object.keys(thumbs))delete thumbs[key];
-  if(auth.isLoggedIn)void Promise.all([loadConversations(),loadMeta(),loadFolders()]).catch(()=>{});
+  if(auth.isLoggedIn){const identity=auth.identityRevision;void Promise.allSettled([loadConversations(),loadMeta(),loadFolders()]).then(()=>{if(!viewActive||!auth.isLoggedIn||identity!==auth.identityRevision)return;if(route.query.agent)void startAgent(route.query.agent);else if(route.query.app!==undefined)void startApp(route.query.app);});}
 });
 async function refreshBackgroundState() {
   if (!viewActive || !auth.isLoggedIn || document.hidden) return;
@@ -1398,6 +1423,7 @@ onMounted(async () => {
   editorMedia.addEventListener('change', updateEditorSize);
   window.addEventListener('keydown', onKeydown);
   if (!auth.isLoggedIn) { loadingConvs.value = false; return; }
+  const openingIdentity=auth.identityRevision;
   if(route.query.agent){
     const opening=startAgent(route.query.agent);
     await Promise.allSettled([loadConversations(),loadMeta(),loadFolders(),opening]);
@@ -1408,9 +1434,9 @@ onMounted(async () => {
   } catch (error) {
     // 退出登录时首屏请求可能仍在飞；组件已离开时不再冒出未处理拒绝或错误提示。
     if (viewActive && auth.isLoggedIn) ElMessage.error(error.message || '加载对话失败，请刷新页面重试');
-    if(!route.query.agent)return;
+
   }
-  if (!viewActive || !auth.isLoggedIn) return;
+  if (!viewActive || !auth.isLoggedIn || openingIdentity!==auth.identityRevision) return;
   if(route.query.agent){await startAgent(route.query.agent);return;}
   if(route.path==='/agent/chat'){void router.replace('/agent');return;}
   applyModelParam(route.query.model);
@@ -1420,22 +1446,7 @@ onMounted(async () => {
     router.replace({ path: route.path, query });
   }
 
-  // 从应用市场进入：带上应用上下文
-  const appParam = route.query.app;
-  if (appParam) {
-    try {
-      const detail = await api.get(`/apps/${appParam}`);
-      if (!viewActive || !auth.isLoggedIn) return;
-      appId.value = detail.id;
-      conversationKind.value = 'app';
-      draftStarted.value = true;
-      appName.value = detail.name;
-      if (detail.defaultModel) model.value = detail.defaultModel;
-      if (detail.greeting) messages.value = [{ role: 'assistant', content: detail.greeting }];
-    } catch {
-      if (viewActive && auth.isLoggedIn) ElMessage.warning('应用不存在或已下架');
-    }
-  }
+  if(route.query.app!==undefined){await startApp(route.query.app);applyModelParam(route.query.model);}
 });
 
 /** 模型广场点「开始对话」会带上 ?model=；已在对话页时也要跟随 */
@@ -1452,6 +1463,7 @@ watch(
   (name) => applyModelParam(name),
 );
 watch(conversationKind, () => { selected.value = []; });
+watch(()=>route.query.app,(id,previous)=>{if(!auth.isLoggedIn)return;if(id!==undefined)void startApp(id);else if(previous!==undefined&&(appId.value||appError.value))leaveApp();});
 watch(()=>route.query.agent,(id,previous)=>{if(!auth.isLoggedIn)return;if(id&&String(id)!==agentId.value)void startAgent(id);else if(!id&&previous&&agentId.value){agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';conversationKind.value='chat';newChat();}});
 
 function onKeydown(e) {
@@ -1468,7 +1480,7 @@ function onKeydown(e) {
 }
 
 onUnmounted(() => {
-  agentRead?.abort();
+  appRead?.abort();agentRead?.abort();
   inputResizeObserver?.disconnect();
   if (historyPoll) clearInterval(historyPoll);
   document.removeEventListener('visibilitychange', refreshBackgroundState);

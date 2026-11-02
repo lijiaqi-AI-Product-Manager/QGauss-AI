@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import {conversationAppSelect,conversationAppView} from '../apps/app-visibility';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { BusinessException, ErrorCode } from '../../common/exceptions/business.exception';
 import { ChatService } from '../chat/chat.service';
@@ -15,7 +16,7 @@ export class ConversationsService {
       where: { userId, deletedAt: null },
       orderBy: [{ pinnedAt: 'desc' }, { lastMessageAt: 'desc' }],
       take: 100,
-      include: { _count: { select: { messages: { where: { deletedAt: null } } } }, app: { select: { id: true, name: true, icon: true } },agent:{select:{id:true,name:true}}, messages: { where: { deletedAt: null, role: 'ASSISTANT', status: { in: ['PENDING', 'STREAMING', 'SETTLING'] } }, select: { id: true, status: true }, take: 1, orderBy: { createdAt: 'desc' } } },
+      include: { _count: { select: { messages: { where: { deletedAt: null } } } }, app: { select: conversationAppSelect },agent:{select:{id:true,name:true}}, messages: { where: { deletedAt: null, role: 'ASSISTANT', status: { in: ['PENDING', 'STREAMING', 'SETTLING'] } }, select: { id: true, status: true }, take: 1, orderBy: { createdAt: 'desc' } } },
     });
     return rows.map((c) => ({
       id: c.id,
@@ -23,7 +24,7 @@ export class ConversationsService {
       modelId: c.modelId,
       folderId: c.folderId,
       appId: c.appId,
-      app: c.app,
+      app: conversationAppView(c.app,userId),
       agentId:c.agentId,agent:c.agent,
       pinned: !!c.pinnedAt,
       messageCount: c._count.messages,
@@ -55,12 +56,12 @@ export class ConversationsService {
           include:{agentRun:{select:{cancelState:true}}},
         },
         model: { select: { id: true, name: true, displayName: true } },
-        app: { select: { id: true, name: true, icon: true } },
+        app: { select: conversationAppSelect },
         agent:{select:{id:true,name:true}},
       },
     });
     if (!conv) throw new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND, '会话不存在', 404);
-    return { ...conv, messages: conv.messages.map(({ settlementJson: _private, searchJson: _search,agentJson:_agent,agentRun:_run, ...message }) => ({ ...message, billing: messageBilling(message),...(safeWebSearch(_search)?{webSearch:safeWebSearch(_search)}:{}),...(publicAgentActivity(_agent,_run)?{agentActivity:publicAgentActivity(_agent,_run)}:{}) })) };
+    return { ...conv, app:conversationAppView(conv.app,userId), messages: conv.messages.map(({ settlementJson: _private, searchJson: _search,agentJson:_agent,agentRun:_run, ...message }) => ({ ...message, billing: messageBilling(message),...(safeWebSearch(_search)?{webSearch:safeWebSearch(_search)}:{}),...(publicAgentActivity(_agent,_run)?{agentActivity:publicAgentActivity(_agent,_run)}:{}) })) };
   }
 
   /** 读单条消息的落库状态：流断开后前端靠它补齐内容（Safari 等移动端断流常见） */
