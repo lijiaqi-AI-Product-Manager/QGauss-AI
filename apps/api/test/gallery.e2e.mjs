@@ -1,0 +1,57 @@
+/** Public gallery reads and owner publication use isolated files and accounts; no provider is invoked. */
+import 'reflect-metadata';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {resolve,sep} from 'node:path';
+import {tmpdir} from 'node:os';
+import {PrismaClient} from '@prisma/client';
+import sharp from 'sharp';
+import {StorageService} from '../dist/modules/storage/storage.service.js';
+import {SettingsService} from '../dist/modules/settings/settings.service.js';
+if(process.env.DATABASE_URL!=='file:./e2e.db'||!resolve(process.env.E2E_STORAGE_DIR||'.').startsWith(resolve(tmpdir())+sep+'qgauss-e2e-storage-'))throw Error('Gallery requires isolated database and storage');
+process.env.STORAGE_DRIVER='local';process.env.STORAGE_DIR=process.env.E2E_STORAGE_DIR;
+const db=new PrismaClient(),storage=new StorageService(db,new SettingsService(db)),root=process.env.E2E_API,tag=randomUUID(),marker='QGauss-gallery-'+tag,works=[],users=[];
+let admin='',owner='',viewer='',ownerId='',passed=0;
+const values={'commerce.enabled':true,'demo.siteEnabled':false,'security.registerEnabled':true,'security.registerInviteCode':'','security.captchaEnabled':false,'security.emailVerificationRequired':false,'security.registerRateLimit':1000,'security.loginRateLimit':1000},original=await db.globalConfig.findMany({where:{key:{in:Object.keys(values)}}});
+const check=(name,value)=>{assert.ok(value,name);passed++;console.log('  ✔ '+name);};
+async function api(path,method='GET',body,token=viewer){const response=await fetch(root+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(12000)});const json=await response.json();return{status:response.status,data:json.data??json,response};}
+const settings=data=>api('/settings','PUT',{settings:Object.entries(data).map(([key,value])=>({key,value}))},admin),bytes=(path,token=viewer)=>fetch(new URL(path,root),{headers:token?{Authorization:'Bearer '+token}:{},signal:AbortSignal.timeout(12000)});
+const entry=(kind,id,suffix='')=>'/gallery/works/'+kind+'/'+id+suffix,search=extra=>'/gallery/works?q='+encodeURIComponent(marker)+(extra?'&'+extra:'');
+const png=await sharp({create:{width:1280,height:960,channels:3,background:'#afa4cd'}}).png().toBuffer();
+try{
+ admin=(await api('/auth/login','POST',{account:process.env.E2E_ADMIN||'admin',password:process.env.E2E_PASSWORD||'admin123456'},'')).data.accessToken;assert.ok(admin);assert.equal((await settings(values)).status,200);
+ for(const [index,kind]of ['owner','viewer'].entries()){const email='gallery-'+kind+'-'+tag+'@qgauss.test',password='qgauss-gallery-local-123';assert.equal((await api('/auth/register','POST',{email,username:'qggallery'+index+tag.replaceAll('-','').slice(0,9),password},'')).status,201);const signed=(await api('/auth/login','POST',{account:email,password},'')).data;users.push(signed.user.id);if(kind==='owner'){owner=signed.accessToken;ownerId=signed.user.id;}else viewer=signed.accessToken;}
+ const cat=await db.creationCat.create({data:{name:marker,sort:999}}),before={usage:await db.usageRecord.count({where:{userId:ownerId}}),reservations:await db.countReservation.count({where:{userId:ownerId}})},balance=(await api('/balance/query','GET',undefined,owner)).data;
+ for(const kind of ['image','mj','video']){
+  const file=await storage.saveBuffer(ownerId,kind==='video'?Buffer.from('QGauss isolated movie bytes'):png,{mime:kind==='video'?'video/mp4':'image/png',filename:'QGauss-gallery.'+(kind==='video'?'mp4':'png'),scope:kind==='image'?'image':kind==='mj'?'mj-image':'video'}),stored=await db.uploadFile.findUniqueOrThrow({where:{id:file.id}}),defaults={userId:ownerId,status:'SUCCESS',published:false},prompt=marker+' '+kind;
+  const intent={kind:'imagine',presetId:'qgauss-local-preset',prompt,ratio:'3:4',version:'7',model:'mj',quality:1,seconds:6,resolution:'720p',mode:'text',imageIds:['PRIVATE-GALLERY-REFERENCE']};
+  const row=kind==='image'?await db.imageTask.create({data:{...defaults,prompt,model:'qgauss-image',metaJson:'{"secret":"PRIVATE-GALLERY-METADATA"}',inputJson:'{"secret":"PRIVATE-GALLERY-REFERENCE"}',resultJson:JSON.stringify([{fileId:file.id,mime:file.mime}])}}):await db[kind==='mj'?'mjTask':'videoTask'].create({data:{...defaults,requestKey:randomUUID(),intentHash:'synthetic',presetId:intent.presetId,presetName:'QGauss 本地创作',profile:kind==='mj'?'PLUS':'ARK_2_5',intentJson:JSON.stringify(intent),presetJson:'{"private":"PRIVATE-GALLERY-CONFIG"}',inputJson:'{"secret":"PRIVATE-GALLERY-REFERENCE"}',upstreamId:'PRIVATE-GALLERY-UPSTREAM',pool:'drawMj',totalCost:0,deadlineAt:new Date(Date.now()+60000),resultJson:JSON.stringify(kind==='mj'?{items:[{fileId:file.id,kind:'image',mime:file.mime,size:stored.size,sha256:stored.sha256}]}:{videoFileId:file.id})}});
+  works.push({kind,id:row.id,fileId:file.id,updatedAt:row.updatedAt.toISOString()});
+ }
+ check('未公开作品不会进入任何公开列表或详情',(await api(search())).data.total===0&&(await api(entry('image',works[0].id))).status===404);
+ check('未登录不能读取作品、收藏或媒体',(await api('/gallery/options','GET',undefined,'')).status===401&&(await bytes('/api'+entry('image',works[0].id,'/assets/0'),'')).status===401);
+ for(const work of works){const path='/'+work.kind+'/tasks/'+work.id+'/publish';assert.equal((await api(path,'PATCH',{published:'true'},owner)).status,400);assert.equal((await api(path,'PATCH',{published:true},viewer)).status,404);const result=await api(path,'PATCH',{published:true,catId:cat.id,expectedUpdatedAt:work.updatedAt},owner);assert.equal(result.status,200);assert.equal(result.data.published,true);work.publishedAt=result.data.publishedAt;}
+ const page=await api(search('pageSize=30')),options=await api('/gallery/options');check('三类作品统一读取，分类可用，列表使用缩略图',page.data.total===3&&new Set(page.data.items.map(work=>work.kind)).size===3&&page.data.items.every(work=>work.assets[0].url.endsWith('?thumb=1'))&&options.data.categories.some(row=>row.id===cat.id));check('公开响应不缓存到共享或浏览器存储',page.response.headers.get('cache-control')==='private, no-store');
+ for(const work of works){const detail=await api(entry(work.kind,work.id)),reuse=await api(entry(work.kind,work.id,'/reuse'));assert.equal(detail.status,200);assert.equal(reuse.status,200);assert.equal(detail.data.mine,false);const serialized=JSON.stringify({detail:detail.data,reuse:reuse.data});assert.equal(serialized.includes('PRIVATE-GALLERY-'),false);assert.equal(serialized.includes('upstreamId'),false);assert.equal(serialized.includes('billing'),false);}
+ check('公开详情与复用不泄露私有素材、服务配置、上游身份或费用',true);
+ const legacyDetail=await api('/image/tasks/'+works[0].id),legacySquare=await api('/image/square?catId='+cat.id);assert.equal(legacyDetail.status,200);assert.equal(legacySquare.status,200);check('旧绘画详情与广场同样隐藏私有附加记录',!JSON.stringify(legacyDetail.data).includes('PRIVATE-GALLERY-')&&!JSON.stringify(legacySquare.data).includes('PRIVATE-GALLERY-'));
+ const image=works[0],mj=works[1],video=works[2],originalPublish=image.publishedAt;
+ const full=await bytes('/api'+entry('image',image.id,'/assets/0')),thumb=await bytes('/api'+entry('image',image.id,'/assets/0?thumb=1'));check('原图与小图都经过权限检查，缩略图尺寸受限',full.status===200&&thumb.status===200&&full.headers.get('content-type')==='image/png'&&thumb.headers.get('content-type')==='image/webp'&&(await sharp(Buffer.from(await thumb.arrayBuffer())).metadata()).width<=640&&thumb.headers.get('x-content-type-options')==='nosniff');
+ const fallback=await bytes('/api'+entry('video',video.id,'/assets/0?thumb=1'));check('无封面视频展示明确占位图，并限制图像执行能力',fallback.status===200&&fallback.headers.get('content-type')==='image/svg+xml'&&fallback.headers.get('content-security-policy').includes('sandbox')&&(await fallback.text()).includes('暂无作品封面'));
+ for(const kind of ['image','mj','video'])assert.equal((await api(entry(kind,works.find(row=>row.kind===kind).id,'/favorite'),'PUT',{favorite:'false'})).status,400);
+ const favorite=await Promise.all(Array.from({length:4},()=>api(entry('image',image.id,'/favorite'),'PUT',{favorite:true})));check('收藏并发提交只保存一条，回执始终返回明确目标',favorite.every(row=>row.status===200&&row.data.favorite)&&await db.galleryFavorite.count({where:{userId:users[1],kind:'image',taskId:image.id}})===1&&(await api(entry('image',image.id),'GET',undefined,owner)).data.favorite===false);
+ await api(entry('mj',mj.id,'/favorite'),'PUT',{favorite:true});await db.galleryFavorite.updateMany({where:{userId:users[1],kind:'image',taskId:image.id},data:{createdAt:new Date('2020-01-01T00:00:00Z')}});const saved=await api(search('favorites=1&sort=saved'));check('个人收藏按收藏时间排序，不随再次点击重新排列',saved.data.total===2&&saved.data.items[0].kind==='mj');
+ check('推荐管理拒绝普通用户和非布尔值',(await api(entry('image',image.id,'/feature'),'PUT',{featured:true})).status===403&&(await api(entry('image',image.id,'/feature'),'PUT',{featured:'false'},admin)).status===400);assert.equal((await api(entry('image',image.id,'/feature'),'PUT',{featured:true},admin)).status,200);check('管理员推荐后公开列表仍只展示允许公开的作品',(await api(entry('image',image.id))).data.featured===true);
+ const links=(await api(entry('video',video.id,'/playback?index=0'))).data;check('公开视频使用原任务的短期播放凭证',(await bytes(links.videoUrl)).status===200);
+ const replay=await api('/image/tasks/'+image.id+'/publish','PATCH',{published:true,catId:cat.id,expectedUpdatedAt:image.updatedAt},owner);check('重复公开保留首次公开时间',replay.status===200&&replay.data.publishedAt===originalPublish);
+ assert.equal((await api('/image/tasks/'+image.id+'/publish','PATCH',{published:false,expectedUpdatedAt:image.updatedAt},owner)).status,200);check('撤回后详情、收藏新增、复用和媒体同时停止',(await api(entry('image',image.id))).status===404&&(await api(entry('image',image.id,'/reuse'))).status===404&&(await bytes('/api'+entry('image',image.id,'/assets/0?thumb=1'))).status===404&&(await api(entry('image',image.id,'/favorite'),'PUT',{favorite:true})).status===404);
+ check('撤回后的旧确认不能重新公开，已有收藏仍能明确取消',(await api('/image/tasks/'+image.id+'/publish','PATCH',{published:true,catId:cat.id,expectedUpdatedAt:image.updatedAt},owner)).status===409&&(await api(entry('image',image.id,'/favorite'),'PUT',{favorite:false})).status===200);
+ await db.user.update({where:{id:ownerId},data:{status:'DISABLED'}});check('作者停用后隐藏公开作品，并拒绝已经签发的视频凭证',(await api(search())).data.total===0&&(await api(entry('video',video.id))).status===404&&(await bytes(links.videoUrl)).status===404);await db.user.update({where:{id:ownerId},data:{status:'ACTIVE'}});
+ check('筛选拒绝重复、越界和不明确的参数',(await api(search('page=1&page=2'))).status===400&&(await api(search('pageSize=31'))).status===400&&(await api(search('favorites=true'))).status===400);
+ const afterBalance=await api('/balance/query','GET',undefined,owner);assert.equal(afterBalance.status,200);assert.deepEqual(afterBalance.data,balance);assert.equal(await db.usageRecord.count({where:{userId:ownerId}}),before.usage);assert.equal(await db.countReservation.count({where:{userId:ownerId}}),before.reservations);for(const model of ['imageTask','mjTask','videoTask'])assert.equal(await db[model].count({where:{userId:ownerId}}),1);check('浏览、收藏、推荐与公开均未生成任务或改变费用',true);
+}finally{
+ if(ownerId)await db.user.update({where:{id:ownerId},data:{status:'ACTIVE'}}).catch(()=>{});
+ if(admin)await settings(Object.fromEntries(original.map(row=>[row.key,JSON.parse(row.value)]))).catch(()=>{});
+ await db.$disconnect();
+}
+console.log('\n创意作品广场 HTTP：'+passed+' 通过 / 0 失败');

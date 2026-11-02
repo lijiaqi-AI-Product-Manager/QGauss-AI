@@ -31,6 +31,7 @@ import { InstallationGate } from './modules/installation/installation.guards';
 import { VoiceModule } from './modules/voice/voice.module';
 import { VideoModule } from './modules/video/video.module';
 import { MjModule } from './modules/midjourney/mj.module';
+import {GalleryModule} from './modules/gallery/gallery.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { MjModule } from './modules/midjourney/mj.module';
     VoiceModule,
     VideoModule,
     MjModule,
+    GalleryModule,
   ],
   controllers: [HealthController],
   providers: [

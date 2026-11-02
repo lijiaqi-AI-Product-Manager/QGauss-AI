@@ -51,4 +51,4 @@ export class VideoCreateDto extends VideoQuoteDto {
   @Raw() @IsString() @Matches(/^[A-Za-z0-9_-]{8,100}$/) requestKey: string;
   @Raw() @IsString() @Matches(/^[a-f0-9]{64}$/) quoteRevision: string;
 }
-export class VideoPublishDto { @Raw() @IsBoolean() published: boolean; }
+export class VideoPublishDto { @Raw() @IsBoolean() published:boolean; @Optional() @Raw() @IsString() @Length(0,128) catId?:string; @Optional() @Raw() @IsString() @Length(20,40) expectedUpdatedAt?:string; }

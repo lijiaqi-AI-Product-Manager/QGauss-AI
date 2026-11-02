@@ -14,5 +14,5 @@ import { VideoConnectionService } from './video-connection.service';
 import { VideoRunsService } from './video-runs.service';
 import {VideoMaterialsService} from './video-materials.service';
 import {VideoMaterialUploadGuard} from './video-material-upload.guard';
-@Module({ imports: [ModelsModule, CommerceModule, StorageModule, SettingsModule, ModerationModule], controllers: [VideoController], providers: [VideoService, VideoProvider, VideoWorker, VideoMediaService, VideoAccountingService, VideoConnectionService, VideoRunsService,VideoMaterialsService,VideoMaterialUploadGuard] })
+@Module({ imports: [ModelsModule, CommerceModule, StorageModule, SettingsModule, ModerationModule], controllers: [VideoController], exports:[VideoService,VideoMediaService], providers: [VideoService, VideoProvider, VideoWorker, VideoMediaService, VideoAccountingService, VideoConnectionService, VideoRunsService,VideoMaterialsService,VideoMaterialUploadGuard] })
 export class VideoModule {}

@@ -1,0 +1,15 @@
+<template>
+  <section v-if="entry.present" class="qge-entry" :class="{blocked:entry.blocked}" aria-label="公开作品带入创作" :aria-busy="entry.pending">
+    <div class="qge-entry-symbol"><QLoader v-if="entry.pending" :size="22"/><ClientIcon v-else name="gallery"/></div>
+    <div class="qge-entry-copy"><span>QGAUSS / AN IDEA TO MAKE YOUR OWN</span><strong>{{ entry.pending?'正在重新核对这份公开作品…':entry.source?.title||'先确认这次灵感入口' }}</strong><p v-if="entry.error" role="alert">{{ entry.error }}</p><p v-else-if="entry.offered">当前有尚未提交的想法。带入会替换当前文字与设置，私有参考素材不会跟随。</p><p v-else-if="entry.applied">{{ entry.source?.note||'公开文字与设定已带入，可以继续修改。请核对当前模型和参数，生成仍由你确认。' }}</p></div>
+    <div class="qge-entry-actions"><button v-if="entry.offered&&!entry.pending" type="button" @click="entry.confirm">用作品设定替换当前草稿</button><button v-else-if="entry.error&&!entry.pending" type="button" @click="entry.retry">重新核对作品</button><button type="button" @click="entry.cancel">{{ entry.applied?'保留草稿，收起说明':'保留当前草稿，暂不带入' }}</button></div>
+  </section>
+</template>
+<script setup>
+import ClientIcon from '../reference/ClientIcon.vue';
+import QLoader from '../QLoader.vue';
+defineProps({entry:{type:Object,required:true}});
+</script>
+<style>
+.qge-entry{display:flex;align-items:flex-start;gap:15px;margin:10px 0 25px;padding:20px;border:1px solid color-mix(in srgb,var(--qd-brand) 23%,var(--qd-edge));border-radius:21px;color:var(--qd-ink);background:linear-gradient(130deg,color-mix(in srgb,var(--qd-brand) 8%,var(--qd-panel)),color-mix(in srgb,var(--qd-panel) 80%,transparent));backdrop-filter:blur(25px);box-shadow:inset 0 1px #ffffff30}.qge-entry-symbol{width:40px;height:40px;display:grid;place-items:center;border-radius:14px;flex-shrink:0;background:color-mix(in srgb,var(--qd-brand) 13%,transparent);color:var(--qd-brand)}.qge-entry-symbol>svg{width:21px;height:21px}.qge-entry-copy{flex:1;min-width:0}.qge-entry-copy>span{display:block;font-size:7px;font-weight:700;letter-spacing:.15em;color:var(--qd-muted);line-height:1.8}.qge-entry-copy>strong{display:block;font-size:13px;line-height:1.7;margin-top:7px;overflow-wrap:anywhere}.qge-entry-copy>p{font-size:11px;color:var(--qd-muted);line-height:1.9;margin:8px 0 0}.qge-entry-actions{display:flex;gap:8px;flex-wrap:wrap;max-width:320px}.qge-entry-actions>button{min-height:48px;border:1px solid var(--qd-edge);background:var(--qd-panel);color:var(--qd-ink);padding:10px 13px;border-radius:13px;font:inherit;font-size:10px;cursor:pointer}.qge-entry-actions>button:disabled{opacity:.5;cursor:wait}.qge-entry-actions>button:focus-visible{outline:3px solid var(--qd-brand);outline-offset:3px}.qge-entry.blocked{border-color:color-mix(in srgb,var(--qd-brand) 40%,var(--qd-edge))}@media(max-width:900px){.qge-entry{flex-wrap:wrap}.qge-entry-actions{width:100%;max-width:none;margin-left:55px}}@media(max-width:600px){.qge-entry{padding:17px 15px;gap:12px;border-radius:17px}.qge-entry-copy>strong{font-size:13px}.qge-entry-copy>p{font-size:11px}.qge-entry-copy>span{font-size:6px}.qge-entry-actions{margin-left:0;gap:8px}.qge-entry-actions>button{font-size:11px;min-height:48px}}
+</style>

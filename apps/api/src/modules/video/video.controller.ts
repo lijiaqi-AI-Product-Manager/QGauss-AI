@@ -31,7 +31,7 @@ export class VideoController {
   @Get('square') square(@CurrentUser() user: AuthUser, @Query('page') page = '1', @Query('pageSize') size = '12') { return this.video.list(user.id, true, Number(page), Number(size)); }
   @Get('tasks/:id') detail(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.video.detail(user.id, id); }
   @Post('tasks/:id/cancel') cancel(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.video.cancel(user.id, id); }
-  @Patch('tasks/:id/publish') publish(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: VideoPublishDto) { return this.video.publish(user.id, id, dto.published); }
+  @Patch('tasks/:id/publish') publish(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: VideoPublishDto) { return this.video.publish(user.id, id, dto.published,dto.catId,dto.expectedUpdatedAt); }
   @Delete('tasks/:id') remove(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.video.remove(user.id, id); }
   @Post('tasks/:id/restore') restore(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.video.restore(user.id, id); }
   @Get('tasks/:id/playback') async playback(@CurrentUser() user: AuthUser, @Param('id') id: string) { return this.media.playback(user.id, await this.video.visible(user.id, id)); }

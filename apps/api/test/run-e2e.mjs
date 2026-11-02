@@ -183,6 +183,7 @@ async function main() {
     E2E_API: apiBase,
     E2E_FAKE: `http://127.0.0.1:${fakePort}/v1`,
     E2E_DATABASE_FILE: e2eDb,
+    E2E_STORAGE_DIR: testStorage,
   };
 
   // Fixed order: core, commerce, admin, chat runs, painting, image recovery, chat recovery, security.
@@ -208,6 +209,7 @@ async function main() {
     { name: '智能体进程恢复 agents-recovery.e2e.mjs', script: join(here, 'agents-recovery.e2e.mjs') },
     { name: '原生语音 voice.e2e.mjs', script: join(here, 'voice.e2e.mjs') },
     { name: '声音收藏室 voice-library.e2e.mjs', script: join(here, 'voice-library.e2e.mjs') },
+    { name: '创意作品广场 gallery.e2e.mjs', script: join(here, 'gallery.e2e.mjs') },
     { name: '语音进程恢复 voice-recovery.e2e.mjs', script: join(here, 'voice-recovery.e2e.mjs') },
     { name: '账户与密码 account-security.e2e.mjs', script: join(here, 'account-security.e2e.mjs') },
     { name: '注册与邮箱验证 email-verification.e2e.mjs', script: join(here, 'email-verification.e2e.mjs') },
@@ -216,7 +218,7 @@ async function main() {
   ];
 
   // Optional targeted debugging still uses the same isolated DB, storage and provider process.
-  const requestedSuites = process.env.E2E_SUITES?.split(',').map(value => value.trim()).filter(Boolean);
+  const requestedSuites = process.env.E2E_SUITES?.trim() ? process.env.E2E_SUITES.split(',').map(value => value.trim()).filter(Boolean) : undefined;
   const selectedSuites = requestedSuites ? suites.filter(suite => requestedSuites.includes(suite.script.split(/[\\/]/).at(-1))) : suites;
   if (requestedSuites && (selectedSuites.length !== new Set(requestedSuites).size || !selectedSuites.length)) throw new Error('E2E_SUITES 必须使用现有套件文件名');
   // E2E_REPEAT=2 会把所有套件各跑两遍。

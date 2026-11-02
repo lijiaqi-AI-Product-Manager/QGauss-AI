@@ -3,6 +3,8 @@
 import { computed } from 'vue';
 const props = defineProps({ name: String });
 const icons = {
+  gallery:['M4 4h16v16H4zM4 14l5-5 6 6 2-2 3 3M15 8h.01'],
+  heart:['M20.8 4.7a5.3 5.3 0 0 0-7.5 0L12 6l-1.3-1.3a5.3 5.3 0 0 0-7.5 7.5L12 21l8.8-8.8a5.3 5.3 0 0 0 0-7.5Z'],
   video: ['M3 5h18v14H3zM3 9h18M7 5l3 4M14 5l3 4M10 12l5 3-5 3z'],
   microphone:['M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0V5ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8'],
   sound:['M4 9h4l5-4v14l-5-4H4V9ZM17 9a5 5 0 0 1 0 6M20 6a9 9 0 0 1 0 12'],

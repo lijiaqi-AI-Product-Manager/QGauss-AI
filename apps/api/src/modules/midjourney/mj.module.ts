@@ -12,5 +12,5 @@ import { MjMediaService } from './mj-media.service';
 import { MjAccountingService } from './mj-accounting.service';
 import { MjConnectionService } from './mj-connection.service';
 import { MjRunsService } from './mj-runs.service';
-@Module({imports:[ModelsModule,CommerceModule,StorageModule,SettingsModule,ModerationModule],controllers:[MjController],providers:[MjService,MjProvider,MjWorker,MjMediaService,MjAccountingService,MjConnectionService,MjRunsService]})
+@Module({imports:[ModelsModule,CommerceModule,StorageModule,SettingsModule,ModerationModule],controllers:[MjController],exports:[MjService,MjMediaService],providers:[MjService,MjProvider,MjWorker,MjMediaService,MjAccountingService,MjConnectionService,MjRunsService]})
 export class MjModule {}

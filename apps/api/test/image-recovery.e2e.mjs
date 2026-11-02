@@ -74,6 +74,8 @@ try {
   const form = new FormData(); form.append('file', new Blob([png], { type: 'image/png' }), 'QGauss-recovery-output.png');
   const uploaded = await fetch(base + '/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + token }, body: form });
   const file = (await uploaded.json()).data; assert.ok(file.id);
+  const outputForm=new FormData();outputForm.append('scope','image');outputForm.append('file',new Blob([png],{type:'image/png'}),'QGauss-staged-output.png');
+  const outputResponse=await fetch(base+'/upload',{method:'POST',headers:{Authorization:'Bearer '+token},body:outputForm}),outputFile=(await outputResponse.json()).data;assert.ok(outputFile.id);assert.equal(outputFile.scope,'image');
   const running = (await api('/image/tasks', 'POST', { prompt: 'interrupt a real upstream call', model: upstream, mode: 'img2img', referenceIds: [file.id], n: 4, expectedUnitCost: 1 }, token)).data;
   await awaitTask(running.id, token, 'RUNNING');
   for (let i = 0; i < 60 && !(await observations()).length; i++) await pause(50);
@@ -82,7 +84,7 @@ try {
   await crash();
   check('实际 API 在请求上游期间被强制结束，预留和任务仍持久化', () => assert.ok(child.signalCode || child.exitCode !== null));
   // A deliberately constructed durable-output fixture replaces only this test-owned task.
-  await prisma.imageTask.update({ where: { id: saved.id }, data: { status: 'SETTLING', progress: 95, resultJson: JSON.stringify([{ fileId: file.id, mime: 'image/png', url: file.url }]) } });
+  await prisma.imageTask.update({ where: { id: saved.id }, data: { status: 'SETTLING', progress: 95, resultJson: JSON.stringify([{ fileId: outputFile.id, mime: 'image/png', url: outputFile.url }]) } });
   const persisted = await prisma.countReservation.findUnique({ where: { refId: running.id } });
   const inputSnapshot = await prisma.imageTask.findUnique({ where: { id: running.id } });
   check('进程消失不会丢失已预留的次数、费用与参考图快照', () => { assert.equal(persisted.status, 'HELD'); assert.equal(persisted.amount, 4); assert.equal(JSON.parse(inputSnapshot.inputJson).references[0].id, file.id); });
@@ -93,7 +95,7 @@ try {
   const complete = await awaitTask(saved.id, token, 'SUCCESS');
   const view = (await api('/balance/query', 'GET', undefined, token)).data;
   check('重启将中断生成标为失败并释放预留，不重新调用上游', () => { assert.equal(stopped.billing.returned, 4); assert.equal(stopped.billing.charged, 0); });
-  check('已保存作品重启后继续结算，只扣实际张数并释放差额', () => { assert.equal(complete.results[0].fileId, file.id); assert.equal(complete.billing.charged, 1); assert.equal(complete.billing.returned, 1); assert.equal(view.counts.drawMj, 9); assert.equal(view.reserved.drawMj, 0); });
+  check('已保存作品重启后继续结算，只扣实际张数并释放差额', () => { assert.equal(complete.results[0].fileId, outputFile.id); assert.equal(complete.billing.charged, 1); assert.equal(complete.billing.returned, 1); assert.equal(view.counts.drawMj, 9); assert.equal(view.reserved.drawMj, 0); });
   const requestsAfter = (await observations()).length;
   check('恢复结算没有新增图像请求，作品仍可下载原始字节', () => assert.equal(requestsAfter, priorRequests));
   const image = await fetch(new URL(complete.results[0].url, base), { headers: { Authorization: 'Bearer ' + token } });

@@ -1,3 +1,5 @@
+import {galleryPublicPage} from '../gallery/gallery-query';
+import {saveGalleryPublication} from '../gallery/gallery-publication';
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
@@ -89,6 +91,7 @@ function view(task: any) {
     meta: safeJson<any>(task.metaJson, null),
     errorCode: task.errorCode,
     errorMessage: task.errorMessage,
+    publishedAt:task.publishedAt,updatedAt:task.updatedAt,
     createdAt: task.createdAt,
     finishedAt: task.finishedAt,
     billing: task.billingUnitCost == null ? { state: 'LEGACY' } : {
@@ -317,33 +320,25 @@ export class ImageService {
     const safeSize = Number.isFinite(opts.pageSize)
       ? Math.min(60, Math.max(1, Math.floor(opts.pageSize!)))
       : 24;
-    const where: any = { published: true, deletedAt: null, status: 'SUCCESS' };
-    if (opts.catId) where.catId = opts.catId;
-
-    const [rows, total] = await Promise.all([
-      this.prisma.imageTask.findMany({
-        where,
-        orderBy: [{ recommended: 'desc' }, { createdAt: 'desc' }],
-        skip: (safePage - 1) * safeSize,
-        take: safeSize,
-      }),
-      this.prisma.imageTask.count({ where }),
-    ]);
+    return this.prisma.$transaction(async tx=>{
+    const {ids,total}=await galleryPublicPage(tx,'image',safePage,safeSize,opts.catId,true);
+    const rows=await tx.imageTask.findMany({where:{id:{in:ids}}});rows.sort((a,b)=>ids.indexOf(a.id)-ids.indexOf(b.id));
 
     // 作者名脱敏（广场不暴露完整账号）
     const userIds = [...new Set(rows.map((r) => r.userId))];
-    const users = await this.prisma.user.findMany({
+    const users = await tx.user.findMany({
       where: { id: { in: userIds } },
       select: { id: true, username: true },
     });
     const nameOf = new Map(users.map((u) => [u.id, maskName(u.username)]));
 
     return {
-      items: rows.map((r) => ({ ...view(r), editOf: null, referenceIds: undefined, maskId: undefined, billing: undefined, author: nameOf.get(r.userId) ?? '匿名用户' })),
+      items: rows.map((r) => ({ ...view(r), parentId:null,meta:undefined,editOf: null, referenceIds: undefined, maskId: undefined, billing: undefined, author: nameOf.get(r.userId) ?? '匿名用户' })),
       total,
       page: safePage,
       pageSize: safeSize,
     };
+    });
   }
 
   private async visibleTask(userId: string, id: string) {
@@ -352,7 +347,7 @@ export class ImageService {
     if (!task || task.deletedAt) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '任务不存在', 404);
     }
-    if (task.userId !== userId && (!task.published || task.status !== 'SUCCESS')) {
+    if (task.userId !== userId && (!task.published || task.status !== 'SUCCESS' || !await this.prisma.user.findFirst({where:{id:task.userId,status:'ACTIVE',deletedAt:null},select:{id:true}}))) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '任务不存在', 404);
     }
     return task;
@@ -364,8 +359,11 @@ export class ImageService {
     if (task.status !== 'SUCCESS') throw new BusinessException(ErrorCode.NOT_FOUND, '作品尚未完成保存与结算', 404);
     const results = safeJson<any[]>(task.resultJson, []);
     if (!Array.isArray(results) || !results.some(result => result?.fileId === fileId)) throw new BusinessException(ErrorCode.NOT_FOUND, '作品图片不存在', 404);
+    const metadata=await this.storage.detail(fileId,task.userId,'USER');
+    if(metadata.scope!=='image')throw new BusinessException(ErrorCode.NOT_FOUND,'作品图片不存在',404);
     const file = await this.storage.read(fileId, task.userId, 'USER');
     if (!/^image\/(png|jpeg|gif|webp|svg\+xml)$/.test(file.mime)) throw new BusinessException(ErrorCode.NOT_FOUND, '作品图片不存在', 404);
+    await this.visibleTask(userId,id);
     return file;
   }
 
@@ -377,22 +375,11 @@ export class ImageService {
       orderBy: { createdAt: 'asc' },
     }) : [];
     const data = view(task);
-    return { ...data, editOf: mine ? task.editOf : null, referenceIds: mine ? data.referenceIds : undefined, maskId: mine ? data.maskId : undefined, billing: mine ? data.billing : undefined, events, mine };
+    return { ...data, parentId:mine?data.parentId:null,meta:mine?data.meta:undefined,editOf: mine ? task.editOf : null, referenceIds: mine ? data.referenceIds : undefined, maskId: mine ? data.maskId : undefined, billing: mine ? data.billing : undefined, events, mine };
   }
 
   /** 发布 / 取消发布到绘画广场 */
-  async publish(userId: string, id: string, published: boolean) {
-    const task = await this.prisma.imageTask.findFirst({
-      where: { id, userId, deletedAt: null },
-      select: { id: true, status: true },
-    });
-    if (!task) throw new BusinessException(ErrorCode.NOT_FOUND, '任务不存在', 404);
-    if (published && task.status !== 'SUCCESS') {
-      throw new BusinessException(ErrorCode.PARAM_INVALID, '只有生成成功的作品才能发布');
-    }
-    await this.prisma.imageTask.update({ where: { id }, data: { published } });
-    return { ok: true, published };
-  }
+  async publish(userId:string,id:string,published:boolean,catId?:string,expectedUpdatedAt?:string){const row=await saveGalleryPublication(this.prisma,userId,'image',id,published,catId,expectedUpdatedAt);return{ok:true,published:row.published,catId:row.catId,publishedAt:row.publishedAt,updatedAt:row.updatedAt};}
 
   /** 软删除：后台「一键清理」再物理删除 */
   async remove(userId: string, id: string) {
