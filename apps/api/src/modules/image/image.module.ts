@@ -10,11 +10,13 @@ import { ImageService } from './image.service';
 import { ImageWorker } from './image.worker';
 import { ImageAccountingService } from './image-accounting.service';
 import { ImageRunsService } from './image-runs.service';
+import {ImageEditorController} from './image-editor.controller';
+import {ImageEditorService} from './image-editor.service';
 
 @Module({
   imports: [SettingsModule, StorageModule, CommerceModule, ModerationModule, ModelsModule],
-  controllers: [ImageController],
-  providers: [ImageService, ImageProvider, ImageWorker, ImageAccountingService, ImageRunsService],
+  controllers: [ImageController,ImageEditorController],
+  providers: [ImageService, ImageProvider, ImageWorker, ImageAccountingService, ImageRunsService,ImageEditorService],
   exports: [ImageService],
 })
 export class ImageModule {}

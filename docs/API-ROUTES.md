@@ -1,7 +1,7 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **262** 条路由，分布在 **29** 个控制器。
+> 共 **277** 条路由，分布在 **31** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
@@ -17,9 +17,11 @@
 | `/gallery` | 8 | `src/modules/gallery/gallery.controller.ts` |
 | `/health` | 2 | `src/modules/health/health.controller.ts` |
 | `/image` | 9 | `src/modules/image/image.controller.ts` |
+| `/image/editor` | 2 | `src/modules/image/image-editor.controller.ts` |
 | `/installation` | 4 | `src/modules/installation/installation.controller.ts` |
 | `/mail` | 6 | `src/modules/mail/mail.controller.ts` |
 | `/menus` | 5 | `src/modules/menu/menu.controller.ts` |
+| `/mindmap` | 13 | `src/modules/mindmap/mindmap.controller.ts` |
 | `/mj` | 23 | `src/modules/midjourney/mj.controller.ts` |
 | `/models` | 21 | `src/modules/models/models.controller.ts` |
 | `/moderation` | 5 | `src/modules/moderation/moderation.controller.ts` |
@@ -206,6 +208,13 @@
 | POST | `/image/tasks/:id/cancel` | 登录 |
 | DELETE | `/image/tasks/:id` | 登录 |
 
+## /image/editor
+
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| GET | `/image/editor/inputs` | 登录 |
+| GET | `/image/editor/files/:id` | 登录 |
+
 ## /installation
 
 | 方法 | 路径 | 权限 |
@@ -235,6 +244,24 @@
 | POST | `/menus` | ADMIN |
 | PATCH | `/menus/:id` | ADMIN |
 | DELETE | `/menus/:id` | ADMIN |
+
+## /mindmap
+
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| GET | `/mindmap/options` | 登录 |
+| GET | `/mindmap/documents` | 登录 |
+| GET | `/mindmap/documents/:id` | 登录 |
+| POST | `/mindmap/mutations` | 登录 |
+| GET | `/mindmap/mutations/:requestKey` | 登录 |
+| POST | `/mindmap/mutations/:requestKey/end` | 登录 |
+| POST | `/mindmap/generations/quote` | 登录 |
+| POST | `/mindmap/generations` | 登录 |
+| GET | `/mindmap/generations` | 登录 |
+| GET | `/mindmap/generations/by-request/:requestKey` | 登录 |
+| POST | `/mindmap/generations/requests/:requestKey/end` | 登录 |
+| GET | `/mindmap/generations/:id` | 登录 |
+| POST | `/mindmap/generations/:id/cancel` | 登录 |
 
 ## /mj
 
