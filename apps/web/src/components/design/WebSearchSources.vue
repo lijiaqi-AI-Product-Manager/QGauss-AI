@@ -1,10 +1,11 @@
 <template>
-  <section v-if="report" class="qws-sources" :class="['qws-'+appearance.variant,'qws-'+report.status]" aria-label="联网检索与资料来源">
-    <header><span class="qws-globe" aria-hidden="true"><i></i><b></b></span><div><strong>{{ webSearchLabel(report) }}</strong><span>{{ description }}</span></div><span v-if="report.sources.length" class="qws-count">{{ report.sources.length }} 个来源</span></header>
-    <details v-if="report.sources.length" :open="report.sources.length<=3&&!streaming"><summary>查看资料与链接 <ClientIcon name="chevronRight" /></summary><ol><li v-for="(item,index) in report.sources" :key="item.url"><a :href="item.url" target="_blank" rel="noopener noreferrer nofollow"><span class="qws-number">{{ index+1 }}</span><span><strong>{{ item.title || item.domain }}</strong><small>{{ item.domain }}</small></span><ClientIcon name="arrowUpRight" /></a></li></ol><p>来源由模型服务提供，链接不代表内容已经核实；请打开原文确认。</p></details>
+  <section v-if="report" class="qws-sources" :class="['qws-'+appearance.variant,'qws-'+report.status]" :aria-label="ct(&quot;联网检索与资料来源&quot;)">
+    <header><span class="qws-globe" aria-hidden="true"><i></i><b></b></span><div><strong>{{ ct(webSearchLabel(report)) }}</strong><span>{{ ct(description) }}</span></div><span v-if="report.sources.length" class="qws-count">{{ ct("{p0} 个来源",{p0:(report.sources.length)}) }}</span></header>
+    <details v-if="report.sources.length" :open="report.sources.length<=3&&!streaming"><summary>{{ ct("查看资料与链接 ") }}<ClientIcon name="chevronRight" /></summary><ol><li v-for="(item,index) in report.sources" :key="item.url"><a :href="item.url" target="_blank" rel="noopener noreferrer nofollow"><span class="qws-number">{{ index+1 }}</span><span><strong>{{ item.title || item.domain }}</strong><small>{{ item.domain }}</small></span><ClientIcon name="arrowUpRight" /></a></li></ol><p>{{ ct("来源由模型服务提供，链接不代表内容已经核实；请打开原文确认。") }}</p></details>
   </section>
 </template>
 <script setup>
+import {chatText as ct} from "../../i18n/chat.js";
 import { computed } from 'vue';
 import { useAppearance } from '../../stores/appearance.js';
 import { webSearchReport,webSearchLabel } from '../../lib/web-search.js';
