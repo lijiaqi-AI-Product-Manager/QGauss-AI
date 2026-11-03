@@ -213,7 +213,7 @@ async function main() {
       children: [
         { title: '对话', path: '/chat', icon: 'ChatDotRound', sort: 1 },
         { title: '应用', path: '/apps', icon: 'Grid', sort: 2 },
-        { title: '图像', path: '/image', icon: 'Picture', sort: 3 }, {title:'扩展工作台',path:'/extend',icon:'Grid',sort:5},
+        { title: '图像', path: '/image', icon: 'Picture', sort: 3 }, {title:'扩展工作台',path:'/extend',icon:'Grid',sort:5}, {title:'声音工作室',path:'/voice/create',icon:'Microphone',sort:6},
         { title: '预设', path: '/presets', icon: 'MagicStick', sort: 4 },
       ],
     },

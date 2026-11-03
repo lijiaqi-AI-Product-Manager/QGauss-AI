@@ -58,3 +58,6 @@ html[data-qg-design] .qgc-history .cv-convs-body{flex:1;min-height:0;padding:0 0
 .qgc-credit{white-space:nowrap;flex:none;min-height:36px}.qgc-credit>svg{width:15px;height:15px;flex:none}
 
 @media(min-width:640px){html[data-qg-design=play] .qgd-primary-navigation>div{flex:1;min-width:0;justify-content:flex-start;overflow-x:auto;scrollbar-width:none}html[data-qg-design=play] .qgd-primary-navigation>div::-webkit-scrollbar{display:none}html[data-qg-design=play] .qgd-primary-navigation>div>a{flex:none}}
+
+.qgd-primary-navigation>div{min-height:0;overflow-y:auto;scrollbar-width:none}.qgd-primary-navigation>div::-webkit-scrollbar{display:none}.qgd-primary-navigation>div>a{flex-shrink:0}
+@media(min-width:640px){html[data-qg-design=play] .qgd-primary-navigation{right:calc(var(--qgc-tool-space,240px) + 45px)}html[data-qg-design=play] .qgd-primary-navigation>div,html[data-qg-design=orbit] .qgd-primary-navigation>div{overflow-x:auto;overflow-y:hidden;min-width:0;flex:1}html[data-qg-design=orbit] .qgd-primary-navigation{max-width:calc(100vw - 45px);box-sizing:border-box}}

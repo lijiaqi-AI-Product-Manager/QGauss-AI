@@ -208,6 +208,7 @@ async function main() {
     { name: '联网检索 web-search.e2e.mjs', script: join(here, 'web-search.e2e.mjs') },
     { name: '智能体协作 agents.e2e.mjs', script: join(here, 'agents.e2e.mjs') },
     { name: '智能体进程恢复 agents-recovery.e2e.mjs', script: join(here, 'agents-recovery.e2e.mjs') },
+    { name: '独立配音 voice-composer.e2e.mjs', script: join(here, 'voice-composer.e2e.mjs') },
     { name: '原生语音 voice.e2e.mjs', script: join(here, 'voice.e2e.mjs') },
     { name: '声音收藏室 voice-library.e2e.mjs', script: join(here, 'voice-library.e2e.mjs') },
     { name: '创意作品广场 gallery.e2e.mjs', script: join(here, 'gallery.e2e.mjs') },

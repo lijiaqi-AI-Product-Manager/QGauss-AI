@@ -1,7 +1,9 @@
 /** Loopback-only native audio counterpart. All content and credentials are synthetic. */
+import {readFileSync} from 'node:fs';
+const previewMp3=readFileSync(new URL('./fixtures/qgauss-voice-preview.mp3',import.meta.url));
 const requests=[],counts=new Map(),controls=new Map();
 const json=(res,value,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(value));};
-export function syntheticMp3(){const frame=Buffer.alloc(417);frame.writeUInt32BE(0xfffb9064);return Buffer.concat([frame,frame,frame,frame]);}
+export function syntheticMp3(){return Buffer.from(previewMp3);}
 export async function voiceUpstreamFixture(req,res){
   const url=new URL(req.url,'http://localhost');if(!url.pathname.startsWith('/voice-fixture/'))return false;
   if(url.pathname==='/voice-fixture/stats'){json(res,{requests});return true;}

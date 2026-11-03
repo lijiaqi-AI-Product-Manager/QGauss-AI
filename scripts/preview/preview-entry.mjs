@@ -35,10 +35,12 @@ import {galleryFixtures,galleryPage,galleryFavorite} from './gallery-fixture.mjs
 import {mindmapFixtures,mindmapFixtureReply} from './mindmap-fixture.mjs';
 import {imageEditorPreview} from './image-editor-fixture.mjs';
 import {extensionFixtures} from './extension-fixture.mjs';
+import {voiceComposerFixtures} from './voice-composer-fixture.mjs';
 import {emailVerificationFixtures,emailVerificationAction} from './email-verification-fixture.mjs';
 const installationState = new URL(location.href).searchParams.get('state');
 const imageEditorData=installationState?.startsWith('image-editor')?imageEditorPreview():null;
 const extensionData=installationState?.startsWith('extensions-')?extensionFixtures(installationState):null;
+const voiceComposerData=installationState?.startsWith('voice-composer-')?voiceComposerFixtures(installationState):null;
 const galleryMode=installationState?.startsWith('gallery-');
 const mindmapData=installationState?.startsWith('mindmap-')?mindmapFixtures(installationState):null;
 
@@ -136,6 +138,7 @@ window.fetch = async (input, init = {}) => {
   if(installationState?.startsWith('status-')&&url.pathname==='/api/health')return new Response(JSON.stringify({status:installationState==='status-offline'?'unavailable':'ok'}),{status:installationState==='status-offline'?503:200,headers:{'Content-Type':'application/json'}});
   if(imageEditorData&&url.origin===location.origin){const result=await imageEditorData.reply(url,init);if(result)return result;}
   if(extensionData&&url.origin===location.origin){const result=await extensionData.reply(url,init);if(result)return result;}
+  if(voiceComposerData&&url.origin===location.origin){const result=await voiceComposerData.reply(url,init,()=>nativeFetch('/qgauss-voice-preview.mp3'));if(result)return result;}
   if(mindmapData&&url.origin===location.origin&&url.pathname.startsWith('/api/mindmap/')){const body=typeof init.body==='string'?JSON.parse(init.body):{};const result=mindmapFixtureReply(mindmapData,url,init.method||'GET',body);return new Response(JSON.stringify(result.error?{code:result.status,message:result.error}:{code:0,data:result.data}),{status:result.status,headers:{'Content-Type':'application/json'}});}
   if(galleryMode&&url.origin===location.origin){
     if(installationState==='gallery-error'&&url.pathname==='/api/gallery/works')return new Response(JSON.stringify({code:503,message:'本地作品列表加载失败样例'}),{status:503,headers:{'Content-Type':'application/json'}});

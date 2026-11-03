@@ -201,7 +201,10 @@ export class ExtensionsService {
     async bindChatTx(tx: Db, admission: Awaited<ReturnType<ExtensionsService['authorizeChat']>>, messageId: string) { const message = await tx.message.findFirst({ where: { id: messageId, conversationId: admission.conversationId, role: 'ASSISTANT', deletedAt: null } }); if (!message)
         throw extensionMissing(); await tx.$executeRaw `UPDATE "extension_requests" SET "messageId"=${messageId},"updatedAt"=${new Date()} WHERE "userId"=${admission.userId} AND "requestKey"=${admission.requestKey} AND "messageId" IS NULL`; const row = await this.request(tx, admission.userId, admission.requestKey); if (row?.messageId !== messageId)
         throw extensionConflict(); }
-    async requireInitialRequestKey(userId: string, conversationId: string) { const rows = await this.prisma.$queryRaw<any[]> `SELECT "requestKey" FROM "extension_requests" WHERE "userId"=${userId} AND "conversationId"=${conversationId}`; if (!rows[0])
-        return; const user = await this.prisma.message.findUnique({ where: { conversationId_clientMsgId: { conversationId, clientMsgId: rows[0].requestKey } } }); if (!user || user.deletedAt)
-        throw new BusinessException(ErrorCode.PARAM_INVALID, '请先在扩展工作台完成首轮请求的确认。', 409); }
+    async requireInitialRequestKey(userId: string, conversationId: string) {
+        const rows = await this.prisma.$queryRaw<any[]> `SELECT "requestKey","messageId" FROM "extension_requests" WHERE "userId"=${userId} AND "conversationId"=${conversationId}`;
+        if (!rows[0] || rows[0].messageId) return;
+        const user = await this.prisma.message.findUnique({ where: { conversationId_clientMsgId: { conversationId, clientMsgId: rows[0].requestKey } } });
+        if (!user || user.deletedAt) throw new BusinessException(ErrorCode.PARAM_INVALID, '请先在扩展工作台完成首轮请求的确认。', 409);
+    }
 }
