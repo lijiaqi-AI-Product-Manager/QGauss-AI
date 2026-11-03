@@ -81,10 +81,6 @@ export function setLang(next) {
   return preferences.set(next);
 }
 
-export function toggleLang() {
-  setLang(currentLang.value === 'zh' ? 'en' : 'zh');
-}
-
 export function t(key, values) {
   const message = INTERFACE_MESSAGES[currentLang.value]?.[key] ?? DICT[currentLang.value]?.[key] ?? DICT.zh[key] ?? key;
   return values ? message.replace(/\{(\w+)\}/g, (token, name) => Object.hasOwn(values, name) ? String(values[name]) : token) : message;
