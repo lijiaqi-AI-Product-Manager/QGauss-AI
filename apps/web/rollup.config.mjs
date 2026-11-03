@@ -91,8 +91,8 @@ export function createWebConfig({ webRoot = here, outputRoot, development = fals
       format: 'es',
       entryFileNames: '[name]-[hash].js',
       chunkFileNames: 'chunks/[name]-[hash].js',
-      // 生产生成 sourcemap 但不在产物里引用，排障时手动对照；API 托管也不对外提供 .map
-      sourcemap: dev ? true : 'hidden',
+      // 开发环境保留调试映射；生产包不包含源码映射。
+      sourcemap: dev,
       // 框架稳定缓存；组件库由路由按实际依赖拆分，避免后台组件进入聊天首屏。
       manualChunks(id) {
         if (!id.includes('node_modules')) return undefined;
