@@ -2,6 +2,7 @@ import { useAuth } from '../stores/auth.js';
 import { useInstallation } from '../stores/installation.js';
 
 export async function guardNavigation(to) {
+  if (to.meta.systemStatus) return true;
   const installation = useInstallation();
   if (!installation.status && !installation.error) await installation.check();
   if (installation.status?.required || installation.error) return to.name === 'setup' ? true : { path: '/setup' };
@@ -12,6 +13,6 @@ export async function guardNavigation(to) {
     return true;
   }
   if (!auth.isLoggedIn) return { path: '/login', query: { redirect: to.fullPath } };
-  if (to.meta.admin && !auth.isAdmin) return { path: '/chat' };
+  if (to.meta.admin && !auth.isAdmin) return { path: '/unauthorized' };
   return true;
 }
