@@ -17,9 +17,10 @@ export async function voiceUpstreamFixture(req,res){
   if(!authorized||mode==='auth-error'){json(res,{error:{message:'private provider credential must never leak'}},401);return true;}
   if(mode==='rate-limit'){json(res,{error:'private provider rate limit'},429);return true;}
   if(mode==='fail-second'&&call===2){json(res,{error:'private failed segment'},500);return true;}
-  if(mode==='hang'||mode==='slow-body'||mode==='hold'){
+  if(mode==='hang'||mode==='slow-body'||mode==='hold'||mode==='progressive'){
     if(mode==='slow-body'){res.writeHead(200,{'Content-Type':'audio/mpeg'});res.write(syntheticMp3().subarray(0,4));}
-    await new Promise(resolve=>{const timer=setTimeout(resolve,240000);res.once('close',()=>{clearTimeout(timer);resolve();});const check=setInterval(()=>{if(controls.get(mode)?.release){clearInterval(check);if(!res.destroyed){res.writeHead(200,{'Content-Type':'audio/mpeg'});res.end(syntheticMp3());}clearTimeout(timer);resolve();}},50);res.once('close',()=>clearInterval(check));});return true;
+    if(mode==='progressive'){const audio=syntheticMp3();res.writeHead(200,{'Content-Type':'audio/mpeg'});res.write(audio.subarray(0,Math.ceil(audio.length/2)));}
+    await new Promise(resolve=>{const timer=setTimeout(resolve,240000);res.once('close',()=>{clearTimeout(timer);resolve();});const check=setInterval(()=>{const setting=controls.get(mode);if(setting?.release||Number.isSafeInteger(setting?.releaseThrough)&&call<=setting.releaseThrough){clearInterval(check);if(!res.destroyed){if(!res.headersSent)res.writeHead(200,{'Content-Type':'audio/mpeg'});const audio=syntheticMp3();res.end(mode==='progressive'?audio.subarray(Math.ceil(audio.length/2)):audio);}clearTimeout(timer);resolve();}},50);res.once('close',()=>clearInterval(check));});return true;
   }
   if(mode==='large-header'){res.writeHead(200,{'Content-Type':'audio/mpeg','Content-Length':20*1024*1024});res.end();return true;}
   if(path.endsWith('speech')){res.writeHead(200,{'Content-Type':'audio/mpeg'});res.end(mode==='bad-audio'?Buffer.from('not an audio file'):syntheticMp3());return true;}

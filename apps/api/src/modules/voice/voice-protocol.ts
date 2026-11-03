@@ -21,10 +21,10 @@ export function inspectVoiceWav(buffer:Buffer) {
 }
 
 /** Split at punctuation where possible; never split UTF-16 surrogate pairs. */
-export function splitVoiceText(text:string,limit=4096) {
-  if(!Number.isSafeInteger(limit)||limit<2||limit>4096)throw new Error('语音分段上限无效');
+export function splitVoiceText(text:string,limit=4096,firstLimit=limit) {
+  if(!Number.isSafeInteger(limit)||limit<2||limit>4096||!Number.isSafeInteger(firstLimit)||firstLimit<2||firstLimit>limit)throw new Error('语音分段上限无效');
   const points=[...text],segments:string[]=[];
-  for(let start=0;start<points.length;){let end=start,units=0;while(end<points.length&&units+points[end].length<=limit){units+=points[end].length;end++;}if(end<points.length){for(let index=end-1;index>start+Math.floor((end-start)*.65);index--)if(/[。！？.!?\n；;]/.test(points[index])){end=index+1;break;}}
+  for(let start=0;start<points.length;){const maximum=segments.length?limit:firstLimit;let end=start,units=0;while(end<points.length&&units+points[end].length<=maximum){units+=points[end].length;end++;}if(end<points.length){for(let index=end-1;index>start+Math.floor((end-start)*.65);index--)if(/[。！？.!?\n；;]/.test(points[index])){end=index+1;break;}}
     segments.push(points.slice(start,end).join(''));start=end;}
   return segments;
 }
@@ -39,10 +39,10 @@ export function validMp3(buffer:Buffer) {
 }
 
 /** One total deadline is shared with fetch and body reads. Errors never include provider bodies. */
-export async function readVoiceBody(response:Response,maxBytes:number,signal:AbortSignal) {
+export async function readVoiceBody(response:Response,maxBytes:number,signal:AbortSignal,onChunk?:(chunk:Buffer)=>void) {
   if(!response.ok||!response.body){await response.body?.cancel().catch(()=>{});throw new Error([401,403].includes(response.status)?'语音服务授权未通过，请联系管理员核对渠道':response.status===429?'语音服务繁忙，请稍后明确重试':'语音服务没有完成本次请求，请稍后明确重试');}
   const announced=response.headers.get('content-length');if(announced&&(!/^\d+$/.test(announced)||Number(announced)>maxBytes)){await response.body.cancel().catch(()=>{});throw new Error('语音服务返回内容过大');}
   const reader=response.body.getReader(),chunks:Buffer[]=[];let size=0;const abort=()=>{void reader.cancel().catch(()=>{});};signal.addEventListener('abort',abort,{once:true});
-  try{while(true){signal.throwIfAborted();const part=await reader.read();signal.throwIfAborted();if(part.done)break;size+=part.value.byteLength;if(size>maxBytes)throw new Error('语音服务返回内容过大');chunks.push(Buffer.from(part.value));}if(!size)throw new Error('语音服务没有返回内容');return Buffer.concat(chunks,size);}
+  try{while(true){signal.throwIfAborted();const part=await reader.read();signal.throwIfAborted();if(part.done)break;size+=part.value.byteLength;if(size>maxBytes||chunks.length>=8192)throw new Error('语音服务返回内容过大');if(part.value.byteLength){const chunk=Buffer.from(part.value);chunks.push(chunk);onChunk?.(chunk);}}if(!size)throw new Error('语音服务没有返回内容');return Buffer.concat(chunks,size);}
   finally{signal.removeEventListener('abort',abort);await reader.cancel().catch(()=>{});reader.releaseLock();}
 }
