@@ -1,3 +1,4 @@
+import {applicationText} from './application-messages.js';
 import { computed, ref } from 'vue';
 import {createLanguagePreferences} from './language-preferences.js';
 import {INTERFACE_MESSAGES,ROUTE_LANGUAGE_KEYS} from './interface-messages.js';
@@ -89,3 +90,5 @@ export function routeTitle(path, {compact=false}={}) {
   const key=ROUTE_LANGUAGE_KEYS[path];
   return key ? compact && INTERFACE_MESSAGES[currentLang.value]?.[key+'.short'] || t(key) : '';
 }
+
+export function appText(original,values){return applicationText(currentLang.value,original,values);}

@@ -1,5 +1,5 @@
 <template>
-  <el-config-provider :locale="zhCn">
+  <el-config-provider :locale="componentLocale">
   <!-- 登录页不加外壳 -->
   <router-view v-if="!showChrome" />
 
@@ -200,6 +200,8 @@
 <script setup>
 import { ElAlert, ElButton, ElConfigProvider, ElIcon, ElTag } from 'element-plus';
 import zhCn from 'element-plus/es/locale/lang/zh-cn.mjs';
+import zhTw from 'element-plus/es/locale/lang/zh-tw.mjs';
+import en from 'element-plus/es/locale/lang/en.mjs';
 import { computed, onMounted, ref, watch } from 'vue';
 import {isImplementedRoute} from './lib/route-recovery.js';
 import { useRoute, useRouter } from 'vue-router';
@@ -218,10 +220,11 @@ import { useAuth } from './stores/auth.js';
 import { useBalance } from './stores/balance.js';
 import { useTheme } from './stores/theme.js';
 import { useUi } from './stores/ui.js';
-import { t } from './i18n/index.js';
+import { currentLang,t } from './i18n/index.js';
 import LanguagePicker from './components/design/LanguagePicker.vue';
 
 const auth = useAuth();
+const componentLocale=computed(()=>currentLang.value==='en'?en:currentLang.value==='zh-TW'?zhTw:zhCn);
 useAppearance().initialize();
 const route = useRoute();
 const router = useRouter();

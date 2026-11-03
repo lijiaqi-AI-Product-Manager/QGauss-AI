@@ -1,12 +1,12 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **294** 条路由，分布在 **32** 个控制器。
+> 共 **296** 条路由，分布在 **32** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
 | `/agents` | 16 | `src/modules/agents/agents.controller.ts` |
-| `/apps` | 31 | `src/modules/apps/apps.controller.ts` |
+| `/apps` | 33 | `src/modules/apps/apps.controller.ts` |
 | `/auth` | 12 | `src/modules/auth/auth.controller.ts` |
 | `/balance` | 7 | `src/modules/commerce/wallet.controller.ts` |
 | `/chat` | 4 | `src/modules/chat/chat.controller.ts` |
@@ -78,6 +78,8 @@
 | POST | `/apps/mine/:id/restore` | 登录 |
 | POST | `/apps/mine/:id/reconcile` | 登录 |
 | GET | `/apps/shared/:shareId` | 访客可读，携带凭据时校验身份 |
+| GET | `/apps/shared/:shareId/views` | 访客可读，携带凭据时校验身份 |
+| POST | `/apps/shared/:shareId/visits` | 访客可读，携带凭据时校验身份 |
 | GET | `/apps/admin/review` | ADMIN |
 | GET | `/apps/admin/review/:id` | ADMIN |
 | POST | `/apps/admin/review/:id` | ADMIN |

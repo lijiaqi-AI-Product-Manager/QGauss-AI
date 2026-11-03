@@ -1,21 +1,22 @@
 <template>
- <section class="qai-picker" aria-label="自定义应用图片">
-  <div class="qai-picker-head"><AppAvatar :icon="modelValue" private-image/><div><b>让它拥有自己的模样</b><p>选一张图片，裁出属于它的个性。</p></div><button type="button" :disabled="disabled||busy||!!pending" @click="input?.click()">{{ appImageId(modelValue)?'更换图片 ↗':'上传图片 ＋' }}</button></div>
-  <input ref="input" type="file" class="qai-file" accept="image/png,image/jpeg,image/webp" aria-label="上传应用形象" :disabled="disabled||busy||!!pending" @change="choose"/>
-  <p class="qai-hint">PNG、JPEG、WebP · 最大 5MB · 图片随应用审核与公开</p>
-  <div v-if="pending" class="qai-recovery"><span>有一张临时图片，可以先核对保存结果。</span><button type="button" :disabled="disabled||busy" @click="recover">核对上次图片</button><button type="button" :disabled="busy" @click="abandon">暂不使用</button></div>
-  <p v-if="error" class="qai-error" role="alert">{{ error }}</p><p v-if="note" class="qai-note" role="status">{{ note }}</p>
+ <section class="qai-picker" :aria-label="at('自定义应用图片')">
+  <div class="qai-picker-head"><AppAvatar :icon="modelValue" private-image/><div><b>{{ at('让它拥有自己的模样') }}</b><p>{{ at('选一张图片，裁出属于它的个性。') }}</p></div><button type="button" :disabled="disabled||busy||!!pending" @click="input?.click()">{{ appImageId(modelValue)?at('更换图片 ↗'):at('上传图片 ＋') }}</button></div>
+  <input ref="input" type="file" class="qai-file" accept="image/png,image/jpeg,image/webp" :aria-label="at('上传应用形象')" :disabled="disabled||busy||!!pending" @change="choose"/>
+  <p class="qai-hint">{{ at('PNG、JPEG、WebP · 最大 5MB · 图片随应用审核与公开') }}</p>
+  <div v-if="pending" class="qai-recovery"><span>{{ at('有一张临时图片，可以先核对保存结果。') }}</span><button type="button" :disabled="disabled||busy" @click="recover">{{ at('核对上次图片') }}</button><button type="button" :disabled="busy" @click="abandon">{{ at('暂不使用') }}</button></div>
+  <p v-if="error" class="qai-error" role="alert">{{ at(error) }}</p><p v-if="note" class="qai-note" role="status">{{ at(note) }}</p>
   <dialog ref="dialog" class="qai-dialog" aria-labelledby="qai-crop-title" @cancel.prevent="cancel">
-   <header><div><span class="qcs-eyebrow">A FACE FOR YOUR NEXT IDEA</span><h2 id="qai-crop-title">给这位搭档，一个新模样。</h2><p>{{ recovered?'找到原来保存的图片，确认后用于当前草稿。':'拖动画面找到主角，用缩放调整大小。' }}</p></div><button type="button" aria-label="关闭图片裁切" @click="cancel">×</button></header>
-   <div class="qai-dialog-body"><div class="qai-crop-wrap"><div class="qai-crop-glow"></div><AppAvatar v-if="recovered" class="qai-recovered" :icon="recovered" private-image/><canvas v-else ref="canvas" width="512" height="512" tabindex="0" role="img" aria-label="应用图片裁切预览，可拖动或使用方向键调整，Shift 加快移动" @pointerdown="startDrag" @pointermove="drag" @pointerup="stopDrag" @pointercancel="stopDrag" @keydown="moveKey"></canvas><span class="qai-crop-ring" aria-hidden="true"></span><span class="qai-crop-label">YOUR CHARACTER / 512 × 512</span></div>
-    <div v-if="!recovered" class="qai-adjust"><label for="qai-zoom">靠近一点 <output>{{ Number(zoom).toFixed(1) }}×</output></label><input id="qai-zoom" v-model.number="zoom" type="range" min="1" max="4" step="0.05" :disabled="busy" aria-label="图片缩放"/><button type="button" :disabled="busy" @click="resetCrop">回到正中 ↺</button><small>方向键可微调位置，按住 Shift 移动更快。</small></div>
-    <p v-if="error" class="qai-error" role="alert">{{ error }}</p><BrandLoader v-if="busy" :size="24" text="正在准备这张图片…"/>
+   <header><div><span class="qcs-eyebrow">A FACE FOR YOUR NEXT IDEA</span><h2 id="qai-crop-title">{{ at('给这位搭档，一个新模样。') }}</h2><p>{{ recovered?at('找到原来保存的图片，确认后用于当前草稿。'):at('拖动画面找到主角，用缩放调整大小。') }}</p></div><button type="button" :aria-label="at('关闭图片裁切')" @click="cancel">×</button></header>
+   <div class="qai-dialog-body"><div class="qai-crop-wrap"><div class="qai-crop-glow"></div><AppAvatar v-if="recovered" class="qai-recovered" :icon="recovered" private-image/><canvas v-else ref="canvas" width="512" height="512" tabindex="0" role="img" :aria-label="at('应用图片裁切预览，可拖动或使用方向键调整，Shift 加快移动')" @pointerdown="startDrag" @pointermove="drag" @pointerup="stopDrag" @pointercancel="stopDrag" @keydown="moveKey"></canvas><span class="qai-crop-ring" aria-hidden="true"></span><span class="qai-crop-label">YOUR CHARACTER / 512 × 512</span></div>
+    <div v-if="!recovered" class="qai-adjust"><label for="qai-zoom">{{ at('靠近一点') }} <output>{{ Number(zoom).toFixed(1) }}×</output></label><input id="qai-zoom" v-model.number="zoom" type="range" min="1" max="4" step="0.05" :disabled="busy" :aria-label="at('图片缩放')"/><button type="button" :disabled="busy" @click="resetCrop">{{ at('回到正中 ↺') }}</button><small>{{ at('方向键可微调位置，按住 Shift 移动更快。') }}</small></div>
+    <p v-if="error" class="qai-error" role="alert">{{ at(error) }}</p><BrandLoader v-if="busy" :size="24" :text="at('正在准备这张图片…')"/>
    </div>
-   <footer><p>只保留裁切后的图片。保存应用前，这张图片仅自己可见。</p><div><button type="button" @click="cancel">返回编辑</button><button type="button" class="qai-primary" :disabled="busy||disabled||!bitmap&&!recovered" @click="confirm">{{ busy?'正在保存…':recovered?'使用已保存的图片 ↗':'使用这张图片 ↗' }}</button></div></footer>
+   <footer><p>{{ at('只保留裁切后的图片。保存应用前，这张图片仅自己可见。') }}</p><div><button type="button" @click="cancel">{{ at('返回编辑') }}</button><button type="button" class="qai-primary" :disabled="busy||disabled||!bitmap&&!recovered" @click="confirm">{{ busy?at('正在保存…'):recovered?at('使用已保存的图片 ↗'):at('使用这张图片 ↗') }}</button></div></footer>
   </dialog>
  </section>
 </template>
 <script setup>
+import {appText as at} from '../../i18n/index.js';
 import {nextTick,onBeforeUnmount,ref,watch} from 'vue';
 import {api,uploadAppImage} from '../../api/client.js';
 import {useAuth} from '../../stores/auth.js';

@@ -7,11 +7,12 @@ import {ModerationModule} from '../moderation/moderation.module';
 import {StorageModule} from '../storage/storage.module';
 import {AppImageService} from './app-image.service';
 import {AppImageUploadGuard} from './app-image-upload.guard';
+import {AppShareViewsService} from './app-share-views.service';
 
 @Module({
   imports:[CommerceModule,ModerationModule,StorageModule],
   controllers: [AppsController],
-  providers: [AppsService,AppCreatorService,AppImageService,AppImageUploadGuard],
+  providers: [AppsService,AppCreatorService,AppImageService,AppImageUploadGuard,AppShareViewsService],
   exports: [AppsService],
 })
 export class AppsModule {}

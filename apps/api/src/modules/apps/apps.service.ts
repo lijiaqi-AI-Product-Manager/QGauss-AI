@@ -71,6 +71,7 @@ export class AppsService {
       icon: a.icon,
       greeting: a.greeting,
       defaultModel: a.defaultModel,
+      shareViewCount:a.shareViewCount,
       category: a.category,
       favorited: favSet.has(a.id),
     }));
@@ -91,6 +92,7 @@ export class AppsService {
         published: true,
         version:true,
         shareId:true,
+        shareViewCount:true,
         category: { select: { id: true, name: true } },
       },
     });
@@ -139,7 +141,7 @@ export class AppsService {
     return rows
       .map((r) => map.get(r.appId))
       .filter(Boolean)
-      .map((a) => ({ id: a!.id, name: a!.name, icon: a!.icon, description: a!.description }));
+      .map((a) => ({ id: a!.id, name: a!.name, icon: a!.icon, description: a!.description, shareViewCount:a!.shareViewCount }));
   }
 
   // ---------------- 后台 ----------------
