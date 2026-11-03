@@ -1,3 +1,5 @@
+import {voiceName} from '../../apps/web/src/lib/voice-presentation.js';
+import {voiceText} from '../../apps/web/src/i18n/voice-messages.js';
 /** Local listening-room samples. Playback uses a silent local recording, never a provider. */
 export function voiceLibraryFixtures(state='voice-library-ready'){
  const kinds=['speech','transcription','speech','speech','transcription','speech','speech','transcription','speech','speech'];
@@ -9,4 +11,12 @@ export function voiceLibraryFixtures(state='voice-library-ready'){
  const summary=row=>({...row,transcript:undefined,audio:undefined});
  return{'/api/voice/library':{items:rows.map(summary),total:rows.length,counts:{all:rows.length,speech:rows.filter(row=>row.kind==='speech').length,transcription:rows.filter(row=>row.kind==='transcription').length},page:1,pageSize:9,policy:{retentionDays:7}},...Object.fromEntries(rows.map(row=>['/api/voice/library/'+row.id,row]))};
 }
-export function voiceLibraryPage(data,url){const kind=url.searchParams.get('kind')||'all',state=url.searchParams.get('state')||'all',q=(url.searchParams.get('q')||'').toLowerCase().trim(),page=Number(url.searchParams.get('page')||1),pageSize=Number(url.searchParams.get('pageSize')||9);let rows=data.items.filter(row=>(kind==='all'||row.kind===kind)&&(!q||[row.label,row.voice].join(' ').toLowerCase().includes(q)));if(state!=='all')rows=rows.filter(row=>state==='expired'?row.availability==='expired':state==='processing'?row.availability==='processing':row.availability!=='expired'&&row.status===({completed:'COMPLETED',failed:'FAILED',canceled:'CANCELED'})[state]);return{...data,items:rows.slice((page-1)*pageSize,page*pageSize),total:rows.length,page,pageSize};}
+export function voiceLibraryPage(data,url){
+ const kind=url.searchParams.get('kind')||'all',state=url.searchParams.get('state')||'all',q=(url.searchParams.get('q')||'').toLowerCase().trim(),page=Number(url.searchParams.get('page')||1),pageSize=Number(url.searchParams.get('pageSize')||9),terms=[...new Set([q,q.normalize('NFKC')])];
+ let rows=data.items.filter(row=>{
+  if(kind!=='all'&&row.kind!==kind)return false;if(!q)return true;if(row.availability==='expired')return false;
+  const names=row.kind==='speech'?[row.voice,...['zh','zh-TW','en'].map(language=>voiceText(language,voiceName(row.voice)))]:[],text=[row.label,...names].join(' ').toLowerCase();return terms.some(term=>text.includes(term));
+ });
+ if(state!=='all')rows=rows.filter(row=>state==='expired'?row.availability==='expired':state==='processing'?row.availability==='processing':row.availability!=='expired'&&row.status===({completed:'COMPLETED',failed:'FAILED',canceled:'CANCELED'})[state]);
+ return{...data,items:rows.slice((page-1)*pageSize,page*pageSize),total:rows.length,page,pageSize};
+}

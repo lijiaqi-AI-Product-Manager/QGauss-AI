@@ -3,7 +3,7 @@
   <!-- 登录页不加外壳 -->
   <router-view v-if="!showChrome" />
 
-  <ClientShell v-else-if="!route.meta.admin" :menus="menus" :title="title" :site-config="publicSiteConfig" :announcement="announcement" :commerce-enabled="commerceEnabled" :balance="balance" :balance-tooltip="balanceTooltip" @logout="onLogout" @dismiss-announcement="dismissAnnouncement"><router-view /></ClientShell>
+  <ClientShell v-else-if="!route.meta.admin || route.meta.client" :menus="menus" :title="title" :site-config="publicSiteConfig" :announcement="announcement" :commerce-enabled="commerceEnabled" :balance="balance" :balance-tooltip="balanceTooltip" @logout="onLogout" @dismiss-announcement="dismissAnnouncement"><router-view /></ClientShell>
 
   <div v-else class="qg-layout" :class="{ 'no-panel': !showPanel, immersive: immersive && route.name === 'chat' }">
     <div v-if="sidebarOpen" class="qg-sidebar-mask" @click="sidebarOpen = false"></div>

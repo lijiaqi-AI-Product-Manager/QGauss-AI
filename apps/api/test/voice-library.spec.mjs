@@ -20,11 +20,39 @@ import {VoiceService} from '../dist/modules/voice/voice.service.js';
 import {VoiceLibraryService} from '../dist/modules/voice/voice-library.service.js';
 import {VoiceConfigDto} from '../dist/modules/voice/voice.dto.js';
 import {voiceExpiry,syncVoiceRecordingExpiry} from '../dist/modules/voice/voice-retention.js';
+import {voiceSearchIds} from '../dist/modules/voice/voice-search.js';
 import {encodeVoiceWav} from '../../web/src/lib/voice-recorder.js';
 
 const here=dirname(fileURLToPath(import.meta.url)),folder=mkdtempSync(join(tmpdir(),'qgauss-voice-library-')),base=join(folder,'base.db'),hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 execFileSync(process.execPath,[join(here,'../prisma/migrate.mjs')],{env:{...process.env,DATABASE_FILE:base},stdio:'pipe'});
 const status=code=>error=>error.getStatus?.()===code;
+
+test('音色搜索同时识别简体、繁体、英文显示名和原有标识，不修改查询内容',()=>{
+ for(const [input,expected]of [['晴空','alloy'],['Sky','alloy'],[' ＳＫＹ ','alloy'],['回聲','echo'],['暖叙','fable'],['暖敘','fable'],['Story','fable'],['Fable','fable'],['晨星','nova'],['Onyx','onyx'],['微光','shimmer'],['Glow','shimmer'],['Shimmer','shimmer']])assert.deepEqual(voiceSearchIds(input),[expected],input);
+ for(const input of [null,undefined,{},'', 'unknown voice'])assert.deepEqual(voiceSearchIds(input),[]);
+});
+
+test('按显示音色搜索与原标签搜索取并集，同时排除其他账号、过期和已清理内容',async t=>{
+ const f=await fixture(t),voice=await f.task({voice:'alloy',label:'属于我的晴空作品'}),title=await f.task({voice:'fable',label:'Sky'});
+ await f.task({userId:f.other.id,voice:'alloy',label:'另一账号的 Sky'});
+ await f.task({voice:'alloy',expiresAt:new Date(Date.now()-60000)});
+ await f.task({voice:'alloy',purgedAt:new Date(),label:'已清理的 Sky'});
+ for(const q of ['Sky','ＳＫＹ']){const row=await f.library.list(f.owner.id,{q});assert.deepEqual(new Set(row.items.map(item=>item.id)),new Set([voice.id,title.id]));assert.equal(row.total,2);assert.equal(row.counts.all,4);}assert.equal(f.providerCalls(),0);
+ assert.equal((await f.db.voiceTask.findUnique({where:{id:title.id}})).label,'Sky');
+});
+
+test('简体繁体英文音色搜索保持同一原记录，读取不修改正文、音色、次数或状态',async t=>{
+ const f=await fixture(t),task=await f.task({voice:'fable',label:'保存声音设置，是我自己的标题'}),before=hash(await f.db.voiceTask.findUnique({where:{id:task.id}}));
+ for(const q of ['暖叙','暖敘','Story','ＦＡＢＬＥ']){const result=await f.library.list(f.owner.id,{q});assert.equal(result.total,1,q);assert.equal(result.items[0].id,task.id);assert.equal(result.items[0].label,task.label);assert.equal(result.items[0].voice,'fable');}
+ assert.equal(hash(await f.db.voiceTask.findUnique({where:{id:task.id}})),before);assert.equal(f.providerCalls(),0);
+});
+
+test('音色检索不使用转写任务的默认音色字段，仍能匹配转写中的原有文字',async t=>{
+ const f=await fixture(t),recording=await f.task({kind:'transcription',voice:'fable',label:'一段录音',transcript:'这是一份需要保留的原始转写。'});
+ for(const q of ['Story','Fable','暖叙','暖敘'])assert.equal((await f.library.list(f.owner.id,{q})).total,0,q);
+ await f.db.voiceTask.update({where:{id:recording.id},data:{transcript:'这份转写中，确实提到了 Story。'}});
+ const result=await f.library.list(f.owner.id,{q:'Story'});assert.deepEqual(result.items.map(row=>row.id),[recording.id]);assert.equal(f.providerCalls(),0);
+});
 async function fixture(t){
  const database=join(folder,randomUUID()+'.db');copyFileSync(base,database);const db=new SqliteClient({datasources:{db:{url:'file:'+database.replace(/\\/g,'/')}}});
  const [owner,other]=await Promise.all(['owner','other'].map(username=>db.user.create({data:{username,email:username+'@qgauss.test',passwordHash:'synthetic-only'}}))),settings=new SettingsService(db),ledger=new LedgerService(db),accounting=new VoiceAccountingService(db,ledger),rate=new RateLimitService();
