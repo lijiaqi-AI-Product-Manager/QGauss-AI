@@ -131,6 +131,7 @@ if(imageEditorData){fixtures['/api/image/options'].defaultFeatures=imageEditorDa
 window.fetch = async (input, init = {}) => {
   const url = new URL(typeof input?.url==='string'?input.url:String(input), location.href);
   if(url.origin===location.origin&&!url.pathname.startsWith('/api/'))return nativeFetch(input,init);
+  if(installationState?.startsWith('status-')&&url.pathname==='/api/health')return new Response(JSON.stringify({status:installationState==='status-offline'?'unavailable':'ok'}),{status:installationState==='status-offline'?503:200,headers:{'Content-Type':'application/json'}});
   if(imageEditorData&&url.origin===location.origin){const result=await imageEditorData.reply(url,init);if(result)return result;}
   if(mindmapData&&url.origin===location.origin&&url.pathname.startsWith('/api/mindmap/')){const body=typeof init.body==='string'?JSON.parse(init.body):{};const result=mindmapFixtureReply(mindmapData,url,init.method||'GET',body);return new Response(JSON.stringify(result.error?{code:result.status,message:result.error}:{code:0,data:result.data}),{status:result.status,headers:{'Content-Type':'application/json'}});}
   if(galleryMode&&url.origin===location.origin){
@@ -200,7 +201,7 @@ window.fetch = async (input, init = {}) => {
 const pinia = createPinia();
 const auth = useAuth(pinia);
 auth.remember = false;
-if (!installationState?.startsWith('install-') && installationState !== 'email-register' && installationState !== 'creator-guest') auth.apply({ accessToken: 'qgauss-reference-only', refreshToken: 'qgauss-reference-only', user: { id: 'qgauss-reference-only', username: 'QGauss 观察员', role: adminMode ? 'ADMIN' : 'USER' } });
+if (!installationState?.startsWith('install-') && !installationState?.startsWith('status-') && installationState !== 'email-register' && installationState !== 'creator-guest') auth.apply({ accessToken: 'qgauss-reference-only', refreshToken: 'qgauss-reference-only', user: { id: 'qgauss-reference-only', username: 'QGauss 观察员', role: adminMode ? 'ADMIN' : 'USER' } });
 if(['voice-transcript','voice-player','voice-interrupted'].includes(installationState))sessionStorage.setItem('qg:voice:qgauss-reference-only:qg-reference-conversation',JSON.stringify({requestKey:'qg-voice-visual-intent',taskId:'qg-voice-result',payload:{kind:installationState==='voice-transcript'?'transcription':'speech'},quoteRevision:'a'.repeat(64)}));
 const app = createApp(App);
 app.use(pinia).use(router);

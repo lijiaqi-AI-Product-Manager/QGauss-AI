@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { guardNavigation } from './lib/navigation-guard.js';
+import {legacyRoutes,systemStatusRoutes,installRouteRecovery} from './lib/route-recovery.js';
+import StatusPage from './views/StatusPage.vue';
 
 /**
  * 路由路径与后端 menus 表里的 path 保持一致，
@@ -27,15 +29,10 @@ const routes = [
   { path: '/mj', name: 'midjourney', component: () => import('./views/Midjourney.vue'), meta: { ownTitle: true } },
   { path: '/mj/manage', name: 'mjStudio', component: () => import('./views/admin/MidjourneyControl.vue'), meta: { admin: true, ownTitle: true } },
   { path: '/video', name: 'video', component: () => import('./views/Video.vue'), meta: { ownTitle: true } },
-  // 旧的 /image 入口保留，跳到专业绘画工作台，避免书签失效
-  { path: '/image', redirect: '/painting' },
   { path: '/apps', name: 'apps', component: () => import('./views/Apps.vue'), meta: { public:true,ownTitle: true } },
   { path: '/role', name:'appCreator',component:()=>import('./views/MyApps.vue'),meta:{ownTitle:true,title:'我的创建'} },
   { path: '/apps/manage',name:'appReview',component:()=>import('./views/admin/AppReview.vue'),meta:{admin:true,ownTitle:true,title:'应用审核'} },
-  { path: '/app-store',redirect:to=>({path:'/apps',query:to.query,hash:to.hash}) },
-  { path: '/user-center',redirect:to=>({path:'/account',query:to.query,hash:to.hash}) },
-  { path: '/pay',redirect:to=>({path:'/recharge',query:to.query,hash:to.hash}) },
-  { path: '/share',redirect:to=>({path:'/sales',query:to.query,hash:to.hash}) },
+  ...legacyRoutes,
   { path: '/recharge', name: 'recharge', component: () => import('./views/Recharge.vue'), meta: { ownTitle: true } },
   { path: '/wallet', name: 'wallet', component: () => import('./views/Wallet.vue'), meta: { ownTitle: true } },
   { path: '/sales', name: 'sales', component: () => import('./views/Sales.vue'), meta: { ownTitle: true } },
@@ -51,7 +48,7 @@ const routes = [
   { path: '/admin/crami', name: 'cramiAdmin', component: () => import('./views/admin/Crami.vue'), meta: { admin: true } },
   { path: '/admin/orders', name: 'ordersAdmin', component: () => import('./views/admin/Orders.vue'), meta: { admin: true } },
   { path: '/admin/sales', name: 'salesAdmin', component: () => import('./views/admin/SalesAudit.vue'), meta: { admin: true } },
-  { path: '/:pathMatch(.*)*', redirect: '/chat' },
+  ...systemStatusRoutes(StatusPage),
 ];
 
 export const router = createRouter({
@@ -60,3 +57,4 @@ export const router = createRouter({
 });
 
 router.beforeEach(guardNavigation);
+installRouteRecovery(router);

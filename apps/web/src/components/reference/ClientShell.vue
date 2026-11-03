@@ -53,6 +53,7 @@ import ClientIcon from './ClientIcon.vue';
 import AmbientScene from '../design/AmbientScene.vue';
 import AccountAvatar from '../design/AccountAvatar.vue';
 import { useAppearance } from '../../stores/appearance.js';
+import {isImplementedRoute} from '../../lib/route-recovery.js';
 import '../design/workbench-shell.css';
 const props = defineProps({ menus: { type: Array, default: () => [] }, siteConfig: { type: Object, default: () => ({}) }, announcement: String, commerceEnabled: Boolean, balance: { type: Object, default: () => ({ enabled: false }) }, balanceTooltip: String, title: String });
 const emit = defineEmits(['logout', 'dismiss-announcement']);
@@ -79,7 +80,7 @@ const navigation = computed(() => {
       if (row.children?.length) include(row.children);
       if (!row.path || paths.has(row.path)) continue;
       const match = router.resolve(row.path);
-      if (!match.name || match.meta.admin) continue;
+      if (!isImplementedRoute(router,row.path) || match.meta.admin) continue;
       paths.add(row.path); base.push({ path: row.path, title: row.title, icon: 'apps' });
     }
   }

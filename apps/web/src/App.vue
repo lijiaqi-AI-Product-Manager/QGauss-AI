@@ -201,6 +201,7 @@
 import { ElAlert, ElButton, ElConfigProvider, ElIcon, ElTag } from 'element-plus';
 import zhCn from 'element-plus/es/locale/lang/zh-cn.mjs';
 import { computed, onMounted, ref, watch } from 'vue';
+import {isImplementedRoute} from './lib/route-recovery.js';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from './api/client.js';
 import QStar from './components/QStar.vue';
@@ -288,11 +289,7 @@ const primaryNav = computed(() => [
 ]);
 
 /** 只有 router 里真实存在的路径才可点击 */
-function isImplemented(path,seen=new Set()) {
-  if(seen.has(path))return false;seen.add(path);
-  const target=router.resolve(path);if(target.name!==undefined)return true;
-  const redirect=target.matched.at(-1)?.redirect;return typeof redirect==='string'&&seen.size<5?isImplemented(redirect,seen):false;
-}
+const isImplemented=path=>isImplementedRoute(router,path);
 
 /** 顺序固定的兜底导航：菜单接口异常时前台不能没有入口 */
 /** 菜单表里如果也配了 /chat 会渲染两遍，这里统一剔掉 */
