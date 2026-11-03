@@ -255,7 +255,7 @@ const server = createServer(async (req, res) => {
   const marks = [...new Set(plain.match(/QG-MARK-[\w-]+/g) ?? [])];
   const att = images || docs.length ? `ATT:img=${images};doc=${docs.join(',')};marks=${marks.join(',')}|` : '';
 
-  const text =
+  const text = body?.model === 'qgauss-mindmap-local' ? '# QGauss 花园计划\n## 植物\n- 薄荷\n- 迷迭香\n## 光线\n- 清晨柔光' :
     `SYS:${sys ? String(sys.content).slice(0, 30) : 'none'}|` +
     att +
     '这是一段用于验证流式解析与中文分片的中文回复，包含标点。';

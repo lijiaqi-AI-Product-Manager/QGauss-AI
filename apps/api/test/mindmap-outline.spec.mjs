@@ -31,3 +31,9 @@ test('mindmap paging accepts ordinary page numbers and rejects object or mixed n
  const valid=plainToInstance(MindmapPageDto,{page:'2',pageSize:'6',view:'trash',q:'想法'});assert.equal((await validate(valid)).length,0);assert.equal(valid.page,2);
  for(const value of ['2x','0','1.5',['2'],{gt:1}])assert.ok((await validate(plainToInstance(MindmapPageDto,{page:value}))).length);
 });
+
+test('mindmap validation preserves original body values under the application conversion settings',async()=>{
+ const valid={requestKey:'qg-request',kind:'edit',documentId:'qg-doc',expectedVersion:1,title:'想法',outline:'# 想法\n- 下一步'};
+ for(const patch of [{expectedVersion:'1'},{documentId:123},{title:123},{outline:123},{requestKey:123}])assert.ok((await validate(plainToInstance(MindmapMutationDto,{...valid,...patch},{enableImplicitConversion:true}))).length);
+ for(const page of [['1'],{value:1},'1.5'])assert.ok((await validate(plainToInstance(MindmapPageDto,{page},{enableImplicitConversion:true}))).length);
+});
