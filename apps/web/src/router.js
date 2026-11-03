@@ -22,6 +22,7 @@ const routes = [
   { path: '/plaza', name: 'plaza', component: () => import('./views/ModelPlaza.vue'), meta: { ownTitle: true } },
   { path: '/painting', name: 'painting', component: () => import('./views/Painting.vue'), meta: { ownTitle: true } },
   { path:'/market',name:'creativeGallery',component:()=>import('./views/Market.vue'),meta:{ownTitle:true,title:'创意作品广场'} },
+  { path: '/mindmap', name: 'mindmap', component: () => import('./views/Mindmap.vue'), meta: { ownTitle: true, title: '思维导图' } },
   { path: '/mj', name: 'midjourney', component: () => import('./views/Midjourney.vue'), meta: { ownTitle: true } },
   { path: '/mj/manage', name: 'mjStudio', component: () => import('./views/admin/MidjourneyControl.vue'), meta: { admin: true, ownTitle: true } },
   { path: '/video', name: 'video', component: () => import('./views/Video.vue'), meta: { ownTitle: true } },

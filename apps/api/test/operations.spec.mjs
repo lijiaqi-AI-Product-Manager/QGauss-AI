@@ -168,3 +168,13 @@ test('维护 CLI 只接受文件路径、不提供明文密码参数，输出不
   assert.ok(JSON.parse(output).id);assert.doesNotMatch(output,/synthetic-channel-secret|JWT_SECRET|owner@/);
   assert.throws(()=>execFileSync(process.execPath,[cli,'recover-admin','--password','not-accepted'],{stdio:'pipe'}));
 });
+
+test('导图文档、操作回执与未完成任务进入同一加密备份并可原样恢复',async()=>{
+ const f=await fixture(),outline='# QGauss 私人想法\n## 下一步\n- 周末完成',requestKey=randomUUID();
+ const document=await f.prisma.mindmapDocument.create({data:{userId:f.user.id,title:'私人想法',outline,nodeCount:3}});
+ await f.prisma.mindmapOperation.create({data:{userId:f.user.id,requestKey,kind:'create',payloadHash:'synthetic-only',documentId:document.id,documentVersion:1}});
+ const task=await f.prisma.mindmapGeneration.create({data:{userId:f.user.id,requestKey:randomUUID(),modelId:'qg-model',modelName:'qgauss-outline',modelDisplayName:'QGauss 思路搭档',channelId:'qg-channel',routeRevision:'synthetic-only',prompt:'整理下一步',title:'下一步',maxOutput:2048}});
+ const result=await createEncryptedBackup(f.options);assert.equal(result.summary.pending.mindmap,1);assert.equal((await verifyEncryptedBackup({input:f.options.output,keyFile:f.options.keyFile})).summary.pending.mindmap,1);
+ const destination=join(f.root,'mindmap-restored');await restoreEncryptedBackup({input:f.options.output,keyFile:f.options.keyFile,destination});const restored=new PrismaClient({datasources:{db:{url:'file:'+join(destination,'bundle/database/qgauss.db').replace(/\\/g,'/')}}});clients.push(restored);
+ assert.equal((await restored.mindmapDocument.findUnique({where:{id:document.id}})).outline,outline);assert.equal((await restored.mindmapOperation.findUnique({where:{userId_requestKey:{userId:f.user.id,requestKey}}})).documentId,document.id);assert.equal((await restored.mindmapGeneration.findUnique({where:{id:task.id}})).status,'QUEUED');assert.equal(await restored.usageRecord.count(),0);
+});

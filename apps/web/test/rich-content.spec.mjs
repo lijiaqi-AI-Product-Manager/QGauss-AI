@@ -44,6 +44,8 @@ test('真实 KaTeX 输出视觉 HTML 和可访问 MathML', () => {
   assert.ok(result.querySelector('.katex-html'));
   assert.ok(result.querySelector('math mfrac'));
   assert.ok(result.querySelector('annotation'));
+  assert.ok(result.querySelector('.katex-html svg path'),'根号图形必须和可访问公式一起保留');
+  assert.equal(result.querySelector('svg a,svg image,svg use,svg script,svg animate,[href],[xlink\\:href]'),null);
 });
 test('公式不允许外链、图片或注入 HTML 属性', () => {
   for (const source of ['\\href{javascript:alert(1)}{点我}', '\\includegraphics{https://bad.example/a.png}', '\\htmlClass{fixed}{x}']) {

@@ -115,11 +115,11 @@ function start(name, script, env = {}) {
   return child;
 }
 
-async function waitHealthy(timeoutMs = 45_000) {
+async function waitHealthy(timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${apiBase}/health`);
+      const res = await fetch(`${apiBase}/health`,{signal:AbortSignal.timeout(2000)});
       if (res.ok) return true;
     } catch {
       /* 还在启动 */
@@ -172,7 +172,7 @@ async function main() {
   });
 
   if (!(await waitHealthy())) {
-    console.error(`[e2e] API 45s 内未就绪，检查端口占用与 dist 是否最新`);
+    console.error(`[e2e] API 90s 内未就绪，检查端口占用与 dist 是否最新`);
     cleanup();
     process.exit(1);
   }
@@ -210,6 +210,7 @@ async function main() {
     { name: '原生语音 voice.e2e.mjs', script: join(here, 'voice.e2e.mjs') },
     { name: '声音收藏室 voice-library.e2e.mjs', script: join(here, 'voice-library.e2e.mjs') },
     { name: '创意作品广场 gallery.e2e.mjs', script: join(here, 'gallery.e2e.mjs') },
+    { name: '思维导图工作台 mindmap.e2e.mjs', script: join(here, 'mindmap.e2e.mjs') },
     { name: '语音进程恢复 voice-recovery.e2e.mjs', script: join(here, 'voice-recovery.e2e.mjs') },
     { name: '账户与密码 account-security.e2e.mjs', script: join(here, 'account-security.e2e.mjs') },
     { name: '注册与邮箱验证 email-verification.e2e.mjs', script: join(here, 'email-verification.e2e.mjs') },

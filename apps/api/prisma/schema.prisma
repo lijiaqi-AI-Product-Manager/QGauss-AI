@@ -57,8 +57,83 @@ model User {
   reservations  CountReservation[]
   voiceTasks    VoiceTask[]
   galleryFavorites GalleryFavorite[]
+  mindmapDocuments MindmapDocument[]
+  mindmapOperations MindmapOperation[]
+  mindmapGenerations MindmapGeneration[]
 
   @@map("users")
+}
+
+model MindmapDocument {
+  id String @id @default(cuid())
+  userId String
+  title String
+  outline String
+  nodeCount Int
+  version Int @default(1)
+  archivedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@index([userId, archivedAt, updatedAt])
+  @@map("mindmap_documents")
+}
+
+model MindmapOperation {
+  id String @id @default(cuid())
+  userId String
+  requestKey String
+  kind String
+  payloadHash String
+  state String @default("APPLIED")
+  documentId String?
+  documentVersion Int?
+  generationId String?
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@unique([userId, requestKey])
+  @@map("mindmap_operations")
+}
+
+model MindmapGeneration {
+  id String @id @default(cuid())
+  userId String
+  requestKey String
+  modelId String
+  modelName String
+  modelDisplayName String
+  channelId String
+  routeRevision String
+  prompt String
+  context String @default("")
+  title String
+  maxOutput Int
+  status String @default("QUEUED")
+  outline String @default("")
+  promptTokens Int @default(0)
+  completionTokens Int @default(0)
+  priceInPerM Int @default(0)
+  priceOutPerM Int @default(0)
+  costMicros Int @default(0)
+  estimated Boolean @default(false)
+  usageId String? @unique
+  pool String @default("model3")
+  reservedAmount Int @default(0)
+  chargedAmount Int @default(0)
+  returnedAmount Int @default(0)
+  expiredAmount Int @default(0)
+  billingState String @default("FREE")
+  errorCode String?
+  errorMessage String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  startedAt DateTime?
+  finishedAt DateTime?
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@unique([userId, requestKey])
+  @@index([userId, createdAt])
+  @@index([status, updatedAt])
+  @@map("mindmap_generations")
 }
 
 model EmailVerification {

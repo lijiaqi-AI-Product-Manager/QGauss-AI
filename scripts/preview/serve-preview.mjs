@@ -11,6 +11,7 @@ import commonjs from '@rollup/plugin-commonjs';
 import replace from '@rollup/plugin-replace';
 import postcss from 'rollup-plugin-postcss';
 import { richAssets } from '../web/rich-assets.mjs';
+import {mindmapAssets} from '../web/mindmap-assets.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../..');
@@ -18,6 +19,13 @@ if (!process.env.QGAUSS_PREVIEW_DIR) throw new Error('请设置 QGAUSS_PREVIEW_D
 const output = resolve(process.env.QGAUSS_PREVIEW_DIR);
 const port = Number(process.env.PREVIEW_PORT ?? 9433);
 await mkdir(output, { recursive: true });
+if(process.argv.includes('--styles-only')){
+ const entry=join(output,'index.html'),html=await readFile(entry,'utf8'),href='/mindmap/workspace-preview.css';
+ if(!html.includes('/preview.js'))throw Error('请先完成一次完整预览构建');
+ await mkdir(join(output,'mindmap'),{recursive:true});await copyFile(join(repo,'apps/web/src/components/design/mindmap-workspace.css'),join(output,'mindmap/workspace-preview.css'));
+ if(!html.includes(href))await writeFile(entry,html.replace('</head>','<link rel="stylesheet" href="'+href+'"></head>'));
+ console.log('QGauss focused preview styles rebuilt');process.exit(0);
+}
 if (!process.argv.includes('--serve-only')) {
 await copyFile(join(repo, 'apps/api/test/fixtures/qgauss-video.mp4'), join(output, 'qgauss-motion-fixture.mp4'));
 await copyFile(join(repo,'apps/api/test/fixtures/qgauss-reference-video.mp4'),join(output,'qgauss-film-material.mp4'));
@@ -32,9 +40,10 @@ await copyFile(join(here, 'midjourney-grid.svg'), join(output, 'qgauss-mj-grid.s
 const bundle = await rollup({
   input: join(here, 'preview-entry.mjs'),
   plugins: [
+    process.env.QGAUSS_PREVIEW_PAGE==='mindmap'&&{name:'qgauss-focused-preview',resolveId(source){if(source==='../../apps/web/src/router.js')return'\0qgauss:focused-router';},load(id){if(id!=='\0qgauss:focused-router')return;return'import {createRouter,createWebHistory} from "vue-router";import Mindmap from '+JSON.stringify(join(repo,'apps/web/src/views/Mindmap.vue').replaceAll('\\','/'))+';export const router=createRouter({history:createWebHistory(),routes:[{path:"/mindmap",name:"mindmap",component:Mindmap,meta:{ownTitle:true,title:"思维导图"}},{path:"/:pathMatch(.*)*",redirect:"/mindmap"}]});';}},
     replace({ preventAssignment: true, 'process.env.NODE_ENV': '"production"', __VUE_OPTIONS_API__: 'true', __VUE_PROD_DEVTOOLS__: 'false', __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false' }),
-    vue({ css: false }), richAssets(), postcss({ extract: 'preview.css' }), nodeResolve({ browser: true, extensions: ['.mjs', '.js', '.vue'] }), commonjs(),
-  ],
+    vue({ css: false }), richAssets(), mindmapAssets(), postcss({ extract: 'preview.css' }), nodeResolve({ browser: true, extensions: ['.mjs', '.js', '.vue'] }), commonjs(),
+  ].filter(Boolean),
   onwarn(warning, warn) { if (!['CIRCULAR_DEPENDENCY', 'THIS_IS_UNDEFINED'].includes(warning.code)) warn(warning); },
 });
 await bundle.write({ dir: output, format: 'es', entryFileNames: 'preview.js', chunkFileNames: 'chunks/[name]-[hash].js' });
