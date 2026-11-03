@@ -59,6 +59,7 @@ npm run verify:compose
 
 - [产品状态](docs/STATUS.md)
 - [应用图片形象](docs/APP-IMAGES.md)
+- [界面语言与设备偏好](docs/LANGUAGE-PREFERENCES.md)
 - [部署与备份](docs/DEPLOY.md)
 - [安全边界](docs/SECURITY.md)
 - [测试说明](docs/TESTING.md)

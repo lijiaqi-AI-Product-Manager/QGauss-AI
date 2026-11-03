@@ -1,18 +1,18 @@
 <template>
   <Teleport defer to="#qg-chat-history">
     <!-- 左：会话列表 -->
-    <aside class="cv-convs qg-glass" :class="{ open: convOpen }" aria-label="会话列表">
+    <aside class="cv-convs qg-glass" :class="{ open: convOpen }" :aria-label="t('history.list')">
       <div class="cv-convs-head">
-        <button type="button" class="cv-new" title="新对话（Ctrl / ⌘ + K）" @click="newChat">
+        <button type="button" class="cv-new" :title="t('history.newShortcut')" @click="newChat">
           <el-icon><Plus /></el-icon>
-          <span>开启新对话</span>
+          <span>{{ t('history.start') }}</span>
         </button>
         <button
           type="button"
           class="qg-icon-btn"
           :class="{ 'cv-on': searchOpen }"
-          title="搜索对话"
-          aria-label="搜索对话"
+          :title="t('history.search')"
+          :aria-label="t('history.search')"
           @click="searchOpen = !searchOpen"
         >
           <el-icon><Search /></el-icon>
@@ -20,11 +20,11 @@
       </div>
       <div v-if="searchOpen" class="cv-search">
         <el-icon class="cv-search-icon"><Search /></el-icon>
-        <input v-model="convKeyword" placeholder="搜索对话" aria-label="搜索会话" />
+        <input v-model="convKeyword" :placeholder="t('history.search')" :aria-label="t('history.searchLabel')" />
       </div>
-      <div class="qgc-history-tabs" role="tablist" aria-label="对话类型"><button type="button" role="tab" :aria-selected="conversationKind === 'chat'" @click="conversationKind = 'chat'">AI对话</button><button type="button" role="tab" :aria-selected="conversationKind === 'app'" @click="conversationKind = 'app'">应用对话</button><button type="button" role="tab" :aria-selected="conversationKind === 'agent'" @click="conversationKind = 'agent'">搭档协作</button></div>
-      <div v-if="folders.length" class="cv-folders" role="tablist" aria-label="会话分组">
-        <button type="button" class="cv-folder" :class="{ active: folderFilter === '' }" @click="folderFilter = ''">全部</button>
+      <div class="qgc-history-tabs" role="tablist" :aria-label="t('history.kinds')"><button type="button" role="tab" :aria-selected="conversationKind === 'chat'" @click="conversationKind = 'chat'">{{ t('history.chat') }}</button><button type="button" role="tab" :aria-selected="conversationKind === 'app'" @click="conversationKind = 'app'">{{ t('history.app') }}</button><button type="button" role="tab" :aria-selected="conversationKind === 'agent'" @click="conversationKind = 'agent'">{{ t('history.agent') }}</button></div>
+      <div v-if="folders.length" class="cv-folders" role="tablist" :aria-label="t('history.folders')">
+        <button type="button" class="cv-folder" :class="{ active: folderFilter === '' }" @click="folderFilter = ''">{{ t('history.all') }}</button>
         <button
           v-for="f in folders"
           :key="f.id"
@@ -36,9 +36,9 @@
         >{{ f.name }} <span class="cv-folder-n">{{ f.conversationCount }}</span></button>
       </div>
       <div v-if="activeFolder" class="cv-folder-bar">
-        <span>分组「{{ activeFolder.name }}」</span>
-        <button type="button" class="cv-link" @click="renameFolder(activeFolder)">重命名</button>
-        <button type="button" class="cv-link danger" @click="removeFolder(activeFolder)">删除分组</button>
+        <span>{{ t('history.folder', {name:activeFolder.name}) }}</span>
+        <button type="button" class="cv-link" @click="renameFolder(activeFolder)">{{ t('history.rename') }}</button>
+        <button type="button" class="cv-link danger" @click="removeFolder(activeFolder)">{{ t('history.deleteFolder') }}</button>
       </div>
       <div class="cv-convs-list">
         <template v-if="loadingConvs">
@@ -59,50 +59,50 @@
             <span v-if="selecting" class="cv-check" aria-hidden="true">
               <el-icon v-if="selected.includes(c.id)"><Check /></el-icon>
             </span>
-            <span class="cv-conv-title" :title="c.title">{{ c.title || '新对话' }}</span><span v-if="c.activeMessageId" class="qgd-run-badge" role="status">{{ c.activeMessageStatus === 'SETTLING' ? '结算中' : '生成中' }}</span>
-            <el-icon v-if="c.pinned && !selecting" class="cv-pin-mark" title="已置顶"><StarFilled /></el-icon>
+            <span class="cv-conv-title" :title="c.title">{{ c.title || t('chat.new') }}</span><span v-if="c.activeMessageId" class="qgd-run-badge" role="status">{{ t(c.activeMessageStatus === 'SETTLING' ? 'history.settling' : 'history.generating') }}</span>
+            <el-icon v-if="c.pinned && !selecting" class="cv-pin-mark" :title="t('history.pinned')"><StarFilled /></el-icon>
             <span v-if="!selecting" class="cv-conv-ops" @click.stop>
               <el-dropdown trigger="click" size="small" @command="(cmd) => onConvCommand(c, cmd)">
-                <button type="button" class="cv-op" title="更多操作" aria-label="会话操作">
+                <button type="button" class="cv-op" :title="t('history.more')" :aria-label="t('history.actions')">
                   <el-icon><MoreFilled /></el-icon>
                 </button>
                 <template #dropdown>
                   <el-dropdown-menu>
-                    <el-dropdown-item command="pin">{{ c.pinned ? '取消置顶' : '置顶' }}</el-dropdown-item>
-                    <el-dropdown-item command="rename">重命名</el-dropdown-item>
+                    <el-dropdown-item command="pin">{{ t(c.pinned ? 'history.unpin' : 'history.pin') }}</el-dropdown-item>
+                    <el-dropdown-item command="rename">{{ t('history.rename') }}</el-dropdown-item>
                     <el-dropdown-item
                       v-for="f in folders"
                       :key="f.id"
                       :command="`move:${f.id}`"
                       :disabled="c.folderId === f.id"
-                    >移到「{{ f.name }}」</el-dropdown-item>
-                    <el-dropdown-item v-if="c.folderId" command="unfolder">移出分组</el-dropdown-item>
-                    <el-dropdown-item command="newfolder">移到新分组…</el-dropdown-item>
-                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                    >{{ t('history.moveTo', {name:f.name}) }}</el-dropdown-item>
+                    <el-dropdown-item v-if="c.folderId" command="unfolder">{{ t('history.unfolder') }}</el-dropdown-item>
+                    <el-dropdown-item command="newfolder">{{ t('history.newFolder') }}</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>{{ t('history.delete') }}</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
             </span>
           </div>
         </template>
-        <div v-if="!loadingConvs && conversations.length === 0" class="qgc-history-empty"><QBot mood="sleep" :size="45" /><b>灵感故事，从这里开始</b><small>{{ auth.isLoggedIn ? "开启对话后，会自动留在这里。" : "登录后，让每一次灵感都有迹可循。" }}</small></div>
-        <QEmpty v-else-if="!loadingConvs && convGroups.length === 0" compact mood="sleep" title="没找到匹配的会话" desc="换个关键词试试？" />
+        <div v-if="!loadingConvs && conversations.length === 0" class="qgc-history-empty"><QBot mood="sleep" :size="45" /><b>{{ t('history.empty') }}</b><small>{{ t(auth.isLoggedIn ? 'history.emptySignedIn' : 'history.emptyGuest') }}</small></div>
+        <QEmpty v-else-if="!loadingConvs && convGroups.length === 0" compact mood="sleep" :title="t('history.noMatch')" :desc="t('history.trySearch')" />
       </div>
       <div v-if="selecting" class="cv-bulk">
         <div class="cv-bulk-info">
-          <span>已选 {{ selected.length }} 个</span>
+          <span>{{ t('history.selected', {count:selected.length}) }}</span>
           <button type="button" class="cv-link" @click="toggleSelectAll">
-            {{ selected.length && selected.length === visibleConvIds.length ? '取消全选' : '全选' }}
+            {{ t(selected.length && selected.length === visibleConvIds.length ? 'history.deselectAll' : 'history.selectAll') }}
           </button>
         </div>
         <div class="cv-bulk-actions">
           <el-button size="small" type="danger" plain :disabled="!selected.length" @click="bulkDelete({ ids: selected })">
-            删除所选
+            {{ t('history.deleteSelected') }}
           </el-button>
-          <el-button size="small" plain @click="bulkDelete({ unpinnedOnly: true })">清空未置顶</el-button>
+          <el-button size="small" plain @click="bulkDelete({ unpinnedOnly: true })">{{ t('history.clearUnpinned') }}</el-button>
         </div>
       </div>
-      <div class="qgc-history-operations"><button type="button" @click="toggleSelecting">{{ selecting ? '退出批量管理' : '批量管理' }}</button><button type="button" :disabled="!visibleUnpinnedIds.length" @click="bulkDelete({ unpinnedOnly: true })">清空非置顶</button><button type="button" @click="createFolder">会话分组</button><button type="button" @click="router.push('/apps')">应用广场</button></div>
+      <div class="qgc-history-operations"><button type="button" @click="toggleSelecting">{{ t(selecting ? 'history.exitManage' : 'history.manage') }}</button><button type="button" :disabled="!visibleUnpinnedIds.length" @click="bulkDelete({ unpinnedOnly: true })">{{ t('history.clearUnpinnedShort') }}</button><button type="button" @click="createFolder">{{ t('history.folders') }}</button><button type="button" @click="router.push('/apps')">{{ t('shell.apps') }}</button></div>
     </aside>
   </Teleport>
   <EmptyChat v-if="!draftStarted && !conversationId" :models="models" :recent="conversations" @start="newChat" @open="openConversation" @voice="openHomeVoice" />
@@ -113,12 +113,12 @@
       <div class="cv-aurora" :class="`is-${auroraState}`" aria-hidden="true"><i></i><i></i><i></i></div>
       <div class="qgc-chat-stage">
       <header class="cv-top">
-        <button type="button" class="qg-icon-btn cv-only-narrow" aria-label="打开会话列表" @click="clientNavigationOpen = true">
+        <button type="button" class="qg-icon-btn cv-only-narrow" :aria-label="t('conversation.openHistory')" @click="clientNavigationOpen = true">
           <el-icon><Fold /></el-icon>
         </button>
-        <button type="button" class="qg-icon-btn" aria-label="打开外观实验室" title="外观实验室" @click="appearance.open = true"><ClientIcon name="palette" /></button>
+        <button type="button" class="qg-icon-btn" :aria-label="t('appearance.open')" :title="t('shell.appearance')" @click="appearance.open = true"><ClientIcon name="palette" /></button>
         <router-link v-if="agentId" class="cv-model" :to="{path:'/agent/app',query:{agent:agentId}}"><ClientIcon name="agent" /><span class="cv-model-name">{{ currentAgent?.name||'智能体搭档' }}</span></router-link>
-        <button v-else type="button" class="cv-model" :title="'切换模型'" aria-haspopup="dialog" :aria-expanded="panelOpen" @click="panelOpen = !panelOpen">
+        <button v-else type="button" class="cv-model" :title="t('conversation.switchModel')" aria-haspopup="dialog" :aria-expanded="panelOpen" @click="panelOpen = !panelOpen">
           <span class="cv-model-dot" :class="{ off: currentModel && !currentModel.ready }"></span>
           <span class="cv-model-name">{{ currentModel ? currentModel.displayName : t('chat.model') }}</span>
           <el-icon class="cv-model-caret"><ArrowDown /></el-icon>
@@ -130,13 +130,13 @@
           </button>
         </span>
         <span class="cv-grow"></span>
-        <span v-if="quota.limit > 0" class="cv-quota" title="今日已用 / 每日上限">{{ quota.used }} / {{ quota.limit }}</span>
+        <span v-if="quota.limit > 0" class="cv-quota" :title="t('conversation.quota')">{{ quota.used }} / {{ quota.limit }}</span>
         <button
           v-if="messages.length"
           type="button"
           class="qg-icon-btn"
-          title="导出为 Markdown"
-          aria-label="导出为 Markdown"
+          :title="t('conversation.export')"
+          :aria-label="t('conversation.export')"
           @click="exportMarkdown"
         >
           <el-icon><Download /></el-icon>
@@ -144,8 +144,8 @@
         <button
           type="button"
           class="qg-icon-btn"
-          :title="immersive ? '退出沉浸模式（Esc）' : '沉浸模式'"
-          :aria-label="immersive ? '退出沉浸模式' : '进入沉浸模式'"
+          :title="immersive ? t('conversation.exitImmersive') + ' (Esc)' : t('conversation.immersive')"
+          :aria-label="t(immersive ? 'conversation.exitImmersive' : 'conversation.enterImmersive')"
           @click="immersive = !immersive"
         >
           <el-icon><component :is="immersive ? 'Aim' : 'FullScreen'" /></el-icon>
@@ -154,8 +154,8 @@
           type="button"
           class="qg-icon-btn"
           :class="{ 'cv-on': panelOpen }"
-          v-if="!agentId" title="模型列表"
-          aria-label="模型列表"
+          v-if="!agentId" :title="t('conversation.modelList')"
+          :aria-label="t('conversation.modelList')"
           @click="panelOpen = !panelOpen"
         >
           <el-icon><Operation /></el-icon>
@@ -163,9 +163,9 @@
         <ConversationOutline :entries="outlineEntries" :scroller="scroller" :thread-key="conversationId || 'draft'" @navigate="atBottom = false" />
       </header>
 
-      <div ref="scroller" class="cv-scroll" role="log" aria-live="polite" aria-label="消息列表" @scroll.passive="onScroll">
+      <div ref="scroller" class="cv-scroll" role="log" aria-live="polite" :aria-label="t('conversation.messages')" @scroll.passive="onScroll">
         <div v-if="loadingDetail" class="cv-thread">
-          <QLoader text="正在翻聊天记录…" />
+          <QLoader :text="t('conversation.loading')" />
         </div>
 
         <section v-else-if="messages.length === 0 && agentId" class="qag-chat-intro"><span class="qag-mini-core" aria-hidden="true">Q</span><small>QGAUSS / YOUR ACTION PARTNER</small><h1>{{ currentAgent?.name||'正在迎接你的搭档…' }}</h1><p>{{ currentAgent?.greeting||'说说你的目标，让搭档一起向前推进。' }}</p><span>{{ contextOn?'沿当前分支接续协作':'使用独立的服务方会话' }}</span><router-link to="/agent">认识其他搭档<ClientIcon name="arrowUpRight" /></router-link></section>
@@ -194,10 +194,10 @@
               </div>
               <div class="cv-bubble">{{ m.content }}</div>
               <div class="cv-actions">
-                <button type="button" class="cv-act" title="复制" aria-label="复制" @click="copyMessage(m)">
+                <button type="button" class="cv-act" :title="t('conversation.copy')" :aria-label="t('conversation.copy')" @click="copyMessage(m)">
                   <el-icon><CopyDocument /></el-icon>
                 </button>
-                <button type="button" class="cv-act" title="编辑后重发" aria-label="编辑后重发" @click="editMessage(m)">
+                <button type="button" class="cv-act" :title="t('conversation.edit')" :aria-label="t('conversation.edit')" @click="editMessage(m)">
                   <el-icon><EditPen /></el-icon>
                 </button>
               </div>
@@ -208,12 +208,12 @@
                 <details v-if="m.reasoning" class="cv-think" :open="m.streaming && !m.content">
                   <summary>
                     <QStar :size="12" :twinkle="!!m.streaming && !m.content" />
-                    {{ m.streaming && !m.content ? '正在思考…' : '思考过程' }}
+                    {{ t(m.streaming && !m.content ? 'conversation.thinking' : 'conversation.reasoning') }}
                   </summary>
                   <div class="cv-think-body">{{ m.reasoning }}</div>
                 </details>
-                <div v-if="m.streaming && !m.content && !m.reasoning" class="cv-typing" aria-label="正在生成">
-                  <i></i><i></i><i></i><span>马上就来~</span>
+                <div v-if="m.streaming && !m.content && !m.reasoning" class="cv-typing" :aria-label="t('conversation.generating')">
+                  <i></i><i></i><i></i><span>{{ t('conversation.soon') }}</span>
                 </div>
                 <MarkdownMessage v-else-if="m.content" :content="m.streaming?m.content:citationMarkdown(m.content,m.webSearch)" :streaming="!!m.streaming" @rendered="scrollToBottom()" />
                 <WebSearchSources :value="m.webSearch" :streaming="!!m.streaming" />
@@ -222,34 +222,34 @@
                 <div v-if="m.billing?.limit" class="cv-billing" aria-label="本次对话次数"><QStar :size="12" /><span>{{ billingLabel(m.billing) }}</span></div>
                 <div v-if="!m.streaming" class="cv-actions">
                   <span v-if="branchInfo(m)" class="cv-branch">
-                    <button type="button" :disabled="branchInfo(m).index === 0" aria-label="上一个版本" @click="switchBranch(m, -1)">
+                    <button type="button" :disabled="branchInfo(m).index === 0" :aria-label="t('conversation.previous')" @click="switchBranch(m, -1)">
                       <el-icon><ArrowLeft /></el-icon>
                     </button>
                     <span>{{ branchInfo(m).index + 1 }} / {{ branchInfo(m).total }}</span>
                     <button
                       type="button"
                       :disabled="branchInfo(m).index === branchInfo(m).total - 1"
-                      aria-label="下一个版本"
+                      :aria-label="t('conversation.next')"
                       @click="switchBranch(m, 1)"
                     >
                       <el-icon><ArrowRight /></el-icon>
                     </button>
                   </span>
-                  <button type="button" class="cv-act" title="复制" aria-label="复制" @click="copyMessage(m)">
+                  <button type="button" class="cv-act" :title="t('conversation.copy')" :aria-label="t('conversation.copy')" @click="copyMessage(m)">
                     <el-icon><CopyDocument /></el-icon>
                   </button>
-                  <button v-if="m.status==='COMPLETED' && m.serverId && m.content" type="button" class="cv-act" title="朗读回答" aria-label="朗读回答" :disabled="voice.busy || streaming || loadingDetail" @click="voice.speak(m)"><ClientIcon name="sound" /></button>
+                  <button v-if="m.status==='COMPLETED' && m.serverId && m.content" type="button" class="cv-act" :title="t('conversation.speak')" :aria-label="t('conversation.speak')" :disabled="voice.busy || streaming || loadingDetail" @click="voice.speak(m)"><ClientIcon name="sound" /></button>
                   <button
                     type="button"
                     class="cv-act"
-                    title="重新生成"
-                    aria-label="重新生成"
+                    :title="t('conversation.regenerate')"
+                    :aria-label="t('conversation.regenerate')"
                     :disabled="streaming || m.status === 'SETTLING'"
                     @click="regenerate(m)"
                   >
                     <el-icon><RefreshRight /></el-icon>
                   </button>
-                  <button type="button" class="cv-act danger" title="删除" aria-label="删除" @click="removeMessage(m)">
+                  <button type="button" class="cv-act danger" :title="t('history.delete')" :aria-label="t('history.delete')" @click="removeMessage(m)">
                     <el-icon><Delete /></el-icon>
                   </button>
                   <span v-if="m.usage" class="cv-meta">
@@ -266,7 +266,7 @@
       <div class="cv-dock">
         <VoiceStudio :session="voice" :disabled="streaming || loadingDetail" />
         <button v-if="!atBottom && messages.length" type="button" class="cv-jump" @click="scrollToBottom(true)">
-          <el-icon><Bottom /></el-icon> 回到最新
+          <el-icon><Bottom /></el-icon> {{ t('conversation.latest') }}
         </button>
         <div
           ref="composerElement"
@@ -289,9 +289,9 @@
               <img v-if="f.kind === 'image' && f.preview" :src="f.preview" class="cv-pending-thumb" :alt="f.name" />
               <span v-else class="cv-att-ext">{{ extOf(f.name) }}</span>
               <span class="cv-pending-name">{{ f.name }}</span>
-              <span v-if="f.status === 'uploading'" class="cv-pending-state">上传中…</span>
-              <span v-else-if="f.status === 'error'" class="cv-pending-state">失败</span>
-              <button type="button" class="cv-pending-x" :aria-label="`移除 ${f.name}`" @click="removePending(f)">
+              <span v-if="f.status === 'uploading'" class="cv-pending-state">{{ t('conversation.uploading') }}</span>
+              <span v-else-if="f.status === 'error'" class="cv-pending-state">{{ t('conversation.failed') }}</span>
+              <button type="button" class="cv-pending-x" :aria-label="t('conversation.removeFile', {name:f.name})" @click="removePending(f)">
                 <el-icon><Close /></el-icon>
               </button>
             </div>
@@ -303,7 +303,7 @@
               class="cv-input"
               :rows="compactComposer ? 1 : 3"
               :placeholder="composerPlaceholder"
-              aria-label="消息输入框"
+              :aria-label="t('conversation.input')"
               :disabled="entryPending||loadingDetail"
               @input="autosize"
               @paste="onPaste"
@@ -325,13 +325,13 @@
         <p v-else-if="auth.isLoggedIn && currentModel" class="qgc-model-cost-note"><ClientIcon name="wallet" /><span>{{ modelBilling(currentModel).title }}</span><small>发送时按站点设置</small></p>
         <p v-if="webSearchOn" class="cv-web-search-note" role="status"><ClientIcon name="globe" />{{ currentModel?.webSearchAvailable ? '本轮允许模型按需要联网，仅发送当前问题和附件；仍按当前模型设置结算。' : '当前模型尚未接入联网，请关闭联网或选择支持的模型后发送。' }}</p>
         <div class="cv-tools">
-            <button v-if="!agentId" type="button" class="cv-chip" :aria-label="`选择模型：${currentModel?.displayName || '未选择'}`" aria-haspopup="dialog" :aria-expanded="panelOpen" :aria-busy="modelSaving" @click="panelOpen = !panelOpen">
+            <button v-if="!agentId" type="button" class="cv-chip" :aria-label="t('conversation.selectModel', {name:currentModel?.displayName || t('conversation.unselected')})" aria-haspopup="dialog" :aria-expanded="panelOpen" :aria-busy="modelSaving" @click="panelOpen = !panelOpen">
               <el-icon><Cpu /></el-icon>
-              <span class="cv-chip-text">{{ compactComposer && currentModel?.displayName?.length > 6 ? currentModel.displayName.slice(0, 5) + '..' : currentModel ? currentModel.displayName : '选择模型' }}</span><el-icon class="qgc-model-caret"><ArrowDown /></el-icon>
+              <span class="cv-chip-text">{{ compactComposer && currentModel?.displayName?.length > 6 ? currentModel.displayName.slice(0, 5) + '..' : currentModel ? currentModel.displayName : t('chat.model') }}</span><el-icon class="qgc-model-caret"><ArrowDown /></el-icon>
             </button>
             <el-dropdown v-if="!agentId && flatPresets.length" size="small" trigger="click" @command="usePreset">
-              <button type="button" class="cv-chip qgc-compact-tool" aria-label="预设" title="预设">
-                <el-icon><MagicStick /></el-icon><span class="cv-chip-text">预设</span>
+              <button type="button" class="cv-chip qgc-compact-tool" :aria-label="t('chat.preset')" :title="t('chat.preset')">
+                <el-icon><MagicStick /></el-icon><span class="cv-chip-text">{{ t('chat.preset') }}</span>
               </button>
               <template #dropdown>
                 <el-dropdown-menu>
@@ -353,10 +353,10 @@
             >
               <el-icon><Connection /></el-icon><span class="cv-chip-text">{{ contextOn&&!webSearchOn ? '上下文开' : '上下文关' }}</span>
             </button>
-            <button type="button" class="cv-plus" title="添加图片或文档（也可以粘贴 / 拖进来）" aria-label="添加附件" @click="fileInput?.click()"><el-icon><Plus /></el-icon></button>
-            <button type="button" class="cv-mic" :class="{ on: voice.recording }" title="语音输入与音色" aria-label="语音输入与音色" :aria-pressed="voice.open" @click="openVoice"><el-icon><Microphone /></el-icon></button>
-            <button v-if="streaming" type="button" class="cv-stop" aria-label="停止生成（Esc）" :disabled="stopping || activeRun?.target.status === 'SETTLING'" @click="stop"><span class="cv-stop-square"></span></button>
-            <button v-else type="button" class="cv-send" :disabled="!canSend" aria-label="发送" @click="send"><el-icon><Top /></el-icon></button>
+            <button type="button" class="cv-plus" :title="t('conversation.attachHint')" :aria-label="t('conversation.attach')" @click="fileInput?.click()"><el-icon><Plus /></el-icon></button>
+            <button type="button" class="cv-mic" :class="{ on: voice.recording }" :title="t('conversation.voice')" :aria-label="t('conversation.voice')" :aria-pressed="voice.open" @click="openVoice"><el-icon><Microphone /></el-icon></button>
+            <button v-if="streaming" type="button" class="cv-stop" :aria-label="t('conversation.stop')" :disabled="stopping || activeRun?.target.status === 'SETTLING'" @click="stop"><span class="cv-stop-square"></span></button>
+            <button v-else type="button" class="cv-send" :disabled="!canSend" :aria-label="t('chat.send')" @click="send"><el-icon><Top /></el-icon></button>
         </div>
         </div>
       </div>
@@ -739,11 +739,11 @@ const convGroups = computed(() => {
       (!kw || (c.title || '').toLowerCase().includes(kw)),
   );
   const groups = [
-    { key: 'pinned', label: '置顶', items: [] },
-    { key: 'today', label: '今天', items: [] },
-    { key: 'yesterday', label: '昨天', items: [] },
-    { key: 'week', label: '7 天内', items: [] },
-    { key: 'earlier', label: '更早', items: [] },
+    { key: 'pinned', label: t('history.pin'), items: [] },
+    { key: 'today', label: t('history.today'), items: [] },
+    { key: 'yesterday', label: t('history.yesterday'), items: [] },
+    { key: 'week', label: t('history.week'), items: [] },
+    { key: 'earlier', label: t('history.earlier'), items: [] },
   ];
   const byKey = new Map(groups.map((g) => [g.key, g]));
   // 按自然日分组，而不是「距今 24 小时」：昨晚 11 点的会话应当算昨天

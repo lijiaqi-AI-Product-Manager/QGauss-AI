@@ -1,4 +1,6 @@
 import { computed, ref } from 'vue';
+import {createLanguagePreferences} from './language-preferences.js';
+import {INTERFACE_MESSAGES,ROUTE_LANGUAGE_KEYS} from './interface-messages.js';
 
 const DICT = {
   zh: {
@@ -67,20 +69,23 @@ const DICT = {
   },
 };
 
-const lang = ref(localStorage.getItem('qg:lang') || 'zh');
+const state=ref(null);
+const preferences=createLanguagePreferences({onChange:value=>{state.value=value;}});
 
-export const currentLang = computed(() => lang.value);
+export const currentLang = computed(() => state.value.language);
+export const languageMode=computed(()=>state.value.preference);
+export const languageSaved=computed(()=>state.value.saved);
+export const deviceLang=computed(()=>state.value.device);
 
 export function setLang(next) {
-  lang.value = next === 'en' ? 'en' : next === 'zh-TW' ? 'zh-TW' : 'zh';
-  localStorage.setItem('qg:lang', lang.value);
-  document.documentElement.lang = lang.value === 'en' ? 'en' : lang.value === 'zh-TW' ? 'zh-TW' : 'zh-CN';
+  return preferences.set(next);
 }
 
-export function toggleLang() {
-  setLang(lang.value === 'zh' ? 'en' : 'zh');
+export function t(key, values) {
+  const message = INTERFACE_MESSAGES[currentLang.value]?.[key] ?? DICT[currentLang.value]?.[key] ?? DICT.zh[key] ?? key;
+  return values ? message.replace(/\{(\w+)\}/g, (token, name) => Object.hasOwn(values, name) ? String(values[name]) : token) : message;
 }
-
-export function t(key) {
-  return DICT[lang.value]?.[key] ?? DICT.zh[key] ?? key;
+export function routeTitle(path, {compact=false}={}) {
+  const key=ROUTE_LANGUAGE_KEYS[path];
+  return key ? compact && INTERFACE_MESSAGES[currentLang.value]?.[key+'.short'] || t(key) : '';
 }

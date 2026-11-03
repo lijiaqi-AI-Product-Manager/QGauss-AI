@@ -47,4 +47,4 @@ const traditional = {
 texts['zh-TW'] = { ...texts.zh, ...traditional };
 export function authText(key) { return texts[currentLang.value]?.[key] ?? texts.zh[key] ?? key; }
 export function authLanguage() { return currentLang.value === 'en' ? 'en-US' : currentLang.value === 'zh-TW' ? 'zh-TW' : 'zh-CN'; }
-export function setAuthLanguage(value) { setLang(value === 'en-US' ? 'en' : value === 'zh-TW' ? 'zh-TW' : 'zh'); }
+export function setAuthLanguage(value) { setLang(value === 'auto' ? 'auto' : value === 'en-US' ? 'en' : value === 'zh-TW' ? 'zh-TW' : 'zh'); }

@@ -121,3 +121,9 @@ html[data-qg-design]:has(.qgc-chat) .qgd-appearance-launcher{display:none}
 /* Text on primary brand surfaces follows the light/dark brand palette. */
 html[data-qg-design]{--qd-on-brand:#fff}
 html.dark[data-qg-design]{--qd-on-brand:#211c32}
+
+@media(max-width:380px){
+  .qgd-home-hero{display:flex;flex-direction:column;align-items:stretch;min-height:0}
+  .qgd-home-hero .qgd-home-copy p{max-width:none}
+  .qgd-home-hero>.qgd-sculpture{position:relative;left:auto;right:auto;bottom:auto;transform:none;width:210px;height:208px;align-self:center;margin-top:12px}
+}
