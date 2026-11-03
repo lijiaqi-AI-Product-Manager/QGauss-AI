@@ -213,7 +213,7 @@ async function main() {
       children: [
         { title: '对话', path: '/chat', icon: 'ChatDotRound', sort: 1 },
         { title: '应用', path: '/apps', icon: 'Grid', sort: 2 },
-        { title: '图像', path: '/image', icon: 'Picture', sort: 3 },
+        { title: '图像', path: '/image', icon: 'Picture', sort: 3 }, {title:'扩展工作台',path:'/extend',icon:'Grid',sort:5},
         { title: '预设', path: '/presets', icon: 'MagicStick', sort: 4 },
       ],
     },
@@ -227,7 +227,7 @@ async function main() {
         { title: '模型管理', path: '/models/list', icon: 'Files', sort: 2 },
         { title: '搭档控制室', path: '/agents/manage', icon: 'Connection', sort: 3 },
         { title: '声音控制台', path: '/voice/manage', icon: 'Microphone', sort: 4 },
-        { title: '视频控制台', path: '/video/manage', icon: 'VideoCamera', sort: 5 },
+        { title: '视频控制台', path: '/video/manage', icon: 'VideoCamera', sort: 5 }, {title:'扩展工具箱',path:'/extensions/manage',icon:'Grid',sort:6},
       ],
     },
     {

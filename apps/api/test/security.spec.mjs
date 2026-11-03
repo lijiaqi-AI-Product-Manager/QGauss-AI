@@ -118,7 +118,7 @@ async function serve(t, trust = false, production = false) {
   app.set('trust proxy', trust);
   app.use(securityHeaders(production));
   app.use(cors({ origin: corsOrigins('https://ui.qgauss.test', true), credentials: false }));
-  app.get('/', (req, res) => res.json({ ip: req.ip }));
+  app.get(['/','/extensions/idea-canvas.html','/extend','/extensions/manage','/extensions/another.html','/api/extensions'], (req, res) => res.json({ ip: req.ip }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve, reject) => { server.once('listening', resolve); server.once('error', reject); });
   t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
@@ -168,6 +168,15 @@ test('响应：CSP 禁止内联脚本但保留组件样式，HSTS 只在生产�
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(response.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
     assert.equal(response.headers.get('strict-transport-security'), production ? 'max-age=31536000' : null);
+  }
+});
+
+test('响应：只有独立内置画布允许同源嵌入，画布不接受网络连接或表单提交', async t => {
+  const base=await serve(t);
+  const canvas=await fetch(base+'/extensions/idea-canvas.html?view=notes'),csp=canvas.headers.get('content-security-policy');
+  assert.match(csp,/frame-ancestors 'self'/);assert.match(csp,/connect-src 'none'/);assert.match(csp,/form-action 'none'/);assert.equal(canvas.headers.get('x-frame-options'),'SAMEORIGIN');
+  for(const path of ['/extend','/extensions/manage','/extensions/another.html','/api/extensions']){
+    const response=await fetch(base+path);assert.match(response.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.equal(response.headers.get('x-frame-options'),'DENY');
   }
 });
 

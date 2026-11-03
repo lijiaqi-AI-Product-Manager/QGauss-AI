@@ -27,6 +27,7 @@ import { safeWebSearch } from '../../common/llm/web-search';
 import { publicAgentActivity, safeAgentActivity } from '../../common/llm/agent-activity';
 import { AgentsService } from '../agents/agents.service';
 import { AgentExecutionService } from '../agents/agent-execution.service';
+import {ExtensionsService} from '../extensions/extensions.service';
 
 type MsgStatus = 'PENDING' | 'STREAMING' | 'COMPLETED' | 'ABORTED' | 'FAILED';
 
@@ -51,6 +52,7 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
     private readonly attachments: AttachmentsService,
     @Optional() private readonly agents?:AgentsService,
     @Optional() private readonly agentExecution?:AgentExecutionService,
+    @Optional() private readonly extensions?:ExtensionsService,
   ) {}
 
   /**
@@ -120,6 +122,10 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
   // ---------------------------------------------------------------- 主流程
 
   async completions(userId: string, dto: ChatCompletionDto, res: Response) {
+    if (dto.extensionRequestKey && this.extensions) {
+      const accepted = await this.extensions.acceptedChat(userId, dto);
+      if (accepted) return this.events(userId, accepted, 0, res);
+    }
     const maxStreams = await this.settings.get<number>('chat.maxConcurrentStreams');
     const current = this.active.get(userId) ?? 0;
     if (current >= maxStreams) {
@@ -194,6 +200,9 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
       ? await this.prisma.conversation.findFirst({ where: { id: dto.conversationId, userId, deletedAt: null }, include: { model: { select: { name: true } } } })
       : null;
     if (dto.conversationId && !conversation) throw new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND, '会话不存在', 404);
+    if(dto.extensionRequestKey&&!this.extensions)throw new BusinessException(ErrorCode.CHANNEL_UNAVAILABLE,'扩展对话暂未准备好。',503);
+    const extensionAdmission=dto.extensionRequestKey?await this.extensions!.authorizeChat(userId,dto):null;
+    if(!dto.extensionRequestKey&&conversation?.params?.includes('"extensionRequestKey"'))await this.extensions?.requireInitialRequestKey(userId,conversation.id);
     if (conversation && dto.appId && dto.appId !== conversation.appId) {
       throw new BusinessException(ErrorCode.PARAM_INVALID, '当前会话的应用不可切换，请新建对话', 400);
     }
@@ -209,7 +218,7 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
     const app = appId ? await this.apps.getForChat(appId,userId) : null;
     if(app&&dto.appVersion!==undefined&&dto.appVersion!==app.version)throw new BusinessException(ErrorCode.PARAM_INVALID,'应用设定已变化，请重新打开并核对',409);
     const modelName =
-      dto.model ||
+      extensionAdmission?.modelName || dto.model ||
       conversation?.model?.name ||
       app?.defaultModel ||
       (await this.settings.get<string>('chat.defaultModel'));
@@ -224,7 +233,7 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
       : requestedMessages;
 
     // ---- 演示站模式：不调用上游，直接走本地演示流 ----
-    const demoMode = await this.settings.get<boolean>('demo.siteEnabled');
+    const demoMode = extensionAdmission?extensionAdmission.demoMode:await this.settings.get<boolean>('demo.siteEnabled');
 
     let model: any;
     let channels: any[];
@@ -276,7 +285,7 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
       if(!channels.length)throw new BusinessException(ErrorCode.CHANNEL_UNAVAILABLE,'当前模型没有支持联网的可用渠道，请更换模型或关闭联网',400);
     }
     // ---- 商业化：接受费用快照；在消息事务内原子预留 ----
-    const charge = agent?chatCharge(model,agent.commerceEnabled,false):await this.resolveCharge(model, demoMode);
+    const charge = agent?chatCharge(model,agent.commerceEnabled,false):extensionAdmission?extensionAdmission.charge:await this.resolveCharge(model, demoMode);
 
     // ---- 会话 ----
     const newConversation = !conversation;
@@ -333,6 +342,7 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
       await tx.$executeRaw`UPDATE "users" SET "id" = "id" WHERE "id" = ${userId}`;
       const eligible = await tx.user.findFirst({ where: { id: userId, status: 'ACTIVE', deletedAt: null }, select: { id: true } });
       if (!eligible) throw new BusinessException(ErrorCode.FORBIDDEN, '账户不可用', 403);
+      const extensionMessageId=extensionAdmission?await this.extensions!.assertChatTx(tx,extensionAdmission):null;
       if(agent)await this.agents!.assertOfferTx(tx,agent);
       if(app){const eligibleApp=await tx.app.findFirst({where:{AND:[accessibleAppWhere(userId,app.id),{version:app.version}]},select:{id:true}});if(!eligibleApp)throw new BusinessException(ErrorCode.PARAM_INVALID,'应用内容或公开状态已变化，请重新打开',409);if(app.origin==='USER'){const restricted=await this.moderation.checkTx(tx,[app.name,app.description,app.systemPrompt,app.greeting].filter(Boolean).join('\n'));if(restricted)throw new BusinessException(restricted.action==='block'?ErrorCode.CONTENT_BLOCKED:ErrorCode.CONTENT_REVIEW,'应用设定命中当前内容限制，请联系创作者调整',400);}}
       if (newConversation) await tx.conversation.create({ data: { id: conversationId, userId, modelId: demoMode ? null : model.id, appId: app?.id ?? null, agentId:agent?.agent.id??null,title } });
@@ -369,15 +379,15 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
         if (userMsg) {
           if (userMsg.deletedAt) throw new BusinessException(ErrorCode.CONVERSATION_BUSY, '此请求的消息已清空，请发送一条新消息', 409);
           const last = await tx.message.findFirst({
-            where: { parentId: userMsg.id, role: 'ASSISTANT', deletedAt: null },
-            orderBy: { createdAt: 'desc' },
+            where: { parentId: userMsg.id, role: 'ASSISTANT', deletedAt: null, ...(extensionMessageId?{id:extensionMessageId}:{}) },
+            orderBy: { createdAt: extensionAdmission?'asc':'desc' },
           });
           // 上一次请求还在跑：直接 409，既不重复生成也不覆盖进行中的结果
           if (last && (['PENDING', 'STREAMING', 'SETTLING'].includes(last.status))) {
             throw new BusinessException(ErrorCode.CONVERSATION_BUSY, '相同消息正在生成中，请稍候', 409);
           }
           // 只有“成功完成”才原样回放；失败/中止的允许重试，生成一条新的回答
-          if (last && last.status === 'COMPLETED') replayOf = last;
+          if (last && (last.status === 'COMPLETED'||extensionAdmission)) replayOf = last;
         }
       }
 
@@ -414,6 +424,7 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
             modelId: demoMode ? null : model.id,
           },
         }));
+      if(!replayOf&&extensionAdmission)await this.extensions!.bindChatTx(tx,extensionAdmission,createdAssistant.id);
       if(!replayOf&&agent)preparedAgent=await this.agentExecution!.prepareTx(tx,agent,userId,conversationId,createdAssistant.id,dto.agentParentId,nativeInput!.input);
       if (!replayOf && !agent && !demoMode && conversation.modelId !== model.id) {
         await tx.conversation.update({ where: { id: conversationId }, data: { modelId: model.id } });

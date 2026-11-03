@@ -56,3 +56,5 @@ html[data-qg-design] .qgc-history .cv-convs-body{flex:1;min-height:0;padding:0 0
   .qgc-popover{top:calc(100% + 12px);min-width:145px}.qgc-popover>a,.qgc-popover>button{font-size:11px}.qgc-nav-popover{max-width:70vw;max-height:60dvh;overflow:auto}.qgc-dialog{padding:22px;border-radius:24px}.qgc-dialog h2{font-size:18px}.qgc-dialog-nav{gap:8px}.qgc-dialog-nav label{font-size:10px;padding:10px}
 }
 .qgc-credit{white-space:nowrap;flex:none;min-height:36px}.qgc-credit>svg{width:15px;height:15px;flex:none}
+
+@media(min-width:640px){html[data-qg-design=play] .qgd-primary-navigation>div{flex:1;min-width:0;justify-content:flex-start;overflow-x:auto;scrollbar-width:none}html[data-qg-design=play] .qgd-primary-navigation>div::-webkit-scrollbar{display:none}html[data-qg-design=play] .qgd-primary-navigation>div>a{flex:none}}
