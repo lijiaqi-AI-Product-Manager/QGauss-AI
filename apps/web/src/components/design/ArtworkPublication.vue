@@ -1,13 +1,14 @@
 <template>
-  <section class="qga-publication" aria-label="作品公开确认" :aria-busy="busy">
-    <strong ref="heading" tabindex="-1">{{ desired?'让这份灵感，被更多人遇见。':'让这份作品，回到自己的空间。' }}</strong>
-    <p>{{ desired?'公开后，站内用户可浏览、保存作品，并复制公开的文字与设定。私有参考素材、原始任务身份和费用回执不会公开。':'撤回后，新的作品与媒体读取会停止。已保存到其他设备的内容无法远程收回。' }}</p>
-    <label v-if="desired">风格分类<select v-model="category" aria-label="公开作品分类" :disabled="busy||!identityValid"><option value="">暂不分类</option><option v-if="category&&!categories.some(row=>row.id===category)" :value="category" disabled>原分类已停用，请重新选择</option><option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option></select></label>
-    <p v-if="message" :role="error?'alert':'status'">{{ message }}</p>
-    <div><button v-if="satisfied" type="button" :disabled="busy||!identityValid" @click="finish">完成，回到作品</button><button v-else type="button" :disabled="busy||!identityValid||invalidCategory||unknown&&!checked" @click="submit(desired)">{{ busy?'正在核对回执…':checked?'再次确认'+(desired?'公开':'不公开'):'确认'+(desired?'公开':'撤回') }}</button><button v-if="attempted" type="button" :disabled="busy||!identityValid" @click="check">核对公开状态</button><button v-if="attempted&&desired" type="button" :disabled="busy||!identityValid" @click="submit(false)">明确设为不公开</button><button type="button" :disabled="busy||!identityValid" @click="emit('cancel')">{{ unknown?'稍后再核对':'保留现状' }}</button></div>
+  <section class="qga-publication" :aria-label="pt(&quot;作品公开确认&quot;)" :aria-busy="busy">
+    <strong ref="heading" tabindex="-1">{{ desired?pt("让这份灵感，被更多人遇见。"):pt("让这份作品，回到自己的空间。") }}</strong>
+    <p>{{ desired?pt("公开后，站内用户可浏览、保存作品，并复制公开的文字与设定。私有参考素材、原始任务身份和费用回执不会公开。"):pt("撤回后，新的作品与媒体读取会停止。已保存到其他设备的内容无法远程收回。") }}</p>
+    <label v-if="desired">{{ pt("风格分类") }}<select v-model="category" :aria-label="pt(&quot;公开作品分类&quot;)" :disabled="busy||!identityValid"><option value="">{{ pt("暂不分类") }}</option><option v-if="category&&!categories.some(row=>row.id===category)" :value="category" disabled>{{ pt("原分类已停用，请重新选择") }}</option><option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.name }}</option></select></label>
+    <p v-if="message" :role="error?'alert':'status'">{{ pt(message) }}</p>
+    <div><button v-if="satisfied" type="button" :disabled="busy||!identityValid" @click="finish">{{ pt("完成，回到作品") }}</button><button v-else type="button" :disabled="busy||!identityValid||invalidCategory||unknown&&!checked" @click="submit(desired)">{{ busy?pt("正在核对回执…"):checked?pt("再次确认{p0}",{p0:(desired?pt("公开"):pt("不公开"))}):pt("确认{p0}",{p0:(desired?pt("公开"):pt("撤回"))}) }}</button><button v-if="attempted" type="button" :disabled="busy||!identityValid" @click="check">{{ pt("核对公开状态") }}</button><button v-if="attempted&&desired" type="button" :disabled="busy||!identityValid" @click="submit(false)">{{ pt("明确设为不公开") }}</button><button type="button" :disabled="busy||!identityValid" @click="emit('cancel')">{{ unknown?pt("稍后再核对"):pt("保留现状") }}</button></div>
   </section>
 </template>
 <script setup>
+import {paintingText as pt} from "../../i18n/painting.js";
 import {computed,nextTick,onBeforeUnmount,onMounted,ref,watch} from 'vue';
 import {onBeforeRouteLeave} from 'vue-router';
 import {api} from '../../api/client.js';

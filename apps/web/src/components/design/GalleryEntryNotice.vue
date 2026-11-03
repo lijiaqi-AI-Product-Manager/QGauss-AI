@@ -1,11 +1,12 @@
 <template>
-  <section v-if="entry.present" class="qge-entry" :class="{blocked:entry.blocked}" aria-label="公开作品带入创作" :aria-busy="entry.pending">
+  <section v-if="entry.present" class="qge-entry" :class="{blocked:entry.blocked}" :aria-label="pt(&quot;公开作品带入创作&quot;)" :aria-busy="entry.pending">
     <div class="qge-entry-symbol"><QLoader v-if="entry.pending" :size="22"/><ClientIcon v-else name="gallery"/></div>
-    <div class="qge-entry-copy"><span>QGAUSS / AN IDEA TO MAKE YOUR OWN</span><strong>{{ entry.pending?'正在重新核对这份公开作品…':entry.source?.title||'先确认这次灵感入口' }}</strong><p v-if="entry.error" role="alert">{{ entry.error }}</p><p v-else-if="entry.offered">当前有尚未提交的想法。带入会替换当前文字与设置，私有参考素材不会跟随。</p><p v-else-if="entry.applied">{{ entry.source?.note||'公开文字与设定已带入，可以继续修改。请核对当前模型和参数，生成仍由你确认。' }}</p></div>
-    <div class="qge-entry-actions"><button v-if="entry.offered&&!entry.pending" type="button" @click="entry.confirm">用作品设定替换当前草稿</button><button v-else-if="entry.error&&!entry.pending" type="button" @click="entry.retry">重新核对作品</button><button type="button" @click="entry.cancel">{{ entry.applied?'保留草稿，收起说明':'保留当前草稿，暂不带入' }}</button></div>
+    <div class="qge-entry-copy"><span>QGAUSS / AN IDEA TO MAKE YOUR OWN</span><strong>{{ entry.pending?pt("正在重新核对这份公开作品…"):entry.source?.title||pt("先确认这次灵感入口") }}</strong><p v-if="entry.error" role="alert">{{ pt(entry.error) }}</p><p v-else-if="entry.offered">{{ pt("当前有尚未提交的想法。带入会替换当前文字与设置，私有参考素材不会跟随。") }}</p><p v-else-if="entry.applied">{{ pt(entry.source?.note)||pt("公开文字与设定已带入，可以继续修改。请核对当前模型和参数，生成仍由你确认。") }}</p></div>
+    <div class="qge-entry-actions"><button v-if="entry.offered&&!entry.pending" type="button" @click="entry.confirm">{{ pt("用作品设定替换当前草稿") }}</button><button v-else-if="entry.error&&!entry.pending" type="button" @click="entry.retry">{{ pt("重新核对作品") }}</button><button type="button" @click="entry.cancel">{{ entry.applied?pt("保留草稿，收起说明"):pt("保留当前草稿，暂不带入") }}</button></div>
   </section>
 </template>
 <script setup>
+import {paintingText as pt} from "../../i18n/painting.js";
 import ClientIcon from '../reference/ClientIcon.vue';
 import QLoader from '../QLoader.vue';
 defineProps({entry:{type:Object,required:true}});

@@ -6,7 +6,7 @@ import { SettingsService } from '../settings/settings.service';
 import { ModerationService } from '../moderation/moderation.service';
 import { StorageService } from '../storage/storage.service';
 import { ModelsService } from '../models/models.service';
-import { IMAGE_QUALITY_FACTORS } from './image-pricing';
+import { IMAGE_QUALITY_FACTORS, imageUnitCost } from './image-pricing';
 import { imageFeatures } from './image-features';
 import { ImageAccountingService } from './image-accounting.service';
 import { ImageRunsService } from './image-runs.service';
@@ -146,7 +146,7 @@ export class ImageService {
       cats,
       models: imageModels.map(m => { const bindings = m.channels.sort((a, b) => a.channel.priority - b.channel.priority || b.weight - a.weight); return { name: m.name, displayName: m.displayName, capabilities: m.capabilities, ready: bindings.length > 0, features: imageFeatures(bindings[0]?.channel.type ?? '', bindings[0]?.upstreamName) }; }),
       defaultFeatures: imageFeatures(defaultChannel?.type ?? '', defaultModel || (defaultChannel?.type === 'GEMINI' ? process.env.NANO_BANANA_MODEL || 'gemini-2.5-flash-image' : '')),
-      billing: { enabled: !!commerce && !demo && Number.isFinite(Number(cost)) && Number(cost) > 0, costPerImage: Number(cost) || 0, qualityFactors: IMAGE_QUALITY_FACTORS, pool: 'drawMj', reservation: true },
+      billing: { ready: imageUnitCost(!!commerce, !!demo, cost, 'auto') !== null, enabled: !!commerce && !demo && Number.isFinite(Number(cost)) && Number(cost) > 0, costPerImage: Number(cost) || 0, qualityFactors: IMAGE_QUALITY_FACTORS, pool: 'drawMj', reservation: true },
     };
   }
 

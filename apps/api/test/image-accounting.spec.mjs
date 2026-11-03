@@ -59,6 +59,24 @@ async function fixture(grant = { drawMjCount: 30 }) {
   return { user, ledger, accounting, service, settings, config, runs, storage, models, files, removed, create, stage, logs };
 }
 
+test('异常绘画费用在选项和接受任务时都要求核对，不展示免费也不创建任务或扣次数', async () => {
+  const f=await fixture(),before=await prisma.userBalance.findUnique({where:{userId:f.user.id}});
+  for(const value of [undefined,null,'',false,{},-1,1.5,'invalid',Infinity,536870912]){
+    f.config['commerce.imageCost']=value;
+    assert.equal((await f.service.options()).billing.ready,false);
+    await assert.rejects(()=>f.create(),/绘画费用配置无效/);
+  }
+  assert.equal(await prisma.imageTask.count({where:{userId:f.user.id}}),0);
+  assert.deepEqual(await prisma.userBalance.findUnique({where:{userId:f.user.id}}),before);
+});
+
+test('绘画选项区分明确零价与未就绪，历史数字配置与画质边界沿用实际接受规则', async () => {
+  const f=await fixture();
+  for(const [value,price]of [[0,0],['2',2],[268435455,268435455]]){f.config['commerce.imageCost']=value;const options=await f.service.options();assert.equal(options.billing.ready,true);assert.equal(await f.accounting.quote('auto'),price);assert.equal(await f.accounting.quote('high'),price*2);}
+  f.config['commerce.imageCost']=268435456;assert.equal((await f.service.options()).billing.ready,true);assert.equal(await f.accounting.quote('auto'),268435456);await assert.rejects(()=>f.accounting.quote('high'),/配置无效/);
+  f.config['commerce.imageCost']=undefined;f.config['commerce.enabled']=false;assert.equal((await f.service.options()).billing.ready,true);assert.equal(await f.accounting.quote('high'),0);f.config['commerce.enabled']=true;f.config['demo.siteEnabled']=true;assert.equal((await f.service.options()).billing.ready,true);assert.equal(await f.accounting.quote('auto'),0);
+});
+
 test('并发接受任务在同一事务预留次数，不透支，也不提前计入使用量', async () => {
   const f = await fixture({ drawMjCount: 6 });
   const answers = await Promise.allSettled([f.create({ n: 4 }), f.create({ n: 4 })]);

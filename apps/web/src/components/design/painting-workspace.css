@@ -38,3 +38,6 @@ html[data-qg-motion=reduced] .qp-workspace *,html[data-qg-motion=reduced] .qp-ar
   .qp-card-actions{gap:0}
   .qp-card-actions>button{width:100%}
 }
+.qp-price-recheck{display:inline-flex;align-items:center;justify-content:center;max-width:100%;min-height:44px;padding:8px 12px;margin-top:8px;border:1px solid var(--qd-edge);border-radius:12px;background:var(--qd-soft);color:var(--qd-brand);font:inherit;line-height:1.5;white-space:normal;cursor:pointer}
+.qp-price-recheck:focus-visible{outline:3px solid var(--qd-brand);outline-offset:3px}
+.qp-price-recheck:disabled{opacity:.5;cursor:wait}
