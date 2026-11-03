@@ -8,8 +8,10 @@ export const DESIGN_VARIANTS = Object.freeze([
 ]);
 const KEY = 'qg:appearance-v1';
 function read() {
-  try { const data = JSON.parse(localStorage.getItem(KEY) || 'null'); if (data && DESIGN_VARIANTS.some(item => item.id === data.variant)) return { variant: data.variant, motion: data.motion !== false, glass: Math.max(55, Math.min(95, Number(data.glass) || 78)), saved: true }; } catch { /* 使用可读的默认外观 */ }
-  return { variant: 'studio', motion: true, glass: 78, saved: false };
+  const defaults={variant:'studio',motion:true,glass:78,saved:false,saveFailed:false};let raw;
+  try{raw=localStorage.getItem(KEY);}catch{return{...defaults,saveFailed:true};}
+  try{const data=JSON.parse(raw||'null');if(data&&DESIGN_VARIANTS.some(item=>item.id===data.variant))return{variant:data.variant,motion:data.motion!==false,glass:Math.max(55,Math.min(95,Number(data.glass)||78)),saved:true,saveFailed:false};}catch{}
+  return defaults;
 }
 export const useAppearance = defineStore('appearance', {
   state: () => ({ ...read(), open: false, initialized: false }),
@@ -17,7 +19,7 @@ export const useAppearance = defineStore('appearance', {
   actions: {
     initialize() { if (this.initialized) return; this.initialized = true; if (!this.saved) useTheme().set(this.design.mode); this.apply(); },
     apply() { const root = document.documentElement; root.dataset.qgDesign = this.variant; root.dataset.qgMotion = this.motion ? 'full' : 'quiet'; root.style.setProperty('--qgd-glass-opacity', String(this.glass / 100)); },
-    save() { this.apply(); try { localStorage.setItem(KEY, JSON.stringify({ variant: this.variant, motion: this.motion, glass: this.glass })); } catch { /* 不阻断当前页面的选择 */ } },
+    save() { this.apply(); try { localStorage.setItem(KEY, JSON.stringify({ variant: this.variant, motion: this.motion, glass: this.glass })); this.saved=true;this.saveFailed=false; } catch { this.saveFailed=true; } },
     choose(variant) { if (!DESIGN_VARIANTS.some(item => item.id === variant)) return; this.variant = variant; useTheme().set(this.design.mode); this.save(); },
     setMotion(value) { this.motion = !!value; this.save(); },
     setGlass(value) { this.glass = Math.max(55, Math.min(95, Number(value) || 78)); this.save(); },

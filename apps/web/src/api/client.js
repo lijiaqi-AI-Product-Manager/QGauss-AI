@@ -1,4 +1,5 @@
 /** 统一 API 客户端：自动带 token、401 自动刷新一次、统一错误结构 */
+import {requestLanguageHeaders} from '../i18n/language-preferences.js';
 
 const BASE = '/api';
 
@@ -42,6 +43,7 @@ async function request(path, { method = 'GET', body, headers = {}, retry = true,
     method,
     signal,
     headers: {
+      ...requestLanguageHeaders(),
       ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(requestedToken ? { Authorization: `Bearer ${requestedToken}` } : {}),
       ...headers,
@@ -95,7 +97,7 @@ async function uploadMultipart(path, file, { retry = true, signal, fields = {} }
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
     signal,
-    headers: requestedToken ? { Authorization: `Bearer ${requestedToken}` } : {},
+    headers: { ...requestLanguageHeaders(),...(requestedToken ? { Authorization: `Bearer ${requestedToken}` } : {}) },
     body: fd,
   });
   if (res.status === 401 && retry && await canRenewCredential(requestedToken,requestedIdentity,signal) && requestedIdentity === accessIdentity && !signal?.aborted) {
@@ -117,7 +119,7 @@ export async function fetchBlob(path, { signal, retry = true } = {}) {
   if (typeof path !== 'string' || !path.startsWith(`${BASE}/`)) throw new ApiError(400, '文件地址无效', 400);
   const requestedToken = accessToken;
   const requestedIdentity = accessIdentity;
-  const res = await fetch(path, { signal, headers: requestedToken ? { Authorization: `Bearer ${requestedToken}` } : {} });
+  const res = await fetch(path, { signal, headers: {...requestLanguageHeaders(),...(requestedToken ? { Authorization: `Bearer ${requestedToken}` } : {})} });
   if (res.status === 401 && retry && await canRenewCredential(requestedToken,requestedIdentity,signal) && requestedIdentity === accessIdentity && !signal?.aborted) {
     void res.body?.cancel().catch(() => {});
     return fetchBlob(path, { signal, retry: false });
@@ -145,6 +147,7 @@ function observeChat({ payload, messageId: initialMessageId }, handlers) {
   let messageId = initialMessageId || null;
   let cursor = null;
   const callbacks = [];
+  const localeHeaders=requestLanguageHeaders();
   const alive = () => !controller.signal.aborted && (handlers.isCurrent ? handlers.isCurrent() : accessToken === sessionToken);
   const invoke = (name, ...args) => {
     if (!alive()) return;
@@ -169,7 +172,7 @@ function observeChat({ payload, messageId: initialMessageId }, handlers) {
         if (handlers.isCurrent) sessionToken = accessToken;
         const response = await fetch(BASE + path, {
           method: reconnect ? 'GET' : 'POST',
-          headers: { ...(reconnect ? {} : { 'Content-Type': 'application/json' }), ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}) },
+          headers: { ...localeHeaders,...(reconnect ? {} : { 'Content-Type': 'application/json' }), ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}) },
           ...(reconnect ? {} : { body: JSON.stringify(payload) }), signal: controller.signal,
         });
         if (!alive()) { void response.body?.cancel().catch(() => {}); break; }

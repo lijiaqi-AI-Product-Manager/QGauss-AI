@@ -160,7 +160,7 @@
           </router-link>
           <el-tag v-if="auth.user" class="qg-hide-mobile" size="small" type="info">{{ auth.user.role }}</el-tag>
           <el-button text @click="router.push('/account')">个人空间</el-button>
-          <el-button text @click="onToggleLang">{{ currentLang === 'zh' ? 'EN' : '中文' }}</el-button>
+          <LanguagePicker compact/>
           <el-button class="qg-hide-mobile" text @click="onLogout">{{ t('logout') }}</el-button>
         </div>
       </header>
@@ -218,7 +218,8 @@ import { useAuth } from './stores/auth.js';
 import { useBalance } from './stores/balance.js';
 import { useTheme } from './stores/theme.js';
 import { useUi } from './stores/ui.js';
-import { currentLang, t, toggleLang } from './i18n/index.js';
+import { t } from './i18n/index.js';
+import LanguagePicker from './components/design/LanguagePicker.vue';
 
 const auth = useAuth();
 useAppearance().initialize();
@@ -358,14 +359,15 @@ async function loadPublicSettings() {
     setCommerceEnabled(commerceEnabled.value);
     const text = pub?.['site.announcement'] ?? '';
     // 关掉过一次就不再用同一条公告打扰用户
-    if (text && localStorage.getItem(DISMISS_KEY) !== text) announcement.value = text;
+    let dismissed='';try{dismissed=localStorage.getItem(DISMISS_KEY)||'';}catch{}
+    if (text && dismissed !== text) announcement.value = text;
   } catch {
     /* 忽略 */
   }
 }
 
 function dismissAnnouncement() {
-  localStorage.setItem(DISMISS_KEY, announcement.value);
+  try{localStorage.setItem(DISMISS_KEY, announcement.value);}catch{}
   announcement.value = '';
 }
 
@@ -403,7 +405,4 @@ function onLogout() {
   router.push('/login');
 }
 
-function onToggleLang() {
-  toggleLang();
-}
 </script>
