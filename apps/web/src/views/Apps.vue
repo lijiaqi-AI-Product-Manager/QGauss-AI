@@ -1,59 +1,60 @@
 <template>
   <div class="qg-page apps-page">
     <el-tabs v-model="tab" class="qa-hub-tabs" :class="{ 'is-reader': !auth.isAdmin }">
-      <el-tab-pane label="灵感搭档馆" name="market"><AppDiscovery v-if="tab === 'market'" /></el-tab-pane>
+      <el-tab-pane :label="at('灵感搭档馆')" name="market"><AppDiscovery v-if="tab === 'market'" /></el-tab-pane>
 
-      <el-tab-pane v-if="auth.isAdmin" label="应用管理" name="admin">
+      <el-tab-pane v-if="auth.isAdmin" :label="at('应用管理')" name="admin">
         <div style="margin-bottom: 12px">
-          <el-button size="small" type="primary" @click="openCreate">新增应用</el-button>
+          <el-button size="small" type="primary" @click="openCreate">{{ at('新增应用') }}</el-button>
         </div>
         <el-table :data="adminApps" size="small">
-          <el-table-column prop="name" label="名称" width="160" />
-          <el-table-column label="分类" width="120">
-            <template #default="{ row }">{{ row.category?.name || '未分类' }}</template>
+          <el-table-column prop="name" :label="at('名称')" width="160" />
+          <el-table-column :label="at('分类')" width="120">
+            <template #default="{ row }">{{ row.category?.name || at('未分类') }}</template>
           </el-table-column>
-          <el-table-column prop="defaultModel" label="默认模型" width="140" />
+          <el-table-column prop="defaultModel" :label="at('默认模型')" width="140" />
           <el-table-column prop="systemPrompt" label="System Prompt" min-width="260" show-overflow-tooltip />
-          <el-table-column label="上架" width="90">
+          <el-table-column :label="at('上架')" width="90">
             <template #default="{ row }">
               <el-switch :model-value="row.published" @change="(v) => togglePublish(row, v)" />
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="140">
+          <el-table-column :label="at('操作')" width="140">
             <template #default="{ row }">
-              <el-button link size="small" @click="openEdit(row)">编辑</el-button>
-              <el-button link size="small" type="danger" @click="remove(row)">删除</el-button>
+              <el-button link size="small" @click="openEdit(row)">{{ at('编辑') }}</el-button>
+              <el-button link size="small" type="danger" @click="remove(row)">{{ at('删除') }}</el-button>
             </template>
           </el-table-column>
         </el-table>
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog v-model="visible" :title="editing ? '编辑应用' : '新增应用'" width="600">
+    <el-dialog v-model="visible" :title="editing ? at('编辑应用') : at('新增应用')" width="600">
       <el-form label-width="110">
-        <el-form-item label="名称"><el-input v-model="form.name" /></el-form-item>
-        <el-form-item label="分类">
-          <el-select v-model="form.categoryId" style="width: 100%" clearable placeholder="未分类">
+        <el-form-item :label="at('名称')"><el-input v-model="form.name" /></el-form-item>
+        <el-form-item :label="at('分类')">
+          <el-select v-model="form.categoryId" style="width: 100%" clearable :placeholder="at('未分类')">
             <el-option v-for="c in categories" :key="c.id" :label="c.name" :value="c.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="描述"><el-input v-model="form.description" /></el-form-item>
-        <el-form-item label="默认模型"><el-input v-model="form.defaultModel" placeholder="mock-chat" /></el-form-item>
-        <el-form-item label="开场白"><el-input v-model="form.greeting" /></el-form-item>
+        <el-form-item :label="at('描述')"><el-input v-model="form.description" /></el-form-item>
+        <el-form-item :label="at('默认模型')"><el-input v-model="form.defaultModel" placeholder="mock-chat" /></el-form-item>
+        <el-form-item :label="at('开场白')"><el-input v-model="form.greeting" /></el-form-item>
         <el-form-item label="System Prompt">
           <el-input v-model="form.systemPrompt" type="textarea" :rows="6" />
         </el-form-item>
-        <el-form-item label="上架"><el-switch v-model="form.published" /></el-form-item>
+        <el-form-item :label="at('上架')"><el-switch v-model="form.published" /></el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="visible = false">取消</el-button>
-        <el-button type="primary" @click="save">保存</el-button>
+        <el-button @click="visible = false">{{ at('取消') }}</el-button>
+        <el-button type="primary" @click="save">{{ at('保存') }}</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
+import {appText as at} from '../i18n/index.js';
 import { onMounted, reactive, ref } from 'vue';
 import { ElButton, ElDialog, ElForm, ElFormItem, ElInput, ElMessage, ElMessageBox, ElOption, ElSelect, ElSwitch, ElTabPane, ElTable, ElTableColumn, ElTabs } from 'element-plus';
 import { api } from '../api/client.js';
@@ -116,11 +117,11 @@ function openEdit(row) {
 }
 
 async function save() {
-  if (!form.name || !form.systemPrompt) return ElMessage.warning('名称和 System Prompt 必填');
+  if (!form.name || !form.systemPrompt) return ElMessage.warning(at('名称和 System Prompt 必填'));
   const payload = { ...form, categoryId: form.categoryId || null };
   if (editing.value) await api.patch(`/apps/admin/${editing.value.id}`, payload);
   else await api.post('/apps/admin/create', payload);
-  ElMessage.success('已保存');
+  ElMessage.success(at('已保存'));
   visible.value = false;
   await loadAdmin();
 }
@@ -131,7 +132,7 @@ async function togglePublish(row, published) {
 }
 
 async function remove(row) {
-  await ElMessageBox.confirm(`删除应用「${row.name}」？`, '提示', { type: 'warning' });
+  await ElMessageBox.confirm(at('删除应用「{name}」？',{name:row.name}), at('提示'), { type: 'warning' });
   await api.del(`/apps/admin/${row.id}`);
   await loadAdmin();
 }
@@ -139,7 +140,7 @@ async function remove(row) {
 onMounted(async () => {
   if (!auth.isAdmin) return;
   try { await Promise.all([loadCategories(), loadAdmin()]); }
-  catch (error) { ElMessage.error(error.message || '应用信息加载失败'); }
+  catch (error) { ElMessage.error(at(error.message || '应用信息加载失败')); }
 });
 </script>
 

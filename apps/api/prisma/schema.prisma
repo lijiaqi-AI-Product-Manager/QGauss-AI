@@ -742,6 +742,7 @@ model App {
   greeting     String?
   published    Boolean   @default(true)
   sort         Int       @default(0)
+  shareViewCount Int     @default(0)
   createdBy    String?
   ownerId      String?
   origin       String @default("CURATED")
@@ -763,6 +764,7 @@ model App {
 
   category AppCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   conversations Conversation[]
+  shareVisits AppShareVisit[]
   owner User? @relation("UserCreatedApps",fields:[ownerId],references:[id],onDelete:Cascade)
 
   @@index([categoryId, sort])
@@ -781,6 +783,17 @@ model AppFavorite {
   @@id([userId, appId])
   @@index([userId])
   @@map("app_favorites")
+}
+
+model AppShareVisit {
+  appId      String
+  requestKey String
+  createdAt  DateTime @default(now())
+  app        App @relation(fields:[appId],references:[id],onDelete:Cascade)
+
+  @@id([appId,requestKey])
+  @@index([createdAt])
+  @@map("app_share_visits")
 }
 
 model UserLoginLog {

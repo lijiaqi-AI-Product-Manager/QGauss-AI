@@ -1,6 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query,Header,Res,UploadedFile,UseGuards,UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query,Header,Res,Req,UploadedFile,UseGuards,UseInterceptors } from '@nestjs/common';
 import {FileInterceptor} from '@nestjs/platform-express';
-import type {Response} from 'express';
+import type {Request,Response} from 'express';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {OptionalAuth} from '../../common/decorators/optional-auth.decorator';
@@ -9,6 +9,8 @@ import {AppCreatorService} from './app-creator.service';
 import {AppImageService} from './app-image.service';
 import {AppImageUploadGuard} from './app-image-upload.guard';
 import {APP_IMAGE_MAX_BYTES} from './app-image';
+import {AppShareViewsService} from './app-share-views.service';
+import {AppShareVisitDto} from './dto/app-share-visit.dto';
 import {AppActionDto,CreateOwnedAppDto,ReviewOwnedAppDto,UpdateOwnedAppDto} from './dto/creator-app.dto';
 import {
   CreateAppDto,
@@ -20,7 +22,7 @@ import {
 
 @Controller('apps')
 export class AppsController {
-  constructor(private readonly apps: AppsService,private readonly creator:AppCreatorService,private readonly images:AppImageService) {}
+  constructor(private readonly apps: AppsService,private readonly creator:AppCreatorService,private readonly images:AppImageService,private readonly shareViews:AppShareViewsService) {}
 
   @Post('icons') @UseGuards(AppImageUploadGuard) @UseInterceptors(FileInterceptor('file',{limits:{fileSize:APP_IMAGE_MAX_BYTES,files:1,fields:2,fieldSize:1024,parts:3}}))
   uploadIcon(@CurrentUser() user:AuthUser,@Body('requestKey') key:unknown,@Body('crop') crop:unknown,@UploadedFile() file:any){return this.images.upload(user.id,key,crop,file);}
@@ -40,6 +42,8 @@ export class AppsController {
   @Post('mine/:id/restore') restoreOwned(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:AppActionDto){return this.creator.action(user.id,id,dto,'restore');}
   @Post('mine/:id/reconcile') reconcileOwned(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:AppActionDto){return this.creator.reconcile(user.id,id,dto);}
   @OptionalAuth() @Get('shared/:shareId') shared(@CurrentUser() user:AuthUser|undefined,@Param('shareId') id:string){return this.creator.shared(user?.id,id);}
+  @OptionalAuth() @Get('shared/:shareId/views') @Header('Cache-Control','no-store') sharedViews(@Param('shareId') id:string){return this.shareViews.read(id);}
+  @OptionalAuth() @Post('shared/:shareId/visits') @Header('Cache-Control','no-store') recordSharedVisit(@CurrentUser() user:AuthUser|undefined,@Param('shareId') id:string,@Body() dto:AppShareVisitDto,@Req() req:Request){return this.shareViews.record(id,dto.requestKey,user?.id||req.ip||req.socket.remoteAddress||'unknown');}
   @Roles('ADMIN') @Get('admin/review') reviewList(@Query('status') status?:string,@Query('page') page?:string,@Query('pageSize') size?:string){return this.creator.reviews(status,page,size);}
   @Roles('ADMIN') @Get('admin/review/:id') reviewDetail(@Param('id') id:string){return this.creator.reviewDetail(id);}
   @Roles('ADMIN') @Post('admin/review/:id') review(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:ReviewOwnedAppDto){return this.creator.review(user.id,id,dto);}

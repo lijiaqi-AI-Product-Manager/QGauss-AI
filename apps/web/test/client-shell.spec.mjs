@@ -1,3 +1,4 @@
+import {registerAppExperienceTests} from './app-experience-ui.cases.mjs';
 import {registerLanguageTests} from './language-ui.cases.mjs';
 import {registerAppImageTests} from './app-image-ui.cases.mjs';
 import {registerVideoSpeakerTests} from './video-speaker-ui.cases.mjs';
@@ -2068,7 +2069,19 @@ test('视频素材预览：按需读取，移除中的迟到文件不能恢复�
  try{filmSelect('[aria-label="视频创作模型"]','qg-film-upscale');await settle();filmSelect('[aria-label="从当前片库页选择视频"]',row.id);await settle();videoClick('带入 ↗');await settle();await settle();assert.equal(f.calls.some(c=>c.url==='/api/upload/preview-owned-video/raw'),false);document.querySelector('[aria-label="预览视频素材 1"]').click();await settle();assert.equal(f.calls.filter(c=>c.url==='/api/upload/preview-owned-video/raw').length,1);document.querySelector('[aria-label="移除视频素材 1"]').click();await settle();release();await settle();await settle();assert.equal(document.querySelector('.qvm-card'),null);assert.deepEqual(f.errors,[]);}finally{release();await f.close();}
 });
 
-function creatorInterceptor(extra,data=appStudioFixtures('creator-ready','test-user')){return async call=>{const result=await extra?.(call,data);if(result)return result;const url=new URL(call.url,'http://qgauss.test');if(call.method==='GET'&&Object.hasOwn(data,url.pathname))return relayJson(appStudioPage(data[url.pathname],url));};}
+function creatorInterceptor(extra,data=appStudioFixtures('creator-ready','test-user')){
+ const visits=new Set();
+ return async call=>{const result=await extra?.(call,data);if(result)return result;const url=new URL(call.url,'http://qgauss.test');
+  if(call.method==='POST'&&/\/apps\/shared\/[^/]+\/visits$/.test(url.pathname)){
+   const shared=data[url.pathname.replace(/\/visits$/,'')];if(!shared)return relayJson('分享不可用',404);
+   const app=data['/api/apps/'+shared.id],receipt=shared.id+':'+call.body.requestKey,counted=!visits.has(receipt);visits.add(receipt);
+   if(counted)app.shareViewCount=(app.shareViewCount||0)+1;
+   for(const row of data['/api/apps']||[])if(row.id===app.id)row.shareViewCount=app.shareViewCount;
+   return relayJson({id:app.id,shareViewCount:app.shareViewCount,counted});
+  }
+  if(call.method==='GET'&&Object.hasOwn(data,url.pathname))return relayJson(appStudioPage(data[url.pathname],url));
+ };
+}
 const creatorRow=(extra={})=>({...appStudioFixtures('creator-ready','test-user')['/api/apps/mine/qg-role-1'],...extra});
 function creatorFill(name='新灵感搭档'){relayInput('[aria-label="自建应用名称"]',name);relayInput('[aria-label="自建应用角色设定"]','只保留在编辑器中的私人设定。');}
 async function creatorSave(){document.querySelector('.qcs-editor').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));await settle();await settle();}
@@ -2117,7 +2130,7 @@ test('应用审核：新档案加载失败清除旧设定，账户变化不重�
  let release;const held=new Promise(r=>release=r);const f=await mount({loggedIn:true,admin:true,initialPath:'/apps/manage',intercept:creatorInterceptor(async call=>{if(call.url==='/api/apps/admin/review/qg-role-2'){await held;return relayJson(creatorRow({name:'旧账户私有内容'}));}})});try{document.querySelector('.qar-row').click();await settle();assert.equal(document.querySelector('[aria-label="待审核角色设定"]'),null);f.auth.clearLocal();await settle();release();await settle();assert.equal(document.querySelector('[aria-label="待审核角色设定"]'),null);assert.equal(document.body.textContent.includes('旧账户私有内容'),false);assert.deepEqual(f.errors,[]);}finally{release();await f.close();}
 });
 test('应用入口：两种分享参数都只打开详情，访客开始协作保留登录返回地址',async()=>{
- for(const param of ['shareId','shareAppId']){const data=appStudioFixtures();const f=await mount({initialPath:'/app-store?'+param+'=qg-role-share-3',realGuard:true,intercept:creatorInterceptor(null,data)});try{await settle();assert.equal(f.router.currentRoute.value.path,'/apps');assert.equal(document.querySelector('.qa-detail-dialog').open,true);assert.match(document.querySelector('#qa-detail-title').textContent,/你的文字搭档/);assert.equal(studioWrites(f).length,0);document.querySelector('.qa-detail-actions .qa-start').click();await settle();assert.equal(f.router.currentRoute.value.path,'/login');assert.equal(f.router.currentRoute.value.query.redirect,'/chat?app=qg-role-3');assert.deepEqual(f.errors,[]);}finally{await f.close();}}
+ for(const param of ['shareId','shareAppId']){const data=appStudioFixtures();const f=await mount({initialPath:'/app-store?'+param+'=qg-role-share-3',realGuard:true,intercept:creatorInterceptor(null,data)});try{await settle();assert.equal(f.router.currentRoute.value.path,'/apps');assert.equal(document.querySelector('.qa-detail-dialog').open,true);assert.match(document.querySelector('#qa-detail-title').textContent,/你的文字搭档/);assert.equal(studioWrites(f).filter(c=>!c.url.endsWith('/visits')).length,0);assert.equal(studioWrites(f).filter(c=>c.url.endsWith('/visits')).length,1);document.querySelector('.qa-detail-actions .qa-start').click();await settle();assert.equal(f.router.currentRoute.value.path,'/login');assert.equal(f.router.currentRoute.value.query.redirect,'/chat?app=qg-role-3');assert.deepEqual(f.errors,[]);}finally{await f.close();}}
 });
 test('应用入口：失效或重复分享参数明确提示，不打开其他应用或发起对话',async()=>{
  for(const query of ['shareId=missing','shareId=x&shareId=y']){const f=await mount({initialPath:'/apps?'+query,intercept:creatorInterceptor(call=>call.url.startsWith('/api/apps/shared/')?relayJson('不可用',404):null)});try{await settle();assert.match(document.querySelector('.qa-inline-error').textContent,/分享|链接/);assert.equal(document.querySelector('.qa-detail-dialog').open,false);assert.equal(studioWrites(f).length,0);assert.deepEqual(f.errors,[]);}finally{await f.close();}}
@@ -2345,3 +2358,5 @@ registerVideoSpeakerTests({test,assert,mount,settle,relayJson,filmToolsData,film
 registerAppImageTests({test,assert,mount,settle,relayJson});
 
 registerLanguageTests({test,assert,mount,settle,relayJson,setLang});
+
+registerAppExperienceTests({test,assert,mount,settle,relayJson,creatorInterceptor,appStudioFixtures,creatorRow});
