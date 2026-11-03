@@ -46,6 +46,7 @@ export class StorageService {
   }
 
   async upload(userId: string, file: IncomingFile, scope = 'chat') {
+    if (scope === 'app-icon') throw new BusinessException(ErrorCode.PARAM_INVALID, '请从应用编辑页添加图片形象', 400);
     if (!file || !file.buffer?.length) {
       throw new BusinessException(ErrorCode.PARAM_INVALID, '没有收到文件');
     }
@@ -173,7 +174,7 @@ export class StorageService {
     if (!row || row.deletedAt || row.purgedAt || row.expiresAt && row.expiresAt <= new Date()) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '文件不存在', 404);
     }
-    if (row.userId !== userId && (role !== 'ADMIN'||['voice-recording','voice-result'].includes(row.scope))) {
+    if (row.userId !== userId && (role !== 'ADMIN'||['voice-recording','voice-result','app-icon'].includes(row.scope))) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '文件不存在', 404);
     }
     return row;
@@ -188,7 +189,7 @@ export class StorageService {
     const row = await this.findOwned(id, userId, role);
     if (['video','video-input'].includes(row.scope) && row.mime === 'video/mp4' && (!row.size || row.size > 96 * 1024 * 1024)) throw new BusinessException(ErrorCode.PARAM_INVALID, '成片大小超过限制');
     const buffer = ['video','video-input'].includes(row.scope) && row.mime === 'video/mp4' ? await streamBuffer(addAbortSignal(AbortSignal.timeout(120000), await this.driver.openRange(row.storedKey, 0, row.size - 1, row.size))) : await this.driver.get(row.storedKey);
-    return { buffer, mime: row.mime, filename: row.filename };
+    return { buffer, mime: row.mime, filename: row.filename,scope:row.scope };
   }
 
   async streamRange(id: string, userId: string, role: string, start: number, end: number) {
@@ -198,6 +199,7 @@ export class StorageService {
 
   async remove(id: string, userId: string, role: string) {
     const row = await this.findOwned(id, userId, role);
+    if(row.scope==='app-icon') throw new BusinessException(ErrorCode.PARAM_INVALID,'应用图片随应用内容管理，请在编辑页更换',409);
     await this.prisma.uploadFile.update({ where: { id }, data: { deletedAt: new Date() } });
     await this.driver.remove(row.storedKey).catch((e) => this.logger.warn(`删除文件失败: ${e.message}`));
     return { ok: true };
@@ -213,17 +215,45 @@ export class StorageService {
     return{purged:true};
   }
 
+  /** The id identifies one normalized image operation; a retry never replaces its bytes. */
+  async saveAppImage(userId:string,id:string,buffer:Buffer){
+    const sha256=createHash('sha256').update(buffer).digest('hex');
+    const verify=(row:any)=>{
+      if(!row||row.userId!==userId||row.scope!=='app-icon'||row.sha256!==sha256)throw new BusinessException(ErrorCode.PARAM_INVALID,'同一图片保存标识不能用于不同内容',409);
+      if(row.deletedAt||row.purgedAt||row.expiresAt&&row.expiresAt<=new Date())throw new BusinessException(ErrorCode.PARAM_INVALID,'这份临时图片已过期，请重新选择',409);
+      return row;
+    };
+    const previous=await this.prisma.uploadFile.findUnique({where:{id}});if(previous)return verify(previous);
+    const now=new Date(),key=`${now.getUTCFullYear()}/${String(now.getUTCMonth()+1).padStart(2,'0')}/${randomUUID()}.png`;
+    await this.driver.put(key,buffer);
+    try{const row=await this.prisma.$transaction(async tx=>{
+      await tx.$executeRaw`UPDATE "users" SET "id"="id" WHERE "id"=${userId}`;
+      const actor=await tx.user.findFirst({where:{id:userId,status:'ACTIVE',deletedAt:null},select:{id:true}});if(!actor)throw new BusinessException(ErrorCode.FORBIDDEN,'当前身份不能保存图片',403);
+      const old=await tx.uploadFile.findUnique({where:{id}});if(old)return verify(old);
+      if(await tx.uploadFile.count({where:{userId,scope:'app-icon',deletedAt:null,purgedAt:null,expiresAt:{not:null,gt:now}}})>=40)throw new BusinessException(ErrorCode.PARAM_INVALID,'临时图片已满，请先使用已有图片或稍后再试',409);
+      return tx.uploadFile.create({data:{id,userId,scope:'app-icon',filename:'QGauss-app-image.png',storedKey:key,mime:'image/png',size:buffer.length,sha256,backend:this.driver.name,expiresAt:new Date(now.getTime()+86400000)}});
+    });if(row.storedKey!==key)await this.driver.remove(key).catch(()=>{});return row;}catch(error){await this.driver.remove(key).catch(()=>{});throw error;}
+  }
+
+  async purgeAppImage(id:string,userId:string){
+    const row=await this.prisma.uploadFile.findFirst({where:{id,userId,scope:'app-icon'}});
+    if(!row||row.purgedAt)return;
+    if(!row.deletedAt)throw new Error('App image must expire before cleanup');
+    await this.driver.remove(row.storedKey);
+    await this.prisma.uploadFile.updateMany({where:{id,userId,scope:'app-icon',deletedAt:{not:null},purgedAt:null},data:{purgedAt:new Date()}});
+  }
+
   async listMine(userId: string, page = 1, pageSize = 20) {
     const safePage = Number.isFinite(page) ? Math.max(1, Math.floor(page)) : 1;
     const safeSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Math.floor(pageSize))) : 20;
     const [items, total] = await Promise.all([
       this.prisma.uploadFile.findMany({
-        where: { userId, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] },
+        where: { userId, scope:{not:'app-icon'}, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] },
         orderBy: { createdAt: 'desc' },
         skip: (safePage - 1) * safeSize,
         take: safeSize,
       }),
-      this.prisma.uploadFile.count({ where: { userId, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] } }),
+      this.prisma.uploadFile.count({ where: { userId, scope:{not:'app-icon'}, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] } }),
     ]);
     return { items: items.map((r) => this.view(r)), total, page: safePage, pageSize: safeSize };
   }

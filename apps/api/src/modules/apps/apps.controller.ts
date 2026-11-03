@@ -1,9 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query,Header,Res,UploadedFile,UseGuards,UseInterceptors } from '@nestjs/common';
+import {FileInterceptor} from '@nestjs/platform-express';
+import type {Response} from 'express';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import {OptionalAuth} from '../../common/decorators/optional-auth.decorator';
 import { AppsService } from './apps.service';
 import {AppCreatorService} from './app-creator.service';
+import {AppImageService} from './app-image.service';
+import {AppImageUploadGuard} from './app-image-upload.guard';
+import {APP_IMAGE_MAX_BYTES} from './app-image';
 import {AppActionDto,CreateOwnedAppDto,ReviewOwnedAppDto,UpdateOwnedAppDto} from './dto/creator-app.dto';
 import {
   CreateAppDto,
@@ -15,7 +20,14 @@ import {
 
 @Controller('apps')
 export class AppsController {
-  constructor(private readonly apps: AppsService,private readonly creator:AppCreatorService) {}
+  constructor(private readonly apps: AppsService,private readonly creator:AppCreatorService,private readonly images:AppImageService) {}
+
+  @Post('icons') @UseGuards(AppImageUploadGuard) @UseInterceptors(FileInterceptor('file',{limits:{fileSize:APP_IMAGE_MAX_BYTES,files:1,fields:2,fieldSize:1024,parts:3}}))
+  uploadIcon(@CurrentUser() user:AuthUser,@Body('requestKey') key:unknown,@Body('crop') crop:unknown,@UploadedFile() file:any){return this.images.upload(user.id,key,crop,file);}
+  @Get('icons/by-request/:key') @Header('Cache-Control','private, no-store') imageByRequest(@CurrentUser() user:AuthUser,@Param('key') key:string){return this.images.byRequest(user.id,key);}
+  @Get('icons/:id/raw') async privateIcon(@CurrentUser() user:AuthUser,@Param('id') id:string,@Res() res:Response){this.sendIcon(res,await this.images.privateImage(user.id,id));}
+  @OptionalAuth() @Get(':id/icon') async appIcon(@CurrentUser() user:AuthUser|undefined,@Param('id') id:string,@Query('imageId') imageId:unknown,@Res() res:Response){this.sendIcon(res,await this.images.appImage(id,imageId,user));}
+  private sendIcon(res:Response,file:{buffer:Buffer}){res.setHeader('Cache-Control','private, no-store');res.setHeader('Content-Type','image/png');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Content-Disposition','inline; filename="QGauss-app-image.png"');res.end(file.buffer);}
 
   @Get('mine') mine(@CurrentUser() user:AuthUser,@Query('view') view?:string){return this.creator.listMine(user.id,view);}
   @Get('mine/by-request/:key') createdByRequest(@CurrentUser() user:AuthUser,@Param('key') key:string){return this.creator.byRequest(user.id,key);}

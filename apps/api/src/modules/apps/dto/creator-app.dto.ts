@@ -1,10 +1,10 @@
 import {Transform} from 'class-transformer';
-import {IsIn,IsInt,IsOptional,IsString,IsUUID,Length,Max,Min,ValidateIf} from 'class-validator';
+import {IsIn,IsInt,IsOptional,IsString,IsUUID,Length,Matches,Max,Min,ValidateIf} from 'class-validator';
 const raw=({obj,key}:{obj:any;key:string})=>obj[key];
 export class CreatorAppContentDto {
  @Transform(raw) @IsString() @Length(1,64) name:string;
  @Transform(raw) @IsString() @Length(0,240) description:string;
- @IsIn(['🪐','🎨','🧠','📝','🧭','💻']) icon:string;
+ @Transform(raw) @IsString() @Matches(/^(?:🪐|🎨|🧠|📝|🧭|💻|qgauss:app-icon:ai_[a-f\d]{48})$/u) icon:string;
  @Transform(raw) @IsString() @Length(1,8000) systemPrompt:string;
  @Transform(raw) @IsString() @Length(0,1000) greeting:string;
  @IsOptional() @Transform(raw) @IsString() @Length(1,128) defaultModel?:string|null;

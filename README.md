@@ -58,6 +58,7 @@ npm run verify:compose
 问题与功能改动通过 Issue 跟踪，改动分支通过 Pull Request 合入。提交要求见 [贡献规范](CONTRIBUTING.md)。
 
 - [产品状态](docs/STATUS.md)
+- [应用图片形象](docs/APP-IMAGES.md)
 - [部署与备份](docs/DEPLOY.md)
 - [安全边界](docs/SECURITY.md)
 - [测试说明](docs/TESTING.md)

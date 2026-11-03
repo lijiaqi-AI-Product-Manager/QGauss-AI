@@ -1,3 +1,4 @@
+import {registerAppImageTests} from './app-image-ui.cases.mjs';
 import {registerVideoSpeakerTests} from './video-speaker-ui.cases.mjs';
 import {registerVoiceComposerTests} from './voice-composer-ui.cases.mjs';
 /** 用真实 Vue 组件验证跨路由挂载及鉴权动作；jsdom 不承担像素或原生焦点验收。 */
@@ -2338,3 +2339,5 @@ registerExtensionWorkbenchTests({test,assert,mount,settle,relayJson});
 registerVoiceComposerTests({test,assert,mount,settle,relayJson});
 
 registerVideoSpeakerTests({test,assert,mount,settle,relayJson,filmToolsData,filmSelect,filmAddFile});
+
+registerAppImageTests({test,assert,mount,settle,relayJson});

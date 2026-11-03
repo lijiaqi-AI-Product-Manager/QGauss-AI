@@ -8,12 +8,13 @@ import {LedgerService} from '../commerce/ledger.service';
 import {ModerationService} from '../moderation/moderation.service';
 import {AppActionDto,CreateOwnedAppDto,CreatorAppContentDto,ReviewOwnedAppDto,UpdateOwnedAppDto} from './dto/creator-app.dto';
 import {publicAppWhere} from './app-visibility';
+import {appImageId,APP_IMAGE_SCOPE,APP_IMAGE_ICONS} from './app-image';
 
 const bad=(message:string,status=400)=>new BusinessException(ErrorCode.PARAM_INVALID,message,status),missing=()=>new BusinessException(ErrorCode.NOT_FOUND,'没有找到这份应用',404);
 const sha=(data:unknown)=>createHash('sha256').update(JSON.stringify(data)).digest('hex');
 const REWARDS={model3:'apps.reviewReward.model3',model4:'apps.reviewReward.model4',drawMj:'apps.reviewReward.drawMj',agent:'apps.reviewReward.agent'} as const;
 const OWNER_SELECT={id:true,username:true,displayName:true,role:true,status:true,deletedAt:true} as const;
-const icons=['🪐','🎨','🧠','📝','🧭','💻'];
+const icons=APP_IMAGE_ICONS;
 const parse=<T>(text:string|null|undefined,fallback:T):T=>{try{return JSON.parse(text||'') as T;}catch{return fallback;}};
 const editable=(row:any)=>!row.deletedAt&&!row.published&&['DRAFT','REJECTED'].includes(row.reviewStatus);
 const content=(row:any)=>({name:row.name,description:row.description||'',icon:row.icon,systemPrompt:row.systemPrompt,defaultModel:row.defaultModel||null,greeting:row.greeting||'',categoryId:row.categoryId||null});
@@ -28,8 +29,10 @@ export class AppCreatorService {
   if(!actor||admin&&!['ADMIN','SUPER'].includes(actor.role))throw new BusinessException(ErrorCode.FORBIDDEN,'当前身份不能执行这一步',403);return actor;
  }
  private normalize(dto:CreatorAppContentDto){return {name:dto.name.trim(),description:dto.description.trim(),icon:dto.icon,systemPrompt:dto.systemPrompt,defaultModel:dto.defaultModel?.trim()||null,greeting:dto.greeting.trim(),categoryId:dto.categoryId||null};}
- private async validate(value:ReturnType<AppCreatorService['normalize']>,tx:Prisma.TransactionClient){
-  if(!value.name||!value.systemPrompt.trim()||!icons.includes(value.icon))throw bad('请填写名字、角色设定并选择应用形象');
+ private async validate(value:ReturnType<AppCreatorService['normalize']>,tx:Prisma.TransactionClient,ownerId:string){
+  const imageId=appImageId(value.icon);
+  if(!value.name||!value.systemPrompt.trim()||!icons.includes(value.icon)&&!imageId)throw bad('请填写名字、角色设定并选择应用形象');
+  if(imageId){const used=await tx.uploadFile.updateMany({where:{id:imageId,userId:ownerId,scope:APP_IMAGE_SCOPE,mime:'image/png',deletedAt:null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]},data:{expiresAt:null}});if(used.count!==1)throw bad('应用图片已过期或不属于你，请重新添加',409);}
   if(value.categoryId&&!await tx.appCategory.findUnique({where:{id:value.categoryId}}))throw bad('这个分类已变化，请重新选择');
   if(value.defaultModel){const model=await tx.aiModel.findFirst({where:{name:value.defaultModel,status:'ENABLED',deletedAt:null}});if(!model)throw bad('默认模型已变化，请重新选择');const caps=model.capabilities.split(',').map(v=>v.trim());if(!caps.some(v=>['chat','vision','reasoning','tools'].includes(v)))throw bad('请选择可以对话的模型');}
   const hit=await this.moderation.checkTx(tx,[value.name,value.description,value.systemPrompt,value.greeting].join('\n'));
@@ -49,7 +52,7 @@ export class AppCreatorService {
   return this.prisma.$transaction(async tx=>{
    const actor=await this.actorTx(tx,userId),previous=await tx.app.findUnique({where:{ownerId_createRequestKey:{ownerId:userId,createRequestKey:dto.requestKey}}});
    if(previous){if(previous.createSignature!==signature)throw bad('同一保存标识不能用于不同内容，请先核对原记录',409);return this.view(previous);}
-   await this.validate(value,tx);
+   await this.validate(value,tx,userId);
    const [active,total]=await Promise.all([tx.app.count({where:{ownerId:userId,origin:'USER',deletedAt:null}}),tx.app.count({where:{ownerId:userId,origin:'USER'}})]);
    if(active>=20||total>=100)throw bad(active>=20?'最多同时保留 20 位自建搭档，请先整理已有应用':'最多保留 100 份应用记录，请联系管理员整理',409);
    const row=await tx.app.create({data:{...value,ownerId:userId,createdBy:userId,origin:'USER',published:false,reviewStatus:'DRAFT',shareId:randomUUID(),createRequestKey:dto.requestKey,createSignature:signature,lastActionKey:dto.requestKey,lastActionSignature:sha({action:'CREATE',actor:userId,signature}),eventsJson:this.events(null,actor,'CREATE')}});return this.view(row);
@@ -66,8 +69,8 @@ export class AppCreatorService {
    const data:Prisma.AppUncheckedUpdateManyInput={version:{increment:1},lastActionKey:dto.requestKey,lastActionSignature:signature,eventsJson:this.events(row,actor,kind)};
    if(kind==='RESTORE'){if(!row.deletedAt)throw bad('这份应用不在回收站',409);if(await tx.app.count({where:{ownerId:userId,origin:'USER',deletedAt:null}})>=20)throw bad('正在使用的搭档已满，请先整理',409);Object.assign(data,{deletedAt:null,published:false,reviewStatus:'DRAFT'});}
    else{if(row.deletedAt)throw bad('这份应用已在回收站，请先恢复',409);
-    if(kind==='UPDATE'){if(!editable(row))throw bad('请先撤回审核或公开，再修改内容',409);await this.validate(value!,tx);Object.assign(data,value,{reviewStatus:'DRAFT',published:false});}
-    else if(kind==='SUBMIT'){if(!editable(row))throw bad('当前状态不能再次提交审核',409);await this.validate(content(row),tx);Object.assign(data,{reviewStatus:'PENDING',published:false,reviewNote:null});}
+    if(kind==='UPDATE'){if(!editable(row))throw bad('请先撤回审核或公开，再修改内容',409);await this.validate(value!,tx,userId);Object.assign(data,value,{reviewStatus:'DRAFT',published:false});}
+    else if(kind==='SUBMIT'){if(!editable(row))throw bad('当前状态不能再次提交审核',409);await this.validate(content(row),tx,userId);Object.assign(data,{reviewStatus:'PENDING',published:false,reviewNote:null});}
     else if(kind==='WITHDRAW'){if(!['PENDING','APPROVED'].includes(row.reviewStatus))throw bad('这份应用当前没有等待审核或公开',409);Object.assign(data,{reviewStatus:'DRAFT',published:false});}
     else if(kind==='TRASH'){if(!editable(row))throw bad('请先撤回审核或公开，再放入回收站',409);Object.assign(data,{deletedAt:new Date(),published:false,reviewStatus:'DRAFT'});}
     else throw bad('不支持的应用操作');
@@ -115,7 +118,7 @@ export class AppCreatorService {
     if(!row.owner||row.owner.status!=='ACTIVE'||row.owner.deletedAt)throw bad('创作者当前不可用，不能发布或赠送次数',409);
 
     if(row.reviewStatus!=='PENDING')throw bad('这份应用当前不在待审核状态',409);const offer=await this.offer(tx,row);if(dto.offerRevision!==offer.revision)throw bad('角色内容或奖励设置已变化，请刷新并核对',409);
-    await this.validate(content(row),tx);
+    await this.validate(content(row),tx,row.ownerId!);
     Object.assign(data,{published:true,reviewStatus:'APPROVED'});if(!row.rewardGrantedAt){gift=offer.counts;Object.assign(data,{rewardGrantedAt:new Date(),rewardJson:JSON.stringify(gift)});}
    }else{if(!dto.note.trim())throw bad('请填写具体反馈');if(dto.decision==='REJECT'&&row.reviewStatus!=='PENDING'||dto.decision==='UNPUBLISH'&&row.reviewStatus!=='APPROVED')throw bad('当前状态与审核动作不一致，请刷新',409);Object.assign(data,{published:false,reviewStatus:'REJECTED'});}
    const accepted=await tx.app.updateMany({where:{id,version:dto.version,origin:'USER',deletedAt:null},data});if(accepted.count!==1)throw bad('这份应用已被处理，请刷新核对',409);

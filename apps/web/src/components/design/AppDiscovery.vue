@@ -20,7 +20,7 @@
       <div v-else-if="!filtered.length" class="qa-empty"><span class="qa-empty-object">{{ favoritesOnly ? '♡' : '✳' }}</span><h3>{{ favoritesOnly ? '给喜欢的搭档，留个位置。' : keyword ? '换个词，让灵感碰个面。' : '这里，等着新的好搭档。' }}</h3><p>{{ favoritesOnly ? '在卡片上点一下爱心，就能在这里找到它。' : keyword ? '试试名称、介绍、分类或默认模型。' : '应用上架后，就会在这里与你相遇。' }}</p><button v-if="keyword || favoritesOnly || categoryId" type="button" class="qgd-primary" @click="resetFilters">看看全部搭档<ClientIcon name="arrow" /></button></div>
       <div v-else class="qa-card-grid">
         <article v-for="(app, index) in visibleApps" :key="app.id" class="qa-card" :class="'qa-tone-' + tone(app)" :style="{ '--qa-order': index % 9 }">
-          <div class="qa-card-art"><span class="qa-card-orbit"></span><span class="qa-card-number">CREW / {{ String(index + 1).padStart(2, '0') }}</span><span class="qa-app-object"><span v-if="CREATOR_ICONS.includes(app.icon)" class="qa-custom-icon" aria-hidden="true">{{ app.icon }}</span><ClientIcon v-else :name="glyph(app)" /></span><span class="qa-card-spark">✦</span></div>
+          <div class="qa-card-art"><span class="qa-card-orbit"></span><span class="qa-card-number">CREW / {{ String(index + 1).padStart(2, '0') }}</span><span class="qa-app-object"><AppAvatar v-if="appImageId(app.icon)" :icon="app.icon" :app-id="app.id"/><span v-else-if="CREATOR_ICONS.includes(app.icon)" class="qa-custom-icon" aria-hidden="true">{{ app.icon }}</span><ClientIcon v-else :name="glyph(app)" /></span><span class="qa-card-spark">✦</span></div>
           <button type="button" class="apps-fav" :class="{ on: app.favorited }" :aria-label="(app.favorited ? '取消收藏：' : '收藏：') + app.name" :aria-pressed="!!app.favorited" :disabled="favoriteBusy.has(app.id)" :aria-busy="favoriteBusy.has(app.id)" @click="toggleFavorite(app)"><span>{{ favoriteBusy.has(app.id) ? '·' : app.favorited ? '♥' : '♡' }}</span></button>
           <button type="button" class="qa-card-open" :aria-label="'查看应用：' + app.name" @click="openDetail(app, $event)"><span class="qa-card-category">{{ app.category?.name || '灵感搭档' }}</span><h3>{{ app.name }}</h3><p>{{ app.description || '一个新的专业搭档，点开看看它的开场白。' }}</p><span class="qa-card-preview">认识一下<ClientIcon name="arrowUpRight" /></span></button>
           <footer><span :title="app.defaultModel || '使用站点默认模型'"><i></i>{{ app.defaultModel || '站点默认模型' }}</span><button type="button" class="qa-start" :aria-label="'与' + app.name + '开始新会话'" @click="launch(app, $event)">开始协作<ClientIcon name="arrow" /></button></footer>
@@ -32,7 +32,7 @@
     <dialog ref="dialog" class="qa-detail-dialog" aria-labelledby="qa-detail-title" @cancel.prevent="closeDetail" @close="onNativeClose" @click="onBackdrop">
       <div class="qa-detail-shell" :class="'qa-tone-' + tone(detail || detailApp || {})">
         <button type="button" class="qa-detail-close" aria-label="关闭应用详情" @click="closeDetail"><ClientIcon name="close" /></button>
-        <div class="qa-detail-art" aria-hidden="true"><span class="qa-detail-orbit"></span><span class="qa-app-object"><span v-if="CREATOR_ICONS.includes((detail||detailApp)?.icon)" class="qa-custom-icon">{{ (detail||detailApp).icon }}</span><ClientIcon v-else :name="glyph(detail || detailApp || {})" /></span><span class="qa-detail-stamp">YOUR NEXT<br>CREATIVE PARTNER</span><i>✦</i></div>
+        <div class="qa-detail-art" aria-hidden="true"><span class="qa-detail-orbit"></span><span class="qa-app-object"><AppAvatar v-if="appImageId((detail||detailApp)?.icon)" :icon="(detail||detailApp)?.icon" :app-id="(detail||detailApp)?.id"/><span v-else-if="CREATOR_ICONS.includes((detail||detailApp)?.icon)" class="qa-custom-icon">{{ (detail||detailApp).icon }}</span><ClientIcon v-else :name="glyph(detail || detailApp || {})" /></span><span class="qa-detail-stamp">YOUR NEXT<br>CREATIVE PARTNER</span><i>✦</i></div>
         <div class="qa-detail-content"><span class="qa-eyebrow">MEET YOUR CREATIVE CREW</span><h2 id="qa-detail-title">{{ detail?.name || detailApp?.name || '认识新搭档' }}</h2>
           <div v-if="detailLoading" class="qa-detail-loading" role="status"><BrandLoader :size="36" :text="launching ? '正在准备新的协作空间…' : '正在打开搭档档案…'" /></div>
           <div v-else-if="detailError" class="qa-detail-error" role="alert"><ClientIcon name="info" /><p>{{ detailError }}</p><button type="button" class="qgd-primary" @click="openDetail(detailApp)">重新查看<ClientIcon name="refresh" /></button></div>
@@ -44,6 +44,8 @@
 </template>
 
 <script setup>
+import AppAvatar from './AppAvatar.vue';
+import {appImageId} from '../../lib/app-image.js';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute,useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
