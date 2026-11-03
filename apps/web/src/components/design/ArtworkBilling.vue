@@ -1,21 +1,17 @@
 <template>
-  <section class="qp-billing" aria-label="作品费用" :data-state="billing.state">
-    <header><span class="qp-billing-coin" aria-hidden="true">Q</span><div><small>这一次创作的费用</small><strong>{{ title }}</strong></div></header>
-    <template v-if="billing.state !== 'LEGACY'">
-      <dl><div><dt>锁定单价</dt><dd>{{ billing.unitCost || 0 }}<small> 次 / 张</small></dd></div><div><dt>实际结算</dt><dd>{{ billing.charged || 0 }}<small> 次</small></dd></div></dl>
-      <p v-if="billing.reserved">已预留 {{ billing.reserved }} 次，按实际成功张数结算。</p>
-      <p v-else-if="billing.returned">未使用的 {{ billing.returned }} 次已释放回可用额度。</p>
-      <p v-else-if="billing.state === 'FREE'">提交时为免费创作，本次不会补扣次数。</p>
-      <p v-if="billing.expired">{{ billing.expired }} 次未使用的会员预留已失效，不计入新一天或新套餐。</p>
-    </template>
-    <p v-else>这件作品来自此前版本，费用以钱包中的实际流水为准。</p>
+  <section class="qp-billing" :aria-label="pt(&quot;作品费用&quot;)" :data-state="receipt.state">
+    <header><span class="qp-billing-coin" aria-hidden="true">Q</span><div><small>{{ pt("这一次创作的费用") }}</small><strong>{{ receipt.title }}</strong></div></header>
+    <dl v-if="receipt.known"><div><dt>{{ pt("锁定单价") }}</dt><dd>{{ receipt.unitCost }}<small>{{ pt(" 次 / 张",{count:receipt.unitCost}) }}</small></dd></div><div><dt>{{ pt("实际结算") }}</dt><dd>{{ receipt.charged }}<small>{{ pt(" 次",{count:receipt.charged}) }}</small></dd></div></dl>
+    <p v-for="(note,index) in receipt.notes" :key="index">{{ note }}</p>
   </section>
 </template>
 
 <script setup>
+import {paintingText as pt} from "../../i18n/painting.js";
 import { computed } from 'vue';
+import {paintingReceipt} from '../../lib/painting-presentation.js';
 const props = defineProps({ billing: { type: Object, required: true } });
-const title = computed(() => ({ LEGACY: '历史费用记录', FREE: '本次不扣次数', RESERVED: '次数已预留', SETTLED: '本次已结算', RELEASED: '未扣次数，预留已结束' }[props.billing.state] || '费用记录'));
+const receipt=computed(()=>paintingReceipt(props.billing,pt));
 </script>
 
 <style scoped>

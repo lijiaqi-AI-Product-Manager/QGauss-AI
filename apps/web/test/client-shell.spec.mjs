@@ -1,3 +1,4 @@
+import{registerPaintingLanguageTests}from'./painting-language-ui.cases.mjs';
 import {registerChatLanguageTests} from './chat-language-ui.cases.mjs';
 import {registerVoiceLanguageTests} from './voice-language-ui.cases.mjs';
 import {registerVoiceProgressiveTests} from './voice-progressive-ui.cases.mjs';
@@ -708,7 +709,7 @@ test('关闭详情或离开模型观测站后，迟到的开始确认不能再�
 test('图像模型带入绘画参数且不会自动提交，失效的绘画参数不悄悄换成默认模型', async () => {
   const model = { name: 'qg-image', displayName: '图像搭档', ready: true, capabilities: ['image', 'vision'] };
   const response = data => new Response(JSON.stringify({ code: 0, data }), { status: 200 });
-  const intercept = call => call.url === '/api/models/plaza' ? response({ models: [model] }) : call.url === '/api/models/available' ? response([model]) : call.url === '/api/image/options' ? response({ ratios: [{ key: '1:1', w: 1, h: 1 }], resolutions: [{ key: '1K', label: '1K' }], models: [model] }) : call.url === '/api/image/tasks' && call.method === 'POST' ? response({ id: 'image-created', status: 'QUEUED', results: [] }) : /^\/api\/image\/(tasks|square)/.test(call.url) ? response({ items: [], total: 0 }) : undefined;
+  const intercept = call => call.url === '/api/models/plaza' ? response({ models: [model] }) : call.url === '/api/models/available' ? response([model]) : call.url === '/api/image/options' ? response({ ratios: [{ key: '1:1', w: 1, h: 1 }], resolutions: [{ key: '1K', label: '1K' }], billing:{enabled:false}, models: [model] }) : call.url === '/api/image/tasks' && call.method === 'POST' ? response({ id: 'image-created', status: 'QUEUED', results: [] }) : /^\/api\/image\/(tasks|square)/.test(call.url) ? response({ items: [], total: 0 }) : undefined;
   const fixture = await mount({ loggedIn: true, initialPath: '/plaza', intercept });
   try {
     document.querySelector('.qm-model-card .qm-use').click(); await settle(); assert.equal(fixture.router.currentRoute.value.path, '/painting'); assert.equal(fixture.router.currentRoute.value.query.model, 'qg-image'); assert.equal(fixture.calls.some(call => call.method === 'POST'), false);
@@ -760,7 +761,7 @@ test('后台模型只有一组厂商元数据，微元成本精确回填，非�
 test('绘画灵感只填提示词，模型选项来自 API，实际生成携带选中的模型标识', async () => {
   const response = data => new Response(JSON.stringify({ code: 0, data }), { status: 200 });
   const fixture = await mount({ loggedIn: true, intercept: call => {
-    if (call.url === '/api/image/options') return response({ ratios: [{ key: '1:1', w: 1, h: 1, scene: '方形' }], resolutions: [{ key: '1K', label: '1K' }], cats: [], models: [{ name: 'image-a', displayName: '图像模型 A' }, { name: 'image-b', displayName: '图像模型 B' }] });
+    if (call.url === '/api/image/options') return response({ ratios: [{ key: '1:1', w: 1, h: 1, scene: '方形' }], resolutions: [{ key: '1K', label: '1K' }], billing:{enabled:false}, cats: [], models: [{ name: 'image-a', displayName: '图像模型 A' }, { name: 'image-b', displayName: '图像模型 B' }] });
     if (call.url.startsWith('/api/image/tasks') || call.url.startsWith('/api/image/square')) return response({ items: [] });
   } });
   try {
@@ -1028,7 +1029,7 @@ test('旧发送的延迟响应不能覆盖新会话或清除新一轮的生成�
 
 // Painting workspace: real Vue components and transport boundaries, with synthetic HTTP data.
 const paintResponse = data => new Response(JSON.stringify({ code: 0, data }), { headers: { 'Content-Type': 'application/json' } });
-const paintOptions = { ratios: [{ key: '1:1', w: 1, h: 1, scene: '方形' }, { key: '3:4', w: 3, h: 4, scene: '海报' }], resolutions: [{ key: '1K', label: '1K', base: 1024 }, { key: '2K', label: '2K', base: 2048 }], cats: [{ id: 'style-a', name: '柔光' }], models: [{ name: 'image-a', displayName: '图像 A', ready: true }] };
+const paintOptions = { billing:{enabled:false,costPerImage:0,qualityFactors:{auto:1,low:1,medium:1,high:2},reservation:true}, ratios: [{ key: '1:1', w: 1, h: 1, scene: '方形' }, { key: '3:4', w: 3, h: 4, scene: '海报' }], resolutions: [{ key: '1K', label: '1K', base: 1024 }, { key: '2K', label: '2K', base: 2048 }], cats: [{ id: 'style-a', name: '柔光' }], models: [{ name: 'image-a', displayName: '图像 A', ready: true }] };
 function paintingTask(id, extra = {}) { return { id, prompt: '作品 ' + id, model: 'image-a', versionName: '图像 A', status: 'SUCCESS', n: 2, ratio: '3:4', resolution: '2K', quality: 'high', seed: 0, catId: 'style-a', mode: 'text2img', size: '1536x2048', published: false, createdAt: '2026-10-31T01:00:00Z', results: [1, 2].map(i => ({ fileId: id + '-' + i, mime: 'image/png', url: '/api/image/tasks/' + id + '/results/' + id + '-' + i })), ...extra }; }
 async function mountPainting({ items = [paintingTask('first')], squareItems = [], intercept } = {}) {
   const fixture = await mount({ loggedIn: true, intercept: async call => {
@@ -1164,7 +1165,7 @@ test('旧报价被拒后刷新费用，保留描述并等待再次点击才提�
 });
 
 test('保存与结算中的作品继续显示进度和预留费用，不显示取消或回收操作', async () => {
-  const item = paintingTask('settling', { status: 'SETTLING', results: [], billing: { state: 'RESERVED', unitCost: 2, reserved: 4, charged: 0 } });
+  const item = paintingTask('settling', { status: 'SETTLING', results: [], billing: { state: 'RESERVED', unitCost: 2, reserved: 4, charged: 0, returned: 0, expired: 0 } });
   const fixture = await mountPainting({ items: [item] });
   try {
     document.querySelector('.qp-card-actions button').click(); await settle();
@@ -1178,13 +1179,13 @@ test('保存与结算中的作品继续显示进度和预留费用，不显示�
 });
 
 test('画廊任务完成时，打开的详情同步费用与完整足迹，不必关闭重开', async () => {
-  const item = paintingTask('phase', { status: 'RUNNING', results: [], billing: { state: 'RESERVED', unitCost: 1, reserved: 2, charged: 0 } });
+  const item = paintingTask('phase', { status: 'RUNNING', results: [], billing: { state: 'RESERVED', unitCost: 1, reserved: 2, charged: 0, returned: 0, expired: 0 } });
   const fixture = await mountPainting({ items: [item], intercept: call => {
     if (call.url === '/api/image/tasks/phase') return paintResponse({ ...item, mine: true, events: item.status === 'SUCCESS' ? [1, 2, 3].map(id => ({ id, message: '步骤 ' + id })) : [{ id: 1, message: '步骤 1' }] });
   } });
   try {
     document.querySelector('.qp-card-actions button').click(); await settle();
-    Object.assign(item, paintingTask('phase', { billing: { state: 'SETTLED', unitCost: 1, reserved: 0, charged: 2, returned: 0 } }));
+    Object.assign(item, paintingTask('phase', { billing: { state: 'SETTLED', unitCost: 1, reserved: 0, charged: 2, returned: 0, expired: 0 } }));
     document.querySelector('.qp-refresh').click(); await settle(); await settle();
     assert.equal(document.querySelector('.qp-artwork-dialog').open, true);
     assert.match(document.querySelector('.qp-billing').textContent, /本次已结算/);
@@ -2369,3 +2370,5 @@ registerVoiceProgressiveTests({test,assert,mount,settle,relayJson});
 registerVoiceLanguageTests({test,assert,mount,mountVoiceLibrary,settle,relayJson,setLang});
 
 registerChatLanguageTests({test,assert,mount,settle,relayJson,setLang,runFrame,runResponse});
+
+registerPaintingLanguageTests({test,assert,mountPainting,paintingTask,paintOptions,multiPaintOptions,paintResponse,settle,relayJson,setLang});

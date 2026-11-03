@@ -4,7 +4,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { BusinessException, ErrorCode } from '../../common/exceptions/business.exception';
 import { LedgerService } from '../commerce/ledger.service';
 import { SettingsService } from '../settings/settings.service';
-import { imageChargeUnits } from './image-pricing';
+import { imageUnitCost } from './image-pricing';
 
 /** Accepted image prices and count authorizations live with the task, never in process memory. */
 @Injectable()
@@ -15,9 +15,8 @@ export class ImageAccountingService {
     const [enabled, demo, value] = await Promise.all([
       this.settings.get<boolean>('commerce.enabled'), this.settings.get<boolean>('demo.siteEnabled'), this.settings.get<number>('commerce.imageCost'),
     ]);
-    if (!enabled || demo) return 0;
-    const cost = Number(value), unitCost = cost * imageChargeUnits(1, quality);
-    if (!Number.isSafeInteger(cost) || cost < 0 || !Number.isSafeInteger(unitCost) || unitCost * 4 > 2_147_483_647) throw new BusinessException(ErrorCode.INTERNAL, '站点绘画费用配置无效', 500);
+    const unitCost = imageUnitCost(enabled, demo, value, quality);
+    if (unitCost === null) throw new BusinessException(ErrorCode.INTERNAL, '站点绘画费用配置无效', 500);
     return unitCost;
   }
 

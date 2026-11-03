@@ -1,19 +1,20 @@
 <template>
   <Teleport to="body"><dialog ref="dialog" class="qme-dialog" aria-labelledby="qme-title" @cancel.prevent="close" @click="backdrop">
-    <header><div><span class="qp-eyebrow">QGAUSS / MAGIC BRUSH</span><h2 id="qme-title">留住喜欢的，<em>重画一点。</em></h2><p>粉色区域将被重新想象，其他部分作为保留参考。</p></div><button type="button" class="qp-icon-action" aria-label="关闭区域编辑" :disabled="saving" @click="close"><ClientIcon name="close" /></button></header>
+    <header><div><span class="qp-eyebrow">QGAUSS / MAGIC BRUSH</span><h2 id="qme-title">{{ pt("留住喜欢的，") }}<em>{{ pt("重画一点。") }}</em></h2><p>{{ pt("粉色区域将被重新想象，其他部分作为保留参考。") }}</p></div><button type="button" class="qp-icon-action" :aria-label="pt(&quot;关闭区域编辑&quot;)" :disabled="saving" @click="close"><ClientIcon name="close" /></button></header>
     <div class="qme-layout">
-      <section class="qme-stage" aria-label="重绘区域画布">
-        <div v-if="error" class="qme-message" role="alert">{{ error }}</div>
-        <BrandLoader v-else-if="!ready" text="正在展开画布…" />
-        <div class="qme-image" :style="{ aspectRatio: width + '/' + height, '--qme-ratio': width / height }" v-show="ready"><img :src="source" alt="局部重绘的主参考图" @load="loaded" @error="error = '主图未能打开，请关闭后重新选择图片。'" /><canvas ref="canvas" :width="width" :height="height" aria-label="涂抹重绘区域，方向键移动，空格涂抹" tabindex="0" @pointerdown="down" @pointermove="move" @pointerup="up" @pointercancel="cancelStroke" @lostpointercapture="up" @keydown="keyboard" /><span v-if="keyboardMode" class="qme-cursor" :style="{ left: cursor.x * 100 + '%', top: cursor.y * 100 + '%', width: size + '%', aspectRatio: '1' }"></span></div>
-        <span v-if="ready" class="qme-size">{{ width }} × {{ height }} · 拖动涂抹 / 方向键移动，空格涂抹</span>
+      <section class="qme-stage" :aria-label="pt(&quot;重绘区域画布&quot;)">
+        <div v-if="error" class="qme-message" role="alert">{{ pt(error) }}</div>
+        <BrandLoader v-else-if="!ready" :text="pt(&quot;正在展开画布…&quot;)" />
+        <div class="qme-image" :style="{ aspectRatio: width + '/' + height, '--qme-ratio': width / height }" v-show="ready"><img :src="source" :alt="pt(&quot;局部重绘的主参考图&quot;)" @load="loaded" @error="error = '主图未能打开，请关闭后重新选择图片。'" /><canvas ref="canvas" :width="width" :height="height" :aria-label="pt(&quot;涂抹重绘区域，方向键移动，空格涂抹&quot;)" tabindex="0" @pointerdown="down" @pointermove="move" @pointerup="up" @pointercancel="cancelStroke" @lostpointercapture="up" @keydown="keyboard" /><span v-if="keyboardMode" class="qme-cursor" :style="{ left: cursor.x * 100 + '%', top: cursor.y * 100 + '%', width: size + '%', aspectRatio: '1' }"></span></div>
+        <span v-if="ready" class="qme-size">{{ pt("{p0} × {p1} · 拖动涂抹 / 方向键移动，空格涂抹",{p0:(width),p1:(height)}) }}</span>
       </section>
-      <aside class="qme-tools"><span class="qme-tool-eyebrow">给画面一点新可能</span><div class="qme-tool-switch"><button type="button" :aria-pressed="!erase" @click="erase = false">涂抹选区</button><button type="button" :aria-pressed="erase" @click="erase = true">擦除选区</button></div><label for="qme-brush">画笔大小 <b>{{ size }}%</b></label><input id="qme-brush" v-model.number="size" aria-label="画笔大小" type="range" min="2" max="24" /><div class="qme-brush-preview" aria-hidden="true"><i :style="{ width: 20 + size * 2 + 'px', height: 20 + size * 2 + 'px' }"></i><span>✦</span></div><div class="qme-history"><button type="button" :disabled="!strokes.length" @click="undo">撤销一步</button><button type="button" :disabled="!strokes.length" @click="clear">清空选区</button></div><p class="qme-tip">先选区域，再描述你想换成的内容。保留范围是给模型的指引，最终效果由所选模型决定。</p><p class="qme-tip">关闭只放弃本次编辑；确认选区后会保存为你的私有文件。</p><button type="button" class="qme-apply" :disabled="!ready || saving || !strokes.some(s => !s.erase)" @click="apply">{{ saving ? '正在保存…' : '确认这片想象' }} <span>↗</span></button></aside>
+      <aside class="qme-tools"><span class="qme-tool-eyebrow">{{ pt("给画面一点新可能") }}</span><div class="qme-tool-switch"><button type="button" :aria-pressed="!erase" @click="erase = false">{{ pt("涂抹选区") }}</button><button type="button" :aria-pressed="erase" @click="erase = true">{{ pt("擦除选区") }}</button></div><label for="qme-brush">{{ pt("画笔大小 ") }}<b>{{ size }}%</b></label><input id="qme-brush" v-model.number="size" :aria-label="pt(&quot;画笔大小&quot;)" type="range" min="2" max="24" /><div class="qme-brush-preview" aria-hidden="true"><i :style="{ width: 20 + size * 2 + 'px', height: 20 + size * 2 + 'px' }"></i><span>✦</span></div><div class="qme-history"><button type="button" :disabled="!strokes.length" @click="undo">{{ pt("撤销一步") }}</button><button type="button" :disabled="!strokes.length" @click="clear">{{ pt("清空选区") }}</button></div><p class="qme-tip">{{ pt("先选区域，再描述你想换成的内容。保留范围是给模型的指引，最终效果由所选模型决定。") }}</p><p class="qme-tip">{{ pt("关闭只放弃本次编辑；确认选区后会保存为你的私有文件。") }}</p><button type="button" class="qme-apply" :disabled="!ready || saving || !strokes.some(s => !s.erase)" @click="apply">{{ saving ? pt("正在保存…") : pt("确认这片想象") }} <span>↗</span></button></aside>
     </div>
   </dialog></Teleport>
 </template>
 
 <script setup>
+import {paintingText as pt} from "../../i18n/painting.js";
 import { nextTick, onBeforeUnmount, ref } from 'vue';
 import ClientIcon from '../reference/ClientIcon.vue';
 import BrandLoader from './BrandLoader.vue';
