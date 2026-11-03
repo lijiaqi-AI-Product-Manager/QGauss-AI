@@ -1,0 +1,23 @@
+/** Local composition samples; requests never reach a model or the project API. */
+export function voiceComposerFixtures(state='voice-composer-ready'){
+ const tasks=new Map(),ended=new Set();let dropped=false;
+ const json=(data,status=200)=>new Response(JSON.stringify(status<400?{code:0,data}:{code:status,message:data}),{status,headers:{'Content-Type':'application/json','X-QGauss-Reference-Fixture':'client-preview'}});
+ const options={speech:{ready:state!=='voice-composer-unavailable',reason:'声音搭档还没有接通，可以先把文字留在这里。',cost:2,pool:'model3'},transcription:{ready:false,reason:'当前为独立配音界面样例。'},maxSpeechChars:16000,voices:['alloy','echo','fable','nova','onyx','shimmer'],retention:{days:7},disclosure:'合成声音'};
+ const view=row=>({...row,availability:['QUEUED','RUNNING','SETTLING'].includes(row.status)?'processing':row.status==='COMPLETED'?'ready':'unavailable',availabilityReason:row.status==='FAILED'?'这次声音没有完整抵达，预留次数已经退回。':'',billing:{state:row.status==='COMPLETED'?'SETTLED':['FAILED','CANCELED'].includes(row.status)?'RELEASED':'RESERVED',pool:'model3',limit:2,reserved:['QUEUED','RUNNING','SETTLING'].includes(row.status)?2:0,charged:row.status==='COMPLETED'?2:0,returned:['FAILED','CANCELED'].includes(row.status)?2:0,expired:0},audio:row.status==='COMPLETED'?Array.from({length:row.segmentCount},(_,index)=>({index,url:'/api/voice/tasks/'+row.id+'/audio/'+index,mime:'audio/mpeg'})):[],transcript:'',retentionDays:7,expiresAt:new Date(Date.now()+7*86400000).toISOString()});
+ return{tasks,async reply(url,init={},media=()=>new Response(new Uint8Array([1,2,3]),{headers:{'Content-Type':'audio/mpeg'}})){
+  const path=url.pathname,method=init.method||'GET',body=typeof init.body==='string'?JSON.parse(init.body):init.body||{};
+  if(path==='/api/voice/options')return json(options);
+  if(path==='/api/voice/quote'&&method==='POST'){if(!options.speech.ready)return json(options.speech.reason,400);const text=body.sample?'你好，我是 QGauss。让灵感被听见。':body.text||'';return json({kind:'speech',revision:'a'.repeat(64),cost:2,pool:'model3',chars:text.length,segments:Math.ceil(text.length/2800)||1},201);}
+  if(path==='/api/voice/tasks'&&method==='POST'){
+   if(ended.has(body.requestKey))return json('这次声音请求已经结束。',409);let row=[...tasks.values()].find(row=>row.requestKey===body.requestKey);
+   if(!row){const now=new Date().toISOString();row={id:'qg-composition-'+body.requestKey,requestKey:body.requestKey,kind:'speech',sourceKind:body.sample?'sample':'composition',label:body.sample?'一次暖暖的音色试听':body.title||body.text.replace(/\s+/g,' ').slice(0,80),sourceText:body.sample?'':body.text,messageId:null,sample:!!body.sample,voice:body.voice,status:'RUNNING',progress:12,completedSegments:0,segmentCount:body.sample?1:Math.ceil(body.text.length/2800)||1,createdAt:now,finishedAt:null,polls:0};tasks.set(row.id,row);}
+   if(state==='voice-composer-unknown'&&!dropped){dropped=true;throw new TypeError('Local response interrupted');}return json(view(row),201);
+  }
+  const receipt=/^\/api\/voice\/tasks\/by-request\/([^/]+)$/.exec(path),detail=/^\/api\/voice\/(?:tasks|library)\/([^/]+)$/.exec(path),cancel=/^\/api\/voice\/tasks\/([^/]+)\/cancel$/.exec(path),finish=/^\/api\/voice\/requests\/([^/]+)\/end$/.exec(path),audio=/^\/api\/voice\/tasks\/([^/]+)\/(?:audio\/\d+|download)$/.exec(path);
+  if(finish&&method==='POST'){const row=[...tasks.values()].find(row=>row.requestKey===finish[1]);if(row)return json('这次声音已经接受，请先核对原任务。',409);ended.add(finish[1]);return json({ended:true,requestKey:finish[1]});}
+  if(audio){const row=tasks.get(audio[1]);return row?.status==='COMPLETED'?media():json('声音暂时不能读取。',404);}
+  if(receipt||detail||cancel){const row=receipt?[...tasks.values()].find(row=>row.requestKey===receipt[1]):tasks.get((detail||cancel)[1]);if(!row)return json('暂未找到原任务。',404);if(cancel){row.status='CANCELED';row.progress=100;row.finishedAt=new Date().toISOString();}else if(row.status==='RUNNING'&&state!=='voice-composer-hold'){row.polls++;row.progress=Math.min(88,12+row.polls*28);if(row.polls>=2){row.status=state==='voice-composer-failed'?'FAILED':'COMPLETED';row.progress=100;row.completedSegments=row.status==='COMPLETED'?row.segmentCount:0;row.finishedAt=new Date().toISOString();}}return json(view(row));}
+  if(path==='/api/voice/library'){const rows=[...tasks.values()].map(view),kind=url.searchParams.get('kind'),q=url.searchParams.get('q')?.trim().toLowerCase();return json({items:rows.filter(row=>(!kind||kind==='all'||row.kind===kind)&&(!q||row.label.toLowerCase().includes(q))),total:rows.length,page:1,pageSize:9,counts:{all:rows.length,speech:rows.length,transcription:0},policy:{retentionDays:7}});}
+  return null;
+ }};
+}

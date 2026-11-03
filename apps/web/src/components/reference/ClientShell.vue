@@ -1,7 +1,7 @@
 <template>
   <div class="qg-client-shell" :class="{ 'is-floating': floating && appearance.variant !== 'play', 'is-feature-page': !isChat, 'is-immersive': immersive && isChat, 'drawer-open': clientNavigationOpen }">
     <AmbientScene />
-    <nav class="qgd-primary-navigation" :class="{ 'qgd-liquid': appearance.variant === 'orbit' }" aria-label="主导航"><router-link class="qgd-rail-logo" to="/chat" aria-label="QGauss AI 首页"><img src="/brand/qgauss-mark.svg" alt="" /><b>QGauss</b></router-link><div :class="{ 'qgd-liquid': appearance.variant === 'play' }"><router-link v-for="item in navigation" :key="item.path" :to="item.path" :aria-current="navActive(item.path) ? 'page' : undefined" :title="item.title"><span><ClientIcon :name="item.icon" /></span><b>{{ item.title }}</b></router-link></div><button type="button" aria-label="外观实验室" @click="appearance.open = true"><ClientIcon name="palette" /></button></nav>
+    <nav class="qgd-primary-navigation" :style="{'--qgc-tool-space':toolSpace+'px'}" :class="{ 'qgd-liquid': appearance.variant === 'orbit' }" aria-label="主导航"><router-link class="qgd-rail-logo" to="/chat" aria-label="QGauss AI 首页"><img src="/brand/qgauss-mark.svg" alt="" /><b>QGauss</b></router-link><div ref="primaryNavigation" :class="{ 'qgd-liquid': appearance.variant === 'play' }"><router-link v-for="item in navigation" :key="item.path" :to="item.path" :aria-current="navActive(item.path) ? 'page' : undefined" :title="item.title"><span><ClientIcon :name="item.icon" /></span><b>{{ item.title }}</b></router-link></div><button type="button" aria-label="外观实验室" @click="appearance.open = true"><ClientIcon name="palette" /></button></nav>
     <button v-if="clientNavigationOpen" class="qgc-drawer-mask" type="button" aria-label="关闭导航" @click="clientNavigationOpen = false"></button>
     <aside ref="sidebarElement" class="qgc-sidebar" aria-label="QGauss AI 导航" :inert="mobile && !clientNavigationOpen" :aria-hidden="mobile && !clientNavigationOpen ? 'true' : undefined">
       <router-link class="qgc-brand" to="/chat" aria-label="QGauss AI"><img src="/brand/qgauss-mark.svg" alt="" /><span><b>QGauss AI</b><small>把想象，变成可能。</small></span></router-link>
@@ -31,7 +31,7 @@
       </div>
     </header>
     <main class="qgc-content" :inert="mobile && clientNavigationOpen"><slot /></main>
-    <nav v-if="mobile" class="qgc-mobile-nav qgd-liquid" aria-label="移动导航" :inert="clientNavigationOpen"><router-link v-for="item in navigation.filter(item => item.path !== '/statistic')" :key="item.path" :to="item.path" :aria-current="navActive(item.path) ? 'page' : undefined"><ClientIcon :name="item.icon" /><span>{{ item.title }}</span></router-link></nav>
+    <nav v-if="mobile" ref="mobileNavigation" class="qgc-mobile-nav qgd-liquid" aria-label="移动导航" :inert="clientNavigationOpen"><router-link v-for="item in navigation.filter(item => item.path !== '/statistic')" :key="item.path" :to="item.path" :aria-current="navActive(item.path) ? 'page' : undefined"><ClientIcon :name="item.icon" /><span>{{ item.title }}</span></router-link></nav>
     <dialog ref="dialogElement" class="qgc-dialog" :aria-label="dialogTitle" @cancel.prevent="dialog = ''">
       <div class="qgc-dialog-heading"><h2>{{ dialogTitle }}</h2><button type="button" aria-label="关闭" @click="dialog = ''"><ClientIcon name="close" /></button></div>
       <template v-if="dialog === 'notice'"><p class="qgc-notice-content">{{ siteConfig['site.announcement'] || '暂无公告' }}</p></template>
@@ -64,16 +64,17 @@ const { isDark, toggle: toggleTheme } = useTheme();
 const media = window.matchMedia('(max-width:639px)'), mobile = ref(media.matches);
 function updateMobile(event) { mobile.value = event.matches; clientNavigationOpen.value = false; }
 const floating = ref(false), menu = ref(''), dialog = ref(''), dialogElement = ref(null), toolsRoot = ref(null), navPopupRoot = ref(null), sidebarElement = ref(null), layoutButton = ref(null);
+const primaryNavigation=ref(null),mobileNavigation=ref(null),toolSpace=ref(240);let toolsObserver;
 const favorites = ref([]);
 try { floating.value = localStorage.getItem('qg:client-layout') === 'floating'; } catch { /* 只影响布局偏好保存 */ }
 try { const saved = JSON.parse(localStorage.getItem('qg:client-favorites') || '[]'); if (Array.isArray(saved)) favorites.value = saved.filter((path) => typeof path === 'string'); } catch { /* 无效偏好使用空列表 */ }
 const isChat = computed(() => route.name === 'chat');
-function navActive(path){if(path==='/agent')return ['agents','agentDetail'].includes(route.name)||route.path==='/agent/chat';if(path==='/chat')return isChat.value&&route.path!=='/agent/chat';if(path==='/inpaint')return route.name==='imageEditor';return route.path===path;}
+function navActive(path){if(path==='/agent')return ['agents','agentDetail'].includes(route.name)||route.path==='/agent/chat';if(path==='/chat')return isChat.value&&route.path!=='/agent/chat';if(path==='/voice/create')return route.path==='/voice'||route.path==='/voice/create';if(path==='/inpaint')return route.name==='imageEditor';return route.path===path;}
 const pageTitle = computed(() => isChat.value ? clientChatTitle.value || (currentLang.value === 'en' ? 'Chat' : '对话聊天') : route.meta.title || props.title || 'QGauss AI');
 const languages = [{ key: 'zh', title: '简体中文' }, { key: 'zh-TW', title: '繁體中文' }, { key: 'en', title: 'English' }];
 const languageLabel = computed(() => languages.find((item) => item.key === currentLang.value)?.title || '简体中文');
 const navigation = computed(() => {
-  const base = [{ path: '/chat', title: '对话聊天', icon: 'chat' }, { path: '/apps', title: '应用广场', icon: 'apps' }, { path: '/agent', title: '行动搭档', icon: 'agent' }, { path: '/painting', title: '智能绘画', icon: 'image' }, { path: '/inpaint', title:'图像编辑台',icon:'palette' }, { path: '/market', title: '创意广场', icon: 'gallery' }, { path: '/mindmap', title: '思维导图', icon: 'mindmap' }, { path:'/extend',title:'扩展工作台',icon:'apps' }, { path: '/video', title: '视频创作', icon: 'video' }, { path: '/plaza', title: '模型广场', icon: 'model' }];
+  const base = [{ path: '/chat', title: '对话聊天', icon: 'chat' }, { path: '/apps', title: '应用广场', icon: 'apps' }, { path: '/agent', title: '行动搭档', icon: 'agent' }, { path: '/painting', title: '智能绘画', icon: 'image' }, { path: '/inpaint', title:'图像编辑台',icon:'palette' }, { path: '/market', title: '创意广场', icon: 'gallery' }, { path: '/mindmap', title: '思维导图', icon: 'mindmap' }, { path:'/extend',title:'扩展工作台',icon:'apps' }, {path:'/voice/create',title:'声音工作室',icon:'microphone'}, { path: '/video', title: '视频创作', icon: 'video' }, { path: '/plaza', title: '模型广场', icon: 'model' }];
   const paths = new Set(base.map((item) => item.path));
   function include(rows) {
     for (const row of rows) {
@@ -104,6 +105,8 @@ function toggleLayout() {
 }
 function outside(event) { if (!toolsRoot.value?.contains(event.target) && !navPopupRoot.value?.contains(event.target)) menu.value = ''; }
 function keyboard(event) { if (event.key === 'Escape') { menu.value = ''; clientNavigationOpen.value = false; } }
+async function revealNavigation(){await nextTick();for(const nav of [primaryNavigation.value,mobileNavigation.value])nav?.querySelector('[aria-current=page]')?.scrollIntoView?.({block:'nearest',inline:'nearest',behavior:'auto'});}
+watch([()=>route.path,()=>appearance.variant,mobile,()=>navigation.value.map(row=>row.path).join('|')],()=>void revealNavigation());
 watch(() => route.fullPath, () => { menu.value = ''; clientNavigationOpen.value = false; });
 watch(clientNavigationOpen, async (open) => {
   if (!mobile.value) return;
@@ -119,6 +122,6 @@ watch(dialog, async (kind, old) => {
   if (kind && !dialogElement.value.open) dialogElement.value.showModal();
   else if (!kind && dialogElement.value.open) dialogElement.value.close();
 });
-onMounted(() => { media.addEventListener('change', updateMobile); document.addEventListener('pointerdown', outside); document.addEventListener('keydown', keyboard); });
-onBeforeUnmount(() => { media.removeEventListener('change', updateMobile); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', keyboard); });
+onMounted(() => {if(typeof ResizeObserver!=='undefined'&&toolsRoot.value){toolsObserver=new ResizeObserver(()=>{toolSpace.value=Math.ceil(toolsRoot.value?.getBoundingClientRect().width||240);});toolsObserver.observe(toolsRoot.value);}void revealNavigation();media.addEventListener('change', updateMobile); document.addEventListener('pointerdown', outside); document.addEventListener('keydown', keyboard); });
+onBeforeUnmount(() => {toolsObserver?.disconnect();media.removeEventListener('change', updateMobile); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', keyboard); });
 </script>

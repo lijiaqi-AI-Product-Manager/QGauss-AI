@@ -6,10 +6,11 @@ import {BusinessException,ErrorCode} from '../../common/exceptions/business.exce
 import {StorageService} from '../storage/storage.service';
 import {voiceResults} from './voice-accounting.service';
 import {syncVoiceRecordingExpiry,VOICE_TERMINAL,voiceContentActive,voiceFileActive} from './voice-retention';
+import {purgeVoiceRequestText,voiceSourceKind,voiceTaskSources,VoiceRequestRow} from './voice-request';
 
 const missing=()=>new BusinessException(ErrorCode.NOT_FOUND,'声音记录不存在或已被清理',404);
 const invalid=(message:string)=>new BusinessException(ErrorCode.PARAM_INVALID,message,400);
-type SourceIndex={messages:Map<string,{id:string;content:string;conversationId:string}>;recordings:Set<string>;audio:Set<string>};
+type SourceIndex={messages:Map<string,{id:string;content:string;conversationId:string}>;recordings:Set<string>;audio:Set<string>;compositions:Map<string,VoiceRequestRow>};
 
 @Injectable()
 export class VoiceLibraryService implements OnModuleInit,OnModuleDestroy {
@@ -28,22 +29,23 @@ export class VoiceLibraryService implements OnModuleInit,OnModuleDestroy {
  private page(value:unknown,fallback:number,max:number){const text=this.scalar(value,String(fallback));if(!/^[1-9][0-9]{0,5}$/.test(text)||Number(text)>max)throw invalid('声音分页条件不正确');return Number(text);}
  private async sources(userId:string,rows:VoiceTask[],now:Date):Promise<SourceIndex>{
   const readable=rows.filter(row=>voiceContentActive(row,now)),messages=[...new Set(readable.filter(row=>row.kind==='speech'&&!row.sample&&row.messageId).map(row=>row.messageId!))],recordings=[...new Set(readable.filter(row=>row.kind==='transcription'&&row.inputFileId).map(row=>row.inputFileId!))],audio=[...new Set(readable.flatMap(row=>voiceResults(row.resultJson).map(file=>file.id)))];
-  const [messageRows,recordingRows,audioRows]=await Promise.all([
+  const [messageRows,recordingRows,audioRows,compositions]=await Promise.all([
    this.prisma.message.findMany({where:{id:{in:messages},role:'ASSISTANT',status:'COMPLETED',deletedAt:null,conversation:{userId,deletedAt:null}},select:{id:true,content:true,conversationId:true}}),
    this.prisma.uploadFile.findMany({where:{id:{in:recordings},userId,scope:'voice-recording',mime:'audio/wav',...voiceFileActive(now)},select:{id:true}}),
    this.prisma.uploadFile.findMany({where:{id:{in:audio},userId,scope:'voice-result',mime:'audio/mpeg',...voiceFileActive(now)},select:{id:true}}),
+   voiceTaskSources(this.prisma,userId,readable.map(row=>row.id)),
   ]);
-  return{messages:new Map(messageRows.map(row=>[row.id,row])),recordings:new Set(recordingRows.map(row=>row.id)),audio:new Set(audioRows.map(row=>row.id))};
+  return{messages:new Map(messageRows.map(row=>[row.id,row])),recordings:new Set(recordingRows.map(row=>row.id)),audio:new Set(audioRows.map(row=>row.id)),compositions};
  }
  private view(row:VoiceTask,sources:SourceIndex,now:Date,full=false){
   const finished=VOICE_TERMINAL.includes(row.status),expired=finished&&!!row.expiresAt&&row.expiresAt<=now,active=voiceContentActive(row,now),message=row.messageId?sources.messages.get(row.messageId):null;
-  const sourceAvailable=row.kind==='speech'?row.sample||!!message:!!row.inputFileId&&sources.recordings.has(row.inputFileId);
+  const composition=sources.compositions.get(row.id),sourceAvailable=row.kind==='speech'?row.sample||!!message||composition?.sourceKind==='composition'&&!!composition.text.trim():!!row.inputFileId&&sources.recordings.has(row.inputFileId);
   const results=voiceResults(row.resultJson),complete=row.kind==='speech'?results.length===row.segmentCount&&row.completedSegments===row.segmentCount&&results.every(file=>sources.audio.has(file.id)):!!row.transcript.trim();
   const ready=active&&sourceAvailable&&row.status==='COMPLETED'&&complete;
   const availability=expired?'expired':!finished?'processing':ready?'ready':'unavailable';
   const reason=expired?'保留期限已过，内容停止开放；原有费用回执仍保留。':!active?'这份内容已被清理，原有费用回执仍保留。':!sourceAvailable?'原对话或录音已被移除，无法继续读取这份内容。':row.status==='FAILED'||row.status==='CANCELED'?row.errorMessage||'本次未完成，次数处理结果见下方回执。':row.status==='COMPLETED'&&!complete?'声音文件不完整或已被移除，无法继续播放。':'';
   const prefix=(process.env.API_PREFIX||'api').replace(/^\/+|\/+$/g,'');
-  return{id:row.id,kind:row.kind,label:active&&sourceAvailable?(row.label||message?.content.replace(/\s+/g,' ').slice(0,120)||''):'',sample:row.sample,voice:row.voice,status:row.status,progress:row.progress,availability,availabilityReason:reason,retentionDays:row.retentionDays,expiresAt:row.expiresAt,createdAt:row.createdAt,finishedAt:row.finishedAt,segmentCount:row.segmentCount,completedSegments:row.completedSegments,inputChars:row.inputChars,inputSeconds:row.inputSeconds,billing:{state:row.billingState,pool:row.pool,limit:row.reservedAmount,reserved:finished?0:row.reservedAmount,charged:row.chargedAmount,returned:row.returnedAmount,expired:row.expiredAmount},...(full?{messageId:active&&message?row.messageId:null,conversationId:active&&message?message.conversationId:null,transcript:ready&&row.kind==='transcription'?row.transcript:'',audio:ready&&row.kind==='speech'?results.map((file,index)=>({index,url:`/${prefix}/voice/tasks/${encodeURIComponent(row.id)}/audio/${index}`,mime:file.mime})):[]}:{})};
+  return{id:row.id,sourceKind:voiceSourceKind(row),kind:row.kind,label:active&&sourceAvailable?(row.label||message?.content.replace(/\s+/g,' ').slice(0,120)||''):'',sample:row.sample,voice:row.voice,status:row.status,progress:row.progress,availability,availabilityReason:reason,retentionDays:row.retentionDays,expiresAt:row.expiresAt,createdAt:row.createdAt,finishedAt:row.finishedAt,segmentCount:row.segmentCount,completedSegments:row.completedSegments,inputChars:row.inputChars,inputSeconds:row.inputSeconds,billing:{state:row.billingState,pool:row.pool,limit:row.reservedAmount,reserved:finished?0:row.reservedAmount,charged:row.chargedAmount,returned:row.returnedAmount,expired:row.expiredAmount},...(full?{sourceText:active&&sourceAvailable&&composition?.sourceKind==='composition'?composition.text:'',downloadUrl:ready&&row.kind==='speech'?`/${prefix}/voice/tasks/${encodeURIComponent(row.id)}/download`:null,messageId:active&&message?row.messageId:null,conversationId:active&&message?message.conversationId:null,transcript:ready&&row.kind==='transcription'?row.transcript:'',audio:ready&&row.kind==='speech'?results.map((file,index)=>({index,url:`/${prefix}/voice/tasks/${encodeURIComponent(row.id)}/audio/${index}`,mime:file.mime})):[]}:{})};
  }
  async list(userId:string,query:Record<string,unknown>={}){
   const kind=this.scalar(query.kind,'all'),state=this.scalar(query.state,'all'),q=this.scalar(query.q,'').trim(),page=this.page(query.page,1,100000),pageSize=this.page(query.pageSize,9,30),now=new Date();
@@ -65,6 +67,7 @@ export class VoiceLibraryService implements OnModuleInit,OnModuleDestroy {
   const ids=voiceResults(row.resultJson).map(file=>file.id);
   if(ids.length)await tx.uploadFile.updateMany({where:{id:{in:ids},userId:row.userId,scope:'voice-result',mime:'audio/mpeg',purgedAt:null},data:{deletedAt:now,expiresAt:now}});
   await tx.voiceTask.update({where:{id:row.id},data:{label:'',transcript:'',resultJson:'[]',purgedAt:now}});
+  await purgeVoiceRequestText(tx,row.userId,row.id,now);
   await syncVoiceRecordingExpiry(tx,row.userId,row.inputFileId,now);
   if(row.inputFileId)await this.withdrawRecordingTx(tx,row.userId,row.inputFileId,now);
  }

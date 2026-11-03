@@ -1,0 +1,14 @@
+import {Prisma,VoiceTask} from '@prisma/client';
+import {randomUUID} from 'node:crypto';
+import {BusinessException,ErrorCode} from '../../common/exceptions/business.exception';
+type Db=Prisma.TransactionClient;
+export type VoiceRequestRow={id:string;userId:string;requestKey:string;taskId:string|null;state:string;sourceKind:string;title:string;text:string};
+export const voiceSourceKind=(task:{kind:string;sample:boolean;messageId:string|null})=>task.kind==='transcription'?'recording':task.sample?'sample':task.messageId?'message':'composition';
+export function voiceRequestKey(value:string){if(!/^[A-Za-z0-9_-]{8,100}$/.test(value))throw new BusinessException(ErrorCode.PARAM_INVALID,'声音请求标识无效。',400);return value;}
+export async function voiceRequest(db:Db,userId:string,key:string){voiceRequestKey(key);const rows=await db.$queryRaw<VoiceRequestRow[]>`SELECT * FROM "voice_requests" WHERE "userId"=${userId} AND "requestKey"=${key}`;return rows[0]||null;}
+export async function voiceTaskSource(db:Db,userId:string,taskId:string){const rows=await db.$queryRaw<VoiceRequestRow[]>`SELECT * FROM "voice_requests" WHERE "userId"=${userId} AND "taskId"=${taskId}`;return rows[0]||null;}
+export async function voiceTaskSources(db:Db,userId:string,ids:string[]){if(!ids.length)return new Map<string,VoiceRequestRow>();const rows=await db.$queryRaw<VoiceRequestRow[]>(Prisma.sql`SELECT * FROM "voice_requests" WHERE "userId"=${userId} AND "taskId" IN (${Prisma.join(ids)})`);return new Map(rows.filter(row=>row.taskId).map(row=>[row.taskId!,row]));}
+export async function assertVoiceRequestOpen(db:Db,userId:string,key:string){const row=await voiceRequest(db,userId,key);if(row)throw new BusinessException(ErrorCode.CONVERSATION_BUSY,'这次声音请求已经结束或接受，请先核对原任务。',409);}
+export async function acceptVoiceRequest(db:Db,task:VoiceTask,input:{text?:string;title?:string}){const now=new Date();await db.$executeRaw`INSERT INTO "voice_requests" ("id","userId","requestKey","taskId","state","sourceKind","title","text","createdAt","updatedAt") VALUES (${randomUUID()},${task.userId},${task.requestKey},${task.id},'ACCEPTED',${voiceSourceKind(task)},${input.title||''},${input.text||''},${now},${now})`;}
+export async function purgeVoiceRequestText(db:Db,userId:string,taskId:string,now:Date){await db.$executeRaw`UPDATE "voice_requests" SET "text"='',"title"='',"updatedAt"=${now} WHERE "userId"=${userId} AND "taskId"=${taskId}`;}
+export async function endVoiceRequest(db:Db,userId:string,key:string){voiceRequestKey(key);return db.$executeRaw`INSERT INTO "voice_requests" ("id","userId","requestKey","state","sourceKind","title","text","createdAt","updatedAt") VALUES (${randomUUID()},${userId},${key},'ENDED','unknown','','',${new Date()},${new Date()}) ON CONFLICT("userId","requestKey") DO UPDATE SET "state"='ENDED',"updatedAt"=${new Date()}`;}

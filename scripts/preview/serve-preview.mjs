@@ -35,6 +35,7 @@ if(process.argv.includes('--styles-only')){
  console.log('QGauss focused preview styles rebuilt');process.exit(0);
 }
 if (!process.argv.includes('--serve-only')) {
+await copyFile(join(repo,'apps/api/test/fixtures/qgauss-voice-preview.mp3'),join(output,'qgauss-voice-preview.mp3'));
 await copyFile(join(repo, 'apps/api/test/fixtures/qgauss-video.mp4'), join(output, 'qgauss-motion-fixture.mp4'));
 await copyFile(join(repo,'apps/api/test/fixtures/qgauss-reference-video.mp4'),join(output,'qgauss-film-material.mp4'));
 await copyFile(join(repo,'apps/api/test/fixtures/qgauss-reference-upscaled.mp4'),join(output,'qgauss-film-upscaled.mp4'));
@@ -48,8 +49,9 @@ await copyFile(join(here, 'midjourney-grid.svg'), join(output, 'qgauss-mj-grid.s
 const bundle = await rollup({
   input: join(here, 'preview-entry.mjs'),
   plugins: [
-    ['mindmap','image-editor','status','extensions'].includes(process.env.QGAUSS_PREVIEW_PAGE)&&{name:'qgauss-focused-preview',resolveId(source){if(source==='../../apps/web/src/router.js')return'\0qgauss:focused-router';},load(id){
+    ['mindmap','image-editor','status','extensions','voice-composer'].includes(process.env.QGAUSS_PREVIEW_PAGE)&&{name:'qgauss-focused-preview',resolveId(source){if(source==='../../apps/web/src/router.js')return'\0qgauss:focused-router';},load(id){
       if(id!=='\0qgauss:focused-router')return;const header='import {createRouter,createWebHistory} from "vue-router";',view=name=>JSON.stringify(join(repo,'apps/web/src/views/'+name+'.vue').replaceAll('\\','/'));
+      if(process.env.QGAUSS_PREVIEW_PAGE==='voice-composer')return header+'import Extensions from '+view('Extensions')+';import Composer from '+view('VoiceComposer')+';import Library from '+view('VoiceHistory')+';export const router=createRouter({history:createWebHistory(),routes:[{path:"/extend",name:"extensions",component:Extensions,meta:{ownTitle:true,title:"扩展工作台"}},{path:"/voice/create",name:"voiceComposer",component:Composer,meta:{ownTitle:true,title:"声音工作室"}},{path:"/voice",name:"voiceLibrary",component:Library,meta:{ownTitle:true,title:"声音收藏室"}},{path:"/:pathMatch(.*)*",redirect:"/voice/create"}]});';
       if(process.env.QGAUSS_PREVIEW_PAGE==='extensions')return header+'import Extensions from '+view('Extensions')+';import Control from '+view('admin/ExtensionControl')+';import Chat from '+view('Chat')+';export const router=createRouter({history:createWebHistory(),routes:[{path:"/extend",name:"extensions",component:Extensions,meta:{ownTitle:true,title:"扩展工作台"}},{path:"/extensions/manage",name:"extensionStudio",component:Control,meta:{admin:true,ownTitle:true,title:"扩展工具箱"}},{path:"/chat",name:"chat",component:Chat,meta:{public:true,client:true}},{path:"/:pathMatch(.*)*",redirect:"/extend"}]});';
       if(process.env.QGAUSS_PREVIEW_PAGE==='status')return header+'import Status from '+view('StatusPage')+';import Chat from '+view('Chat')+';import Apps from '+view('Apps')+';import Painting from '+view('Painting')+';import {systemStatusRoutes,installRouteRecovery} from '+JSON.stringify(join(repo,'apps/web/src/lib/route-recovery.js').replaceAll('\\','/'))+';export const router=createRouter({history:createWebHistory(),routes:[{path:"/chat",name:"chat",component:Chat,meta:{public:true,client:true}},{path:"/apps",name:"apps",component:Apps,meta:{public:true}},{path:"/painting",name:"painting",component:Painting},...systemStatusRoutes(Status)]});installRouteRecovery(router);';
       if(process.env.QGAUSS_PREVIEW_PAGE==='image-editor')return header+'import Editor from '+view('ImageEditor')+';import Painting from '+view('Painting')+';export const router=createRouter({history:createWebHistory(),routes:[{path:"/inpaint",alias:"/repaint",name:"imageEditor",component:Editor,meta:{ownTitle:true,title:"图像编辑台"}},{path:"/painting",name:"painting",component:Painting,meta:{ownTitle:true,title:"智能绘画"}},{path:"/:pathMatch(.*)*",redirect:"/inpaint"}]});';
@@ -66,17 +68,17 @@ await writeFile(join(output, 'index.html'), '<!doctype html><html lang="zh-CN"><
 }
 if (process.argv.includes('--build-only')) { console.log('QGauss readonly preview rebuilt'); process.exit(0); }
 const publicRoot = join(repo, 'apps/web/public');
-const types = { '.mp4': 'video/mp4', '.wav':'audio/wav', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.woff2': 'font/woff2' };
+const types = { '.mp3':'audio/mpeg', '.mp4': 'video/mp4', '.wav':'audio/wav', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.woff2': 'font/woff2' };
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-QGauss-Reference-Fixture', 'client-preview');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    const deviceFrame=url.searchParams.get('deviceFrame')==='1'&&['/extend','/extensions/manage'].includes(url.pathname);
+    const deviceFrame=url.searchParams.get('deviceFrame')==='1'&&['/extend','/extensions/manage','/voice/create','/voice'].includes(url.pathname);
     res.setHeader('Content-Security-Policy', url.pathname==='/extensions/idea-canvas.html' ? "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self' data:; font-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'" : "default-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; frame-src 'self' https:; frame-ancestors "+(deviceFrame?"'self'":"'none'"));
     if(url.pathname==='/device-preview'){
-      const embedded=new URL(url.searchParams.get('page')==='admin'?'/extensions/manage':'/extend',url.origin);
+      const embedded=new URL(url.searchParams.get('page')==='voice'?'/voice/create':url.searchParams.get('page')==='voice-library'?'/voice':url.searchParams.get('page')==='admin'?'/extensions/manage':'/extend',url.origin);
       embedded.search=url.search;embedded.searchParams.delete('page');embedded.searchParams.set('deviceFrame','1');
       res.setHeader('Content-Type','text/html; charset=utf-8');
       return res.end('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>QGauss 设备预览</title><style>html,body{margin:0;background:#e8e6ed;font:12px sans-serif}header{text-align:center;padding:12px;color:#5c536c}iframe{display:block;width:390px;height:844px;max-width:100%;border:0;margin:auto;background:white;box-shadow:0 15px 60px #3d315333}</style><header>QGauss · 390 × 844 设备预览 · 本地样例</header><iframe title="QGauss 手机工作台" src="'+embedded.href.replaceAll('&','&amp;').replaceAll('"','&quot;')+'"></iframe></html>');

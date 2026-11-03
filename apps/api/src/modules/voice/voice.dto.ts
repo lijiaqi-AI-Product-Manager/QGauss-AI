@@ -17,6 +17,8 @@ export class VoiceConfigDto {
 }
 export class VoiceQuoteDto {
   @Raw() @IsIn(['speech','transcription']) kind:'speech'|'transcription';
+  @Raw() @ValidateIf((_,value)=>value!==undefined) @IsString() @MaxLength(32768) text?:string;
+  @Raw() @ValidateIf((_,value)=>value!==undefined) @IsString() @MaxLength(80) title?:string;
   @Raw() @ValidateIf((_,value)=>value!==undefined) @IsString() @MaxLength(128) messageId?:string;
   @Raw() @ValidateIf((_,value)=>value!==undefined) @IsString() @MaxLength(128) fileId?:string;
   @Raw() @ValidateIf((_,value)=>value!==undefined) @IsBoolean() sample?:boolean;

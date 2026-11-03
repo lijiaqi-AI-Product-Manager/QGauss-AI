@@ -12,7 +12,7 @@ export class VoiceAccountingService {
   constructor(private readonly prisma:PrismaService,private readonly ledger:LedgerService){}
   async reserveTx(tx:Prisma.TransactionClient,task:VoiceTask,cost:number){
     if(!isPool(task.pool))throw new Error('语音次数池无效');
-    if(cost)await this.ledger.reserveCountTx(tx,task.userId,{pool:task.pool,amount:cost,refId:task.id,bizType:'voice',model:task.model,modelName:task.kind==='speech'?'回答朗读':'录音转写'});
+    if(cost)await this.ledger.reserveCountTx(tx,task.userId,{pool:task.pool,amount:cost,refId:task.id,bizType:'voice',model:task.model,modelName:task.kind==='speech'?task.sample?'音色试听':task.messageId?'回答朗读':'文字配音':'录音转写'});
     return tx.voiceTask.update({where:{id:task.id},data:{reservedAmount:cost,billingState:cost?'RESERVED':'FREE'}});
   }
   async stage(id:string,transcript:string,results:VoiceResult[]){
