@@ -124,7 +124,7 @@
           <el-icon class="cv-model-caret"><ArrowDown /></el-icon>
         </button>
         <span v-if="appId||appError||appLoading" class="cv-app">
-          <el-icon><Grid /></el-icon>{{ appName||(appLoading?'正在打开应用':'应用暂不可用') }}
+          <AppAvatar v-if="appIcon" :icon="appIcon" :app-id="appId"/><el-icon v-else><Grid /></el-icon>{{ appName||(appLoading?'正在打开应用':'应用暂不可用') }}
           <button type="button" aria-label="退出应用" @click="leaveApp">
             <el-icon><Close /></el-icon>
           </button>
@@ -321,7 +321,7 @@
           />
         <p v-if="entryPending||entryError" class="qgc-model-cost-note qag-composer-quote" :role="entryError?'alert':'status'"><ClientIcon name="sound"/><span>{{ entryPending?'正在打开指定的创作空间…':entryError }}</span><button v-if="entryError" type="button" @click="applyRouteEntry">重新打开</button><button v-if="entryError" type="button" @click="leaveEntry">开始普通对话</button></p>
         <p v-if="agentId" class="qgc-model-cost-note qag-composer-quote"><ClientIcon name="agent" /><span>{{ agentQuote(currentAgent).label }}</span><small>{{ agentLoading?'正在核对搭档资料…':agentError||'问题与所选附件将交给搭档服务处理' }}</small><button type="button" :disabled="agentLoading||streaming" @click="loadCurrentAgent">刷新资料</button></p>
-        <p v-if="appId||appError||appLoading" class="qgc-model-cost-note qag-composer-quote" :role="appError?'alert':'status'"><ClientIcon name="apps"/><span>{{ appName||'应用资料' }}</span><small>{{ appLoading?'正在核对应用设定…':appError||'已核对第 '+appVersion+' 版设定，发送时再开始生成' }}</small><button v-if="appId" type="button" :disabled="appLoading||streaming||loadingDetail" @click="loadCurrentApp()">刷新应用资料</button><button v-else type="button" @click="leaveApp">返回普通对话</button></p>
+        <p v-if="appId||appError||appLoading" class="qgc-model-cost-note qag-composer-quote" :role="appError?'alert':'status'"><AppAvatar v-if="appIcon" :icon="appIcon" :app-id="appId"/><ClientIcon v-else name="apps"/><span>{{ appName||'应用资料' }}</span><small>{{ appLoading?'正在核对应用设定…':appError||'已核对第 '+appVersion+' 版设定，发送时再开始生成' }}</small><button v-if="appId" type="button" :disabled="appLoading||streaming||loadingDetail" @click="loadCurrentApp()">刷新应用资料</button><button v-else type="button" @click="leaveApp">返回普通对话</button></p>
         <p v-else-if="auth.isLoggedIn && currentModel" class="qgc-model-cost-note"><ClientIcon name="wallet" /><span>{{ modelBilling(currentModel).title }}</span><small>发送时按站点设置</small></p>
         <p v-if="webSearchOn" class="cv-web-search-note" role="status"><ClientIcon name="globe" />{{ currentModel?.webSearchAvailable ? '本轮允许模型按需要联网，仅发送当前问题和附件；仍按当前模型设置结算。' : '当前模型尚未接入联网，请关闭联网或选择支持的模型后发送。' }}</p>
         <div class="cv-tools">
@@ -368,6 +368,7 @@
 </template>
 
 <script setup>
+import AppAvatar from '../components/design/AppAvatar.vue';
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
@@ -443,6 +444,7 @@ const entryKeys=['conversation','voiceTask','agent','app','voice'];
 const entryPending=ref(entryKeys.some(key=>route.query[key]!==undefined)),entryError=ref('');let entryRead=null;
 const appId = ref('');
 const appName = ref('');
+const appIcon=ref('');
 const appVersion=ref(null),appLoading=ref(false),appError=ref('');let appRead=null;
 const agentId=ref(String(route.query.agent||'')),currentAgent=ref(null),agentLoading=ref(!!route.query.agent),agentError=ref('');let agentRead=null;
 const activeTitle = computed(() => !draftStarted.value && !conversationId.value ? '' : conversations.value.find(c => c.id === conversationId.value)?.title || currentAgent.value?.name || appName.value || (currentLang.value === 'en' ? 'New chat' : currentLang.value === 'zh-TW' ? '新對話' : '新对话'));
@@ -1005,15 +1007,15 @@ function newChat(seed) {
   nextTick(() => { autosize(); if (!compactComposer.value) inputEl.value?.focus(); });
 }
 
-function clearApp(){appRead?.abort();appRead=null;appId.value='';appName.value='';appVersion.value=null;appLoading.value=false;appError.value='';}
+function clearApp(){appRead?.abort();appRead=null;appId.value='';appName.value='';appIcon.value='';appVersion.value=null;appLoading.value=false;appError.value='';}
 function leaveApp() { clearApp();conversationKind.value = 'chat'; newChat();if(route.query.app!==undefined){const query={...route.query};delete query.app;void router.replace({path:route.path,query});} }
 async function loadCurrentApp({opening=false}={}){
  appRead?.abort();const id=appId.value;if(!id||!auth.isLoggedIn)return;
  const request=new AbortController(),identity=auth.identityRevision,view=conversationViewRevision,choice=modelSelectionRevision;appRead=request;appLoading.value=true;appError.value='';
  const current=()=>viewActive&&!request.signal.aborted&&auth.isLoggedIn&&auth.identityRevision===identity&&appId.value===id&&view===conversationViewRevision;
- try{const row=await api.get('/apps/'+encodeURIComponent(id),{signal:request.signal,retry:false});if(!current())return;if(row?.id!==id||!Number.isInteger(row.version)||row.version<1)throw Error('应用资料不完整，请重新核对。');appName.value=row.name;appVersion.value=row.version;
+ try{const row=await api.get('/apps/'+encodeURIComponent(id),{signal:request.signal,retry:false});if(!current())return;if(row?.id!==id||!Number.isInteger(row.version)||row.version<1)throw Error('应用资料不完整，请重新核对。');appName.value=row.name;appIcon.value=row.icon||'';appVersion.value=row.version;
   if(opening){if(row.defaultModel&&choice===modelSelectionRevision)model.value=row.defaultModel;if(row.greeting)messages.value=[{role:'assistant',content:row.greeting}];}
- }catch(error){if(current()){appVersion.value=null;appError.value=error.status===404?'这位搭档当前不可用。已有对话保留；可以刷新核对，或退出应用后开始普通对话。':error.message||'应用资料暂未确认，请刷新后继续。';}}
+ }catch(error){if(current()){appIcon.value='';appVersion.value=null;appError.value=error.status===404?'这位搭档当前不可用。已有对话保留；可以刷新核对，或退出应用后开始普通对话。':error.message||'应用资料暂未确认，请刷新后继续。';}}
  finally{if(appRead===request){appLoading.value=false;appRead=null;}}
 }
 async function startApp(id){
@@ -1089,6 +1091,7 @@ async function openConversation(id,{fromEntry=false}={}) {
     conversationId.value = detail.id;
     clearApp();appId.value = detail.appId || '';
     appName.value = detail.app?.name || '';
+    appIcon.value=detail.app?.icon||'';
     appVersion.value=detail.app?.version||null;
     if(appId.value&&!detail.app)appError.value='这位搭档当前不可用。已有对话保留；可以刷新核对，或退出应用后开始普通对话。';
     else if(appId.value&&!Number.isInteger(appVersion.value))void loadCurrentApp();

@@ -1,9 +1,10 @@
+import {appImageId} from './app-image.js';
 export const CREATOR_ICONS=Object.freeze(['🪐','🎨','🧠','📝','🧭','💻']);
 export const CREATOR_STATES=Object.freeze({DRAFT:'只属于你',PENDING:'等待审核',APPROVED:'已在广场发光',REJECTED:'可以再打磨',NONE:'站点精选'});
 export const CREATOR_POOLS=Object.freeze({model3:'基础次数',model4:'高级次数',drawMj:'绘画次数',agent:'应用次数'});
 export function creatorState(app){return app?.deletedAt?'已放入回收站':CREATOR_STATES[app?.reviewStatus]||'状态待确认';}
 export function creatorEditable(app){return!app||!app.deletedAt&&['DRAFT','REJECTED'].includes(app.reviewStatus);}
-export function creatorDraft(app){return{name:app?.name||'',description:app?.description||'',icon:CREATOR_ICONS.includes(app?.icon)?app.icon:CREATOR_ICONS[0],systemPrompt:app?.systemPrompt||'',defaultModel:app?.defaultModel||'',greeting:app?.greeting||'',categoryId:app?.categoryId||''};}
+export function creatorDraft(app){return{name:app?.name||'',description:app?.description||'',icon:CREATOR_ICONS.includes(app?.icon)||appImageId(app?.icon)?app.icon:CREATOR_ICONS[0],systemPrompt:app?.systemPrompt||'',defaultModel:app?.defaultModel||'',greeting:app?.greeting||'',categoryId:app?.categoryId||''};}
 export function creatorPayload(draft){return{name:draft.name.trim(),description:draft.description.trim(),icon:draft.icon,systemPrompt:draft.systemPrompt,defaultModel:draft.defaultModel||null,greeting:draft.greeting.trim(),categoryId:draft.categoryId||null};}
 export function creatorProblem(draft){if(!draft.name.trim())return'先给这位搭档一个名字。';if(draft.name.trim().length>64)return'名字最多 64 个字符。';if(!draft.systemPrompt.trim())return'写下它的专长、工作方式与边界。';if(draft.systemPrompt.length>8000)return'角色设定最多 8000 个字符。';if(draft.description.length>240)return'一句话介绍最多 240 个字符。';if(draft.greeting.length>1000)return'开场白最多 1000 个字符。';return'';}
 export function creatorReward(offer){return Object.entries(offer?.counts||{}).filter(([,v])=>v>0).map(([k,v])=>`${v} ${CREATOR_POOLS[k]||'次'}`).join('、')||'本次不赠送次数';}

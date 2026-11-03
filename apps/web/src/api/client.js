@@ -82,11 +82,16 @@ export async function uploadVideoMaterial(kind, file, options = {}) {
   return uploadMultipart('/video/materials/' + kind, file, options);
 }
 
-async function uploadMultipart(path, file, { retry = true, signal } = {}) {
+export async function uploadAppImage(file,requestKey,crop,options={}) {
+  return uploadMultipart('/apps/icons',file,{...options,retry:false,fields:{requestKey,crop:JSON.stringify(crop)}});
+}
+
+async function uploadMultipart(path, file, { retry = true, signal, fields = {} } = {}) {
   const requestedToken = accessToken;
   const requestedIdentity = accessIdentity;
   const fd = new FormData();
   fd.append('file', file, file.name || 'file');
+  for(const [key,value] of Object.entries(fields)) fd.append(key,value);
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
     signal,
@@ -95,7 +100,7 @@ async function uploadMultipart(path, file, { retry = true, signal } = {}) {
   });
   if (res.status === 401 && retry && await canRenewCredential(requestedToken,requestedIdentity,signal) && requestedIdentity === accessIdentity && !signal?.aborted) {
     void res.body?.cancel().catch(() => {});
-    return uploadMultipart(path, file, { retry: false, signal });
+    return uploadMultipart(path, file, { retry: false, signal,fields });
   }
   const json = await res.json().catch(() => null);
   if (!res.ok) throw new ApiError(json?.code ?? res.status, json?.message ?? `上传失败(${res.status})`, res.status);

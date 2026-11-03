@@ -53,7 +53,7 @@ export class UploadController {
     @Param('id') id: string,
     @Res() res: Response,
   ) {
-    const { buffer, mime, filename } = await this.storage.read(id, user.id, user.role);
+    const { buffer, mime, filename,scope } = await this.storage.read(id, user.id, user.role);
     // 只有位图（和沙箱里的 SVG）允许内联渲染：text/plain、application/pdf 之类内联回源
     // 等于把同源执行面交给用户
     const isSvg = mime === 'image/svg+xml';
@@ -65,7 +65,7 @@ export class UploadController {
       res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
     }
     res.setHeader('Content-Length', buffer.length);
-    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Cache-Control', scope==='app-icon'?'private, no-store':'private, max-age=3600');
     res.setHeader(
       'Content-Disposition',
       `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(filename)}`,

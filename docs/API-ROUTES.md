@@ -1,12 +1,12 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **290** 条路由，分布在 **32** 个控制器。
+> 共 **294** 条路由，分布在 **32** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
 | `/agents` | 16 | `src/modules/agents/agents.controller.ts` |
-| `/apps` | 27 | `src/modules/apps/apps.controller.ts` |
+| `/apps` | 31 | `src/modules/apps/apps.controller.ts` |
 | `/auth` | 12 | `src/modules/auth/auth.controller.ts` |
 | `/balance` | 7 | `src/modules/commerce/wallet.controller.ts` |
 | `/chat` | 4 | `src/modules/chat/chat.controller.ts` |
@@ -63,6 +63,10 @@
 
 | 方法 | 路径 | 权限 |
 |---|---|---|
+| POST | `/apps/icons` | 登录 |
+| GET | `/apps/icons/by-request/:key` | 登录 |
+| GET | `/apps/icons/:id/raw` | 登录 |
+| GET | `/apps/:id/icon` | 访客可读，携带凭据时校验身份 |
 | GET | `/apps/mine` | 登录 |
 | GET | `/apps/mine/by-request/:key` | 登录 |
 | GET | `/apps/mine/:id` | 登录 |

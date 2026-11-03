@@ -132,6 +132,7 @@ test('query bounds reject duplicate values and deterministic pagination does not
 test('creator input preserves JSON types and strips ownership, publication and reward overrides',async()=>{
  const pipe=new ValidationPipe({whitelist:true,transform:true,transformOptions:{enableImplicitConversion:true}}),transform=(body,metatype)=>pipe.transform(body,{type:'body',metatype}),body={name:'名字',description:'',icon:'🪐',systemPrompt:'角色设定',greeting:'',requestKey:randomUUID()};
  const safe=await transform({...body,ownerId:'other',published:true,reviewStatus:'APPROVED',rewardGrantedAt:new Date()},CreateOwnedAppDto);for(const key of ['ownerId','published','reviewStatus','rewardGrantedAt'])assert.equal(Object.hasOwn(safe,key),false);
+ const image='qgauss:app-icon:ai_'+'a'.repeat(48);assert.equal((await transform({...body,icon:image},CreateOwnedAppDto)).icon,image);
  for(const extra of [{name:123},{description:null},{systemPrompt:[]},{icon:'<script>'},{defaultModel:123},{categoryId:{}},{greeting:123}])await assert.rejects(()=>transform({...body,...extra},CreateOwnedAppDto),status(400));
  for(const version of ['1',0,1.2,null,2147483647])await assert.rejects(()=>transform({version,requestKey:randomUUID()},AppActionDto),status(400));await assert.rejects(()=>transform({...body,version:'1'},UpdateOwnedAppDto),status(400));await assert.rejects(()=>transform({version:1,requestKey:randomUUID(),decision:'APPROVE',note:''},ReviewOwnedAppDto),status(400));
 });
