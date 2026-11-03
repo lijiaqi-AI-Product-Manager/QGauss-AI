@@ -42,7 +42,7 @@
     "ops:inspect": "node apps/api/scripts/operations/cli.mjs inspect",
     "preview": "node scripts/preview/serve-preview.mjs",
     "release:check": "node scripts/release-check.mjs",
-    "release:test": "node --test scripts/test/publication.spec.mjs"
+    "release:test": "node --test scripts/test/publication.spec.mjs scripts/test/brand-check.spec.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
