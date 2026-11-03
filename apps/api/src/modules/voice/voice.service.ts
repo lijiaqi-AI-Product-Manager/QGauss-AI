@@ -1,4 +1,5 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy,UnauthorizedException } from '@nestjs/common';
+import type {AuthSessionContext} from '../../common/decorators/current-user.decorator';
 import { Channel, VoiceConfig, VoiceTask, Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -17,6 +18,7 @@ import { VoiceAccountingService, VoiceResult, voiceResults } from './voice-accou
 import { inspectVoiceWav, MAX_RECORDING_BYTES, MAX_RECORDING_SECONDS, readVoiceBody, splitVoiceText, validMp3, VOICE_PREVIEW_TEXT, voiceEndpoint } from './voice-protocol';
 import {acceptVoiceRequest,assertVoiceRequestOpen,endVoiceRequest,voiceRequestKey,voiceSourceKind,voiceTaskSource,VoiceRequestRow} from './voice-request';
 import {mergeVoiceMp3} from './voice-mp3';
+import {VoiceStreamSession} from './voice-stream';
 
 const defaults=()=>({id:'site',enabled:false,speechChannelId:'',transcriptionChannelId:'',speechModel:'tts-1',transcriptionModel:'whisper-1',speechCost:0,transcriptionCost:0,pool:'model3',maxSpeechChars:16000,retentionDays:0,version:0,updatedAt:new Date(0)} satisfies VoiceConfig);
 const hash=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -31,7 +33,7 @@ type Prepared={config:VoiceConfig;channel:Channel;payload:Intent;text:string;seg
 @Injectable()
 export class VoiceService implements OnModuleInit,OnModuleDestroy {
   private readonly logger=new Logger(VoiceService.name);
-  private readonly running=new Map<string,{controller:AbortController;work:Promise<void>}>();
+  private readonly running=new Map<string,{controller:AbortController;work:Promise<void>;stream?:VoiceStreamSession}>();
   private closing=false;
   private settlementTimer?:NodeJS.Timeout;
   private settling=false;
@@ -88,8 +90,8 @@ export class VoiceService implements OnModuleInit,OnModuleDestroy {
     const payload=this.intent(dto),config=await this.config();if(!config.enabled)throw invalid('站点尚未开启语音服务');
     const channel=await this.channel(payload.kind==='speech'?config.speechChannelId:config.transcriptionChannelId);if(!channel)throw invalid('语音渠道暂不可用，请联系管理员');
     const input=await this.source(userId,payload);if(input.text.length>config.maxSpeechChars)throw invalid(`这条回答超过当前 ${config.maxSpeechChars} 字符的朗读上限`);
-    const segments=payload.kind==='speech'?splitVoiceText(input.text):[],cost=(await this.costs(config))[payload.kind];
-    const revision=hash({configVersion:config.version,channelId:channel.id,channelUpdated:channel.updatedAt.toISOString(),payload,inputHash:input.inputHash,cost,pool:config.pool});
+    const segments=payload.kind==='speech'?splitVoiceText(input.text,4096,256):[],cost=(await this.costs(config))[payload.kind];
+    const revision=hash({configVersion:config.version,channelId:channel.id,channelUpdated:channel.updatedAt.toISOString(),payload,inputHash:input.inputHash,cost,pool:config.pool,segments:segments.map(part=>part.length)});
     return{config,channel,payload,...input,segments,cost,revision};
   }
   async quote(userId:string,dto:VoiceQuoteDto){if(!this.rate.tryConsume('voice-quote:'+userId,40))throw new BusinessException(ErrorCode.RATE_LIMITED,'次数确认有些频繁，请稍后再试。',429);const plan=await this.prepare(userId,dto);return{kind:plan.payload.kind,revision:plan.revision,cost:plan.cost,pool:plan.config.pool,chars:plan.text.length,seconds:plan.seconds,segments:plan.segments.length||1,disclosure:'AI 合成声音'};}
@@ -119,14 +121,24 @@ export class VoiceService implements OnModuleInit,OnModuleDestroy {
       if(await tx.voiceTask.count({where:{userId,status:{in:['QUEUED','RUNNING','SETTLING']}}})>=2)throw conflict('已有两项语音正在处理，请稍后再提交');
       const row=await tx.voiceTask.create({data:{userId,requestKey:dto.requestKey,requestHash,label:(payload.title||plan.text.replace(/\s+/g,' ')).slice(0,120),retentionDays:plan.config.retentionDays,kind:payload.kind,messageId:payload.messageId,inputFileId:payload.fileId,sample:payload.sample,voice:payload.voice,model:payload.kind==='speech'?plan.config.speechModel:plan.config.transcriptionModel,channelId:channel.id,configVersion:plan.config.version,inputChars:plan.text.length,inputSeconds:plan.seconds,segmentCount:plan.segments.length||1,pool:plan.config.pool}});created=true;await acceptVoiceRequest(tx,row,payload);await syncVoiceRecordingExpiry(tx,userId,payload.fileId);return this.accounting.reserveTx(tx,row,plan.cost);
     });}catch(error){if((error as any)?.code==='P2002'){const previous=await this.prisma.voiceTask.findUnique({where:{userId_requestKey:{userId,requestKey:dto.requestKey}}});if(previous?.requestHash===requestHash)return this.detail(userId,previous.id);}throw error;}
-    if(created){const controller=new AbortController(),work=Promise.resolve().then(()=>this.execute(accepted.id,plan,controller)).catch(()=>this.logger.warn('语音任务回执等待恢复')).finally(()=>this.running.delete(accepted.id));this.running.set(accepted.id,{controller,work});}
+    if(created){const controller=new AbortController(),stream=accepted.kind==='speech'?new VoiceStreamSession():undefined,work=Promise.resolve().then(()=>this.execute(accepted.id,plan,controller,stream)).catch(()=>this.logger.warn('语音任务回执等待恢复')).finally(()=>this.running.delete(accepted.id));this.running.set(accepted.id,{controller,work,stream});}
     return this.view(accepted,await voiceTaskSource(this.prisma,userId,accepted.id));
   }
-  private view(row:VoiceTask,source:VoiceRequestRow|null=null){const prefix=(process.env.API_PREFIX||'api').replace(/^\/+|\/+$/g,'');return{id:row.id,label:row.label,sourceKind:voiceSourceKind(row),sourceText:source?.sourceKind==='composition'?source.text:'',kind:row.kind,messageId:row.messageId,sample:row.sample,voice:row.voice,status:row.status,progress:row.progress,segmentCount:row.segmentCount,completedSegments:row.completedSegments,transcript:row.status==='COMPLETED'?row.transcript:'',audio:row.status==='COMPLETED'?voiceResults(row.resultJson).map((file,index)=>({index,url:`/${prefix}/voice/tasks/${encodeURIComponent(row.id)}/audio/${index}`,mime:file.mime})):[],errorCode:row.errorCode,errorMessage:row.errorMessage,createdAt:row.createdAt,finishedAt:row.finishedAt,billing:{state:row.billingState,pool:row.pool,limit:row.reservedAmount,reserved:!terminal(row)?row.reservedAmount:0,charged:row.chargedAmount,returned:row.returnedAmount,expired:row.expiredAmount}};}
+  private view(row:VoiceTask,source:VoiceRequestRow|null=null){const prefix=(process.env.API_PREFIX||'api').replace(/^\/+|\/+$/g,'');return{id:row.id,label:row.label,sourceKind:voiceSourceKind(row),sourceText:source?.sourceKind==='composition'?source.text:'',kind:row.kind,messageId:row.messageId,sample:row.sample,voice:row.voice,status:row.status,progress:row.progress,segmentCount:row.segmentCount,completedSegments:row.completedSegments,transcript:row.status==='COMPLETED'?row.transcript:'',streamUrl:row.kind==='speech'&&['QUEUED','RUNNING','SETTLING','COMPLETED'].includes(row.status)?`/${prefix}/voice/tasks/${encodeURIComponent(row.id)}/stream`:null,audio:row.kind==='speech'&&['RUNNING','SETTLING','COMPLETED'].includes(row.status)?voiceResults(row.resultJson).map((file,index)=>({index,url:`/${prefix}/voice/tasks/${encodeURIComponent(row.id)}/audio/${index}`,mime:file.mime})):[],errorCode:row.errorCode,errorMessage:row.errorMessage,createdAt:row.createdAt,finishedAt:row.finishedAt,billing:{state:row.billingState,pool:row.pool,limit:row.reservedAmount,reserved:!terminal(row)?row.reservedAmount:0,charged:row.chargedAmount,returned:row.returnedAmount,expired:row.expiredAmount}};}
   private async owned(userId:string,id:string,source=true){const row=await this.prisma.voiceTask.findFirst({where:{id,userId}});if(!row||row.deletedAt||row.purgedAt||terminal(row)&&!voiceContentActive(row))throw missing();if(source){if(row.kind==='transcription'){if(!await this.prisma.uploadFile.findFirst({where:{id:row.inputFileId!,userId,deletedAt:null,scope:'voice-recording',mime:'audio/wav',...voiceFileActive()},select:{id:true}}))throw missing();}else if(!row.messageId&&!row.sample){const content=await voiceTaskSource(this.prisma,userId,row.id);if(!content||content.sourceKind!=='composition'||!content.text.trim())throw missing();}else await this.source(userId,{kind:'speech',messageId:row.messageId,fileId:null,sample:row.sample,voice:row.voice});}return row;}
   async detail(userId:string,id:string){return this.view(await this.owned(userId,id),await voiceTaskSource(this.prisma,userId,id));}
   async byRequest(userId:string,key:string){const row=await this.prisma.voiceTask.findUnique({where:{userId_requestKey:{userId,requestKey:key}}});if(!row)throw missing();return this.detail(userId,row.id);}
-  async audio(userId:string,id:string,index:number){const row=await this.owned(userId,id);if(row.status!=='COMPLETED'||!Number.isSafeInteger(index)||index<0)throw missing();const file=voiceResults(row.resultJson)[index];if(!file)throw missing();return this.storage.read(file.id,userId,'USER');}
+  async audio(userId:string,id:string,index:number){const row=await this.owned(userId,id);if(!['RUNNING','SETTLING','COMPLETED'].includes(row.status)||!Number.isSafeInteger(index)||index<0)throw missing();const file=voiceResults(row.resultJson)[index];if(!file)throw missing();const result=await this.storage.read(file.id,userId,'USER'),current=await this.owned(userId,id);if(!['RUNNING','SETTLING','COMPLETED'].includes(current.status)||voiceResults(current.resultJson)[index]?.id!==file.id)throw missing();return result;}
+  async stream(userId:string,id:string,signal:AbortSignal,session?:AuthSessionContext):Promise<AsyncIterable<Buffer>>{
+    const row=await this.owned(userId,id);if(row.kind!=='speech'||!['QUEUED','RUNNING','SETTLING','COMPLETED'].includes(row.status))throw missing();
+    if(!this.rate.tryConsume('voice-stream:'+userId,40))throw new BusinessException(ErrorCode.RATE_LIMITED,'声音播放连接有些频繁，请稍后继续',429);
+    const initialUser=await this.prisma.user.findFirst({where:{id:userId,status:'ACTIVE',deletedAt:null},select:{tokenVersion:true}});if(!initialUser)throw missing();const version=session?.tokenVersion??initialUser.tokenVersion;
+    let checked=0;const validate=async()=>{signal.throwIfAborted();if(session&&session.expiresAt!==null&&session.expiresAt<=Date.now())throw new UnauthorizedException({code:2002,message:'此声音连接的登录已失效，请重新连接'});if(Date.now()-checked<250)return;const [current,user,family]=await Promise.all([this.owned(userId,id),this.prisma.user.findFirst({where:{id:userId,status:'ACTIVE',deletedAt:null},select:{tokenVersion:true}}),session?this.prisma.refreshToken.findFirst({where:{userId,familyId:session.familyId,revokedAt:null,expiresAt:{gt:new Date()}},select:{id:true}}):Promise.resolve(true)]);if(!user||!['QUEUED','RUNNING','SETTLING','COMPLETED'].includes(current.status))throw missing();if(user.tokenVersion!==version||!family||session&&session.expiresAt!==null&&session.expiresAt<=Date.now())throw new UnauthorizedException({code:2002,message:'此声音连接的登录已失效，请重新连接'});checked=Date.now();};
+    await validate();const liveStream=this.running.get(id)?.stream;if(liveStream){if(liveStream.readers>=4)throw new BusinessException(ErrorCode.RATE_LIMITED,'请先关闭其他声音播放连接',429);return liveStream.read(async file=>(await this.storage.read(file,userId,'USER')).buffer,validate,signal);}
+    if(!['SETTLING','COMPLETED'].includes(row.status))throw conflict('原声音正在恢复，请核对原任务');
+    const storage=this.storage,files=voiceResults(row.resultJson);if(!files.length||files.length!==row.segmentCount)throw missing();
+    return(async function*(){for(const file of files){await validate();const buffer=(await storage.read(file.id,userId,'USER')).buffer;for(let offset=0;offset<buffer.length;offset+=65536){await validate();yield buffer.subarray(offset,offset+65536);}}})();
+  }
   async cancel(userId:string,id:string){const row=await this.owned(userId,id,false);const stopped=await this.accounting.stop(row.id,'CANCELED','canceled','已停止生成；外部服务是否继续计费，以服务方账单为准');if(stopped){this.running.get(id)?.controller.abort(new Error('voice canceled'));await this.cleanFailed(id);}const final=await this.prisma.voiceTask.findUniqueOrThrow({where:{id}});if(final.status==='COMPLETED')return this.detail(userId,id);return this.view(final);}
   async endRequest(userId:string,key:string){
     voiceRequestKey(key);if(!this.rate.tryConsume('voice-end:'+userId,60))throw new BusinessException(ErrorCode.RATE_LIMITED,'操作有些频繁，请稍后再试。',429);
@@ -136,9 +148,9 @@ export class VoiceService implements OnModuleInit,OnModuleDestroy {
     if(!this.rate.tryConsume('voice-download:'+userId,15))throw new BusinessException(ErrorCode.RATE_LIMITED,'保存声音有些频繁，请稍后再试。',429);
     const task=await this.owned(userId,id);if(task.kind!=='speech'||task.status!=='COMPLETED')throw missing();const files=voiceResults(task.resultJson);if(files.length!==task.segmentCount||!files.length)throw missing();const parts:Buffer[]=[];let bytes=0;for(const file of files){const input=await this.storage.read(file.id,userId,'USER');bytes+=input.buffer.length;if(bytes>32*1024*1024)throw invalid('声音文件超过本次保存上限。');parts.push(input.buffer);}let buffer:Buffer;try{buffer=mergeVoiceMp3(parts);}catch(error){throw invalid((error as Error).message);}const current=await this.owned(userId,id);if(current.status!=='COMPLETED'||current.resultJson!==task.resultJson)throw missing();return{buffer,filename:'QGauss-'+(task.sample?'音色试听':task.label||'声音作品').replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_').slice(0,80)+'.mp3'};
   }
-  async receipts(){const rows=await this.prisma.voiceTask.findMany({orderBy:{createdAt:'desc'},take:50});return rows.map(row=>({...this.view(row),label:undefined,sourceText:undefined,channelId:row.channelId,model:row.model,inputChars:row.inputChars,inputSeconds:row.inputSeconds,attemptedSegments:row.attemptedSegments,possibleProviderCharge:row.attemptedSegments>0,transcript:undefined,audio:[]}));}
+  async receipts(){const rows=await this.prisma.voiceTask.findMany({orderBy:{createdAt:'desc'},take:50});return rows.map(row=>({...this.view(row),label:undefined,sourceText:undefined,streamUrl:undefined,channelId:row.channelId,model:row.model,inputChars:row.inputChars,inputSeconds:row.inputSeconds,attemptedSegments:row.attemptedSegments,possibleProviderCharge:row.attemptedSegments>0,transcript:undefined,audio:[]}));}
   private async cleanFailed(id:string){const row=await this.prisma.voiceTask.findUnique({where:{id}});if(!row||!['FAILED','CANCELED'].includes(row.status))return;for(const file of voiceResults(row.resultJson))await this.storage.remove(file.id,row.userId,'USER').catch(()=>{});}
-  private async execute(id:string,plan:Prepared,controller:AbortController){
+  private async execute(id:string,plan:Prepared,controller:AbortController,stream?:VoiceStreamSession){
     const task=await this.prisma.voiceTask.findUniqueOrThrow({where:{id}}),stored:VoiceResult[]=[];let staged=false,audioBytes=0;
     try{
       const claimed=await this.prisma.voiceTask.updateMany({where:{id,status:'QUEUED'},data:{status:'RUNNING',progress:5}});if(!claimed.count)return;
@@ -152,10 +164,10 @@ export class VoiceService implements OnModuleInit,OnModuleDestroy {
         const marked=await this.prisma.voiceTask.updateMany({where:{id,status:'RUNNING'},data:{attemptedSegments:{increment:1}}});if(!marked.count)return;
         const response=await safeFetch(voiceEndpoint(channel.baseUrl,task.kind as 'speech'|'transcription'),{method:'POST',headers,body},{signal:totalSignal,timeoutMs:channel.timeoutMs});
         if(!response.ok)await this.keys.reportFailure(channel.id,key,[401,403].includes(response.status)?'upstream_auth':response.status===429?'upstream_rate_limited':'upstream_error');
-        const data=await readVoiceBody(response,task.kind==='speech'?16*1024*1024:1024*1024,totalSignal);totalSignal.throwIfAborted();
+        const data=await readVoiceBody(response,task.kind==='speech'?16*1024*1024:1024*1024,totalSignal,task.kind==='speech'&&stream?chunk=>stream.append(index,chunk):undefined);totalSignal.throwIfAborted();
         if(task.kind==='speech'){
           if(!validMp3(data))throw new Error('语音服务没有返回有效 MP3 音频');audioBytes+=data.length;if(audioBytes>32*1024*1024)throw new Error('语音结果超过本次大小上限');const saved=await this.storage.saveBuffer(task.userId,data,{mime:'audio/mpeg',filename:`QGauss-${task.voice}-${index+1}.mp3`,scope:'voice-result',expiresAt:new Date(Date.now()+86400000)});stored.push({id:saved.id,mime:'audio/mpeg'});
-          const savedProgress=await this.prisma.voiceTask.updateMany({where:{id,status:'RUNNING'},data:{resultJson:JSON.stringify(stored),completedSegments:stored.length,progress:Math.min(90,5+Math.floor(85*stored.length/plan.segments.length))}});if(!savedProgress.count)return;
+          const savedProgress=await this.prisma.voiceTask.updateMany({where:{id,status:'RUNNING'},data:{resultJson:JSON.stringify(stored),completedSegments:stored.length,progress:Math.min(90,5+Math.floor(85*stored.length/plan.segments.length))}});if(!savedProgress.count)return;stream?.commit(index,saved.id);
         }else{let json:unknown;try{json=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(data));}catch{throw new Error('语音服务返回的转写结果无效');}transcript=typeof (json as any)?.text==='string'?(json as any).text.trim():'';if(!transcript||transcript.length>30000)throw new Error('没有识别到有效文字，请检查录音后再试');const hit=await this.moderation.check(transcript);if(hit){await this.moderation.recordHit({userId:task.userId,word:hit.word,source:'voice',excerpt:transcript});throw new Error('转写内容暂不能使用');}await this.prisma.voiceTask.updateMany({where:{id,status:'RUNNING'},data:{completedSegments:1}});}
         this.keys.reportSuccess(key);
       }
@@ -164,6 +176,7 @@ export class VoiceService implements OnModuleInit,OnModuleDestroy {
       if(!staged){const canceled=controller.signal.aborted;await this.accounting.stop(id,canceled?'CANCELED':'FAILED',canceled?'canceled':'voice_failed',canceled?'已停止生成；外部服务可能仍计费':(error as Error)?.name==='TimeoutError'?'语音服务等待超时；本次未自动重试':this.safeError(error));}
       else this.logger.warn('语音结果已保存，结算等待恢复');
     }finally{
+      stream?.finish(staged);
       if(!staged)for(const file of stored)await this.storage.remove(file.id,task.userId,'USER').catch(()=>{});
       await this.cleanFailed(id);
     }

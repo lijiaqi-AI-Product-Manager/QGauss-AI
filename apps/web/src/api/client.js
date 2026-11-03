@@ -128,6 +128,20 @@ export async function fetchBlob(path, { signal, retry = true } = {}) {
   return res.blob();
 }
 
+/** A playback connection only reads its accepted task; renewal never submits generation. */
+export async function* fetchAudioStream(path,{signal}={}){
+  if(typeof path!=='string'||!/^\/api\/voice\/tasks\/[A-Za-z0-9_-]{1,128}\/stream$/.test(path))throw new ApiError(400,'声音连接地址无效',400);
+  const identity=accessIdentity,locale=requestLanguageHeaders();let token=accessToken,response;
+  const active=()=>{signal?.throwIfAborted();if(identity!==accessIdentity)throw new DOMException('声音播放身份已变化','AbortError');};
+  for(let attempt=0;attempt<2;attempt++){active();response=await fetch(path,{signal,headers:{...locale,...(token?{Authorization:'Bearer '+token}:{})}});try{active();}catch(error){await response.body?.cancel().catch(()=>{});throw error;}
+    if(response.status===401&&attempt===0){await response.body?.cancel().catch(()=>{});if(await canRenewCredential(token,identity,signal)){active();token=accessToken;continue;}}break;
+  }
+  if(!response.ok||!response.body||response.headers.get('content-type')?.split(';')[0].trim()!=='audio/mpeg'){await response.body?.cancel().catch(()=>{});throw new ApiError(response.status||502,'声音连接暂未就绪，请核对原任务后继续',response.ok?502:response.status);}
+  const reader=response.body.getReader(),abort=()=>{void reader.cancel().catch(()=>{});};let size=0;signal?.addEventListener('abort',abort,{once:true});
+  try{while(true){active();const part=await reader.read();active();if(part.done)break;size+=part.value.byteLength;if(size>32*1024*1024)throw new ApiError(502,'声音内容超过本次播放上限',502);if(part.value.byteLength)yield part.value;}if(!size)throw new ApiError(502,'暂未收到声音，可重新连接原任务',502);}
+  finally{signal?.removeEventListener('abort',abort);await reader.cancel().catch(()=>{});reader.releaseLock();}
+}
+
 export const api = {
   get: (path, options) => request(path, options),
   post: (path, body, options) => request(path, { ...options, method: 'POST', body }),

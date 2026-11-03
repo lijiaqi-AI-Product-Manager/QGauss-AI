@@ -1,11 +1,11 @@
 <template>
   <div v-if="session.player || session.task && !terminal || session.reconnectable || session.error && !session.open" class="qvoice-dock" role="region" aria-label="语音工作区">
     <div class="qvoice-mini-orb" :class="{ active:session.playing || session.busy }" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-    <div class="qvoice-dock-copy"><strong>{{ session.player ? `${voiceName(session.task?.voice)} · ${session.player.title}` : '声音工作区' }}</strong><span role="status">{{ session.error || voiceTaskLabel(session.task) || '正在连接…' }}</span></div>
-    <button v-if="session.player" type="button" class="qvoice-circle" :aria-label="session.playing?'暂停朗读':'播放朗读'" @click="session.play"><ClientIcon :name="session.playing?'pause':'play'" />{{ session.playing?'Ⅱ':'▶' }}</button>
-    <span v-if="session.player" class="qvoice-time">{{ voiceDuration(session.playbackSeconds) }}<small v-if="session.task.audio?.length>1">{{ session.audioPart+1 }}/{{ session.task.audio.length }}</small></span>
-    <button v-if="session.reconnectable" type="button" class="qvoice-text-button" :disabled="session.busy" @click="session.resubmittable?session.resubmit():session.reconnect()">{{ session.resubmittable?'继续本次提交':'重新连接' }}</button>
-    <button v-if="session.task && !terminal" type="button" class="qvoice-text-button" :disabled="session.task.status==='SETTLING'" @click="session.cancelTask">停止生成</button>
+    <div class="qvoice-dock-copy"><strong>{{ session.player ? `${voiceName(session.task?.voice)} · ${session.player.title}` : '声音工作区' }}</strong><span role="status">{{ session.error || session.playbackNotice || (session.player?voicePlaybackLabel(session.playbackPhase,session.task):voiceTaskLabel(session.task)) || '正在连接…' }}</span></div>
+    <button v-if="session.player" type="button" class="qvoice-circle" :disabled="session.canceling" :aria-label="session.playbackRequested?'暂停朗读':'播放朗读'" @click="session.play"><ClientIcon :name="session.playbackRequested?'pause':'play'" />{{ session.playbackRequested?'Ⅱ':'▶' }}</button>
+    <span v-if="session.player" class="qvoice-time">{{ voiceDuration(session.playbackSeconds) }}<small v-if="session.playbackMode!=='stream'&&session.task.audio?.length>1">{{ session.audioPart+1 }}/{{ session.task.audio.length }}</small></span>
+    <button v-if="session.playbackReconnectable" type="button" class="qvoice-text-button" :disabled="session.canceling" @click="session.reconnectPlayback">重新连接播放</button><button v-if="session.reconnectable" type="button" class="qvoice-text-button" :disabled="session.busy" @click="session.resubmittable?session.resubmit():session.reconnect()">{{ session.resubmittable?'继续本次提交':'重新连接' }}</button>
+    <button v-if="session.task && !terminal" type="button" class="qvoice-text-button" :disabled="session.canceling||session.task.status==='SETTLING'" @click="session.cancelTask">{{ session.canceling?'正在停止…':'停止生成' }}</button>
     <button type="button" class="qvoice-text-button" @click="session.show('voices')">音色</button>
     <button v-if="session.player" type="button" class="qvoice-close" aria-label="收起朗读" @click="session.stopPlayback();session.player=null">×</button>
   </div>
@@ -42,7 +42,7 @@ import { computed } from 'vue';
 import { ElDialog } from 'element-plus';
 import ClientIcon from '../reference/ClientIcon.vue';
 import QLoader from '../QLoader.vue';
-import { VOICES, voiceName, voiceDuration, voiceCharge, voiceTerminal, voiceTaskLabel } from '../../lib/voice-presentation.js';
+import { VOICES, voiceName, voiceDuration, voiceCharge, voiceTerminal, voiceTaskLabel,voicePlaybackLabel } from '../../lib/voice-presentation.js';
 const props=defineProps({session:{type:Object,required:true},disabled:Boolean});
 const terminal=computed(()=>voiceTerminal(props.session.task));
 </script>
