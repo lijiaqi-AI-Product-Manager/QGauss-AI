@@ -60,6 +60,7 @@ model User {
   mindmapDocuments MindmapDocument[]
   mindmapOperations MindmapOperation[]
   mindmapGenerations MindmapGeneration[]
+  extensionRequests ExtensionRequest[]
 
   @@map("users")
 }
@@ -349,6 +350,7 @@ model Conversation {
   app      App?      @relation(fields: [appId], references: [id], onDelete: SetNull)
   agent    Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
   messages Message[]
+  extensionRequest ExtensionRequest?
 
   @@index([userId, lastMessageAt])
   @@index([userId, appId, lastMessageAt])
@@ -1426,4 +1428,55 @@ model GalleryFavorite {
   @@index([kind, taskId])
   @@index([userId, createdAt])
   @@map("gallery_favorites")
+}
+
+model Extension {
+  id String @id
+  title String
+  description String @default("")
+  entryUrl String
+  icon String @default("apps")
+  tone String @default("violet")
+  sort Int @default(0)
+  enabled Boolean @default(true)
+  roles String @default("USER,ADMIN")
+  chatEnabled Boolean @default(false)
+  legacyBridge Boolean @default(false)
+  modelId String?
+  version Int @default(1)
+  lastRequestKey String?
+  lastRequestHash String?
+  deletedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  requests ExtensionRequest[]
+  @@index([deletedAt, enabled, sort])
+  @@map("extensions")
+}
+
+model ExtensionRequest {
+  id String @id
+  userId String
+  requestKey String
+  extensionId String?
+  extensionVersion Int
+  extensionTitle String
+  entryUrl String
+  conversationId String? @unique
+  messageId String? @unique
+  prompt String
+  payloadHash String
+  quoteRevision String
+  modelId String
+  modelName String
+  state String @default("READY")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  extension Extension? @relation(fields:[extensionId], references:[id], onDelete:Restrict)
+  conversation Conversation? @relation(fields:[conversationId], references:[id], onDelete:Cascade)
+  @@unique([userId,requestKey])
+  @@index([userId,createdAt])
+  @@map("extension_requests")
 }

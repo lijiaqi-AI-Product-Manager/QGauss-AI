@@ -319,6 +319,7 @@ function defaultMenus() {
         { id: 'fallback-mail', title: '邮件投递台', path: '/mail', icon: 'Message' },
         { id: 'fallback-agents', title: '搭档控制室', path: '/agents/manage', icon: 'Connection' },
         { id: 'fallback-voice', title: '声音控制台', path: '/voice/manage', icon: 'Microphone' },
+        { id:'fallback-extensions',title:'扩展工具箱',path:'/extensions/manage',icon:'Grid' },
         { id: 'fallback-mj', title: 'MJ 控制台', path: '/mj/manage', icon: 'Picture' },
         { id: 'fallback-video', title: '视频控制台', path: '/video/manage', icon: 'VideoCamera' },
         { id: 'fallback-welcome', title: '启航清单', path: '/welcome', icon: 'Position' },
@@ -342,6 +343,7 @@ async function loadMenus() {
     if(auth.isAdmin&&!groups.some(group=>group.path==='/mj/manage'||group.children?.some(child=>child.path==='/mj/manage')))groups.push({id:'mj-studio-entry',title:'进阶创作',children:[{id:'mj-studio',title:'MJ 控制台',path:'/mj/manage',icon:'Picture'}]});
     if(auth.isAdmin&&!groups.some(group=>group.path==='/video/manage'||group.children?.some(child=>child.path==='/video/manage')))groups.push({id:'video-studio-entry',title:'视频创作',children:[{id:'video-studio',title:'视频控制台',path:'/video/manage',icon:'VideoCamera'}]});
     if(auth.isAdmin&&!groups.some(group=>group.path==='/voice/manage'||group.children?.some(child=>child.path==='/voice/manage')))groups.push({id:'voice-studio-entry',title:'声音工作区',children:[{id:'voice-studio',title:'声音控制台',path:'/voice/manage',icon:'Microphone'}]});
+    if(auth.isAdmin&&!groups.some(group=>group.path==='/extensions/manage'||group.children?.some(child=>child.path==='/extensions/manage')))groups.push({id:'extension-studio-entry',title:'扩展工作区',children:[{id:'extension-studio',title:'扩展工具箱',path:'/extensions/manage',icon:'Grid'}]});
     menus.value = withoutChat(groups);
   } catch {
     menus.value = withoutChat(defaultMenus());

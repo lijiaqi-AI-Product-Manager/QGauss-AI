@@ -33,6 +33,7 @@ import { VideoModule } from './modules/video/video.module';
 import { MjModule } from './modules/midjourney/mj.module';
 import {GalleryModule} from './modules/gallery/gallery.module';
 import {MindmapModule} from './modules/mindmap/mindmap.module';
+import {ExtensionsModule} from './modules/extensions/extensions.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import {MindmapModule} from './modules/mindmap/mindmap.module';
     MjModule,
     GalleryModule,
     MindmapModule,
+    ExtensionsModule,
   ],
   controllers: [HealthController],
   providers: [

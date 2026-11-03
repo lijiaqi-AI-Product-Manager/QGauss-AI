@@ -1,7 +1,7 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **277** 条路由，分布在 **31** 个控制器。
+> 共 **287** 条路由，分布在 **32** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
@@ -13,6 +13,7 @@
 | `/chat-logs` | 2 | `src/modules/chatlog/chatlog.controller.ts` |
 | `/conversations` | 9 | `src/modules/conversations/conversations.controller.ts` |
 | `/crami` | 11 | `src/modules/commerce/crami.controller.ts` |
+| `/extensions` | 10 | `src/modules/extensions/extensions.controller.ts` |
 | `/folders` | 4 | `src/modules/folders/folders.controller.ts` |
 | `/gallery` | 8 | `src/modules/gallery/gallery.controller.ts` |
 | `/health` | 2 | `src/modules/health/health.controller.ts` |
@@ -164,6 +165,21 @@
 | DELETE | `/crami/:id` | ADMIN |
 | POST | `/crami/exchange` | 登录 |
 | GET | `/crami/myLog` | 登录 |
+
+## /extensions
+
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| GET | `/extensions` | 登录 |
+| GET | `/extensions/admin` | ADMIN |
+| PUT | `/extensions/admin/:id` | ADMIN |
+| POST | `/extensions/admin/:id/archive` | ADMIN |
+| POST | `/extensions/admin/:id/restore` | ADMIN |
+| GET | `/extensions/requests/:key` | 登录 |
+| POST | `/extensions/requests/:key/end` | 登录 |
+| GET | `/extensions/:id` | 登录 |
+| GET | `/extensions/:id/quote` | 登录 |
+| POST | `/extensions/:id/requests` | 登录 |
 
 ## /folders
 

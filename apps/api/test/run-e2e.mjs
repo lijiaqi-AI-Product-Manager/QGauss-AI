@@ -211,6 +211,7 @@ async function main() {
     { name: '原生语音 voice.e2e.mjs', script: join(here, 'voice.e2e.mjs') },
     { name: '声音收藏室 voice-library.e2e.mjs', script: join(here, 'voice-library.e2e.mjs') },
     { name: '创意作品广场 gallery.e2e.mjs', script: join(here, 'gallery.e2e.mjs') },
+    { name: '扩展工作台 extensions.e2e.mjs', script: join(here, 'extensions.e2e.mjs') },
     { name: '思维导图工作台 mindmap.e2e.mjs', script: join(here, 'mindmap.e2e.mjs') },
     { name: '语音进程恢复 voice-recovery.e2e.mjs', script: join(here, 'voice-recovery.e2e.mjs') },
     { name: '账户与密码 account-security.e2e.mjs', script: join(here, 'account-security.e2e.mjs') },

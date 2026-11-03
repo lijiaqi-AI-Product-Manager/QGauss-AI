@@ -15,6 +15,7 @@ import {
   Min,
   ValidateNested,
   ValidateIf,
+  IsUUID,
 } from 'class-validator';
 
 class ChatMessageDto {
@@ -33,6 +34,7 @@ class ChatMessageDto {
 }
 
 export class ChatCompletionDto {
+  @Transform(({obj,key})=>obj[key]) @ValidateIf((_o,v)=>v!==undefined) @IsUUID('4') extensionRequestKey?:string;
   @IsOptional() @IsString() @Length(1,128) agentId?:string;
   @IsOptional() @IsString() @Length(1,128) agentParentId?:string;
   @IsOptional() @IsString() @Matches(/^[a-f0-9]{64}$/) agentOfferRevision?:string;
