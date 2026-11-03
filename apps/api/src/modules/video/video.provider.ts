@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { safeFetch } from '../../common/net/safe-fetch';
 import { readVideoBody, videoEndpoint, videoJobId, videoResultUrl, VideoUpstreamError } from './video-protocol';
+import type {VideoSpeakerSelection} from './video-speaker';
 
 export interface VideoRoute { channelId: string; baseUrl: string; timeoutMs: number; keyId: string | null; keyHash: string; upstreamModel: string }
-export interface NativeVideoIntent { presetId: string; mode: string; prompt: string; ratio: string; seconds: number; resolution: string; seed?: number; sound?: boolean; imageIds?: string[]; videoIds?:string[];audioIds?:string[];billingSeconds?:number;upscaleFactor?:number;enhanceModel?:string;syncMode?:string;compression?:number;noise?:number;halo?:number;grain?:number;recoverDetail?:number; sourceTaskId?: string; style?: string; motion?: number; guidanceScale?: number; frameRate?: number; pan?: string; tilt?: string; rotate?: string; zoom?: string; negativePrompt?: string }
+export interface NativeVideoIntent { presetId: string; mode: string; prompt: string; ratio: string; seconds: number; resolution: string; seed?: number; sound?: boolean; imageIds?: string[]; videoIds?:string[];audioIds?:string[];billingSeconds?:number;upscaleFactor?:number;enhanceModel?:string;syncMode?:string;speakerSelection?:VideoSpeakerSelection;compression?:number;noise?:number;halo?:number;grain?:number;recoverDetail?:number; sourceTaskId?: string; style?: string; motion?: number; guidanceScale?: number; frameRate?: number; pan?: string; tilt?: string; rotate?: string; zoom?: string; negativePrompt?: string }
 export interface NativeVideoState { id: string; status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'; progress: number; videoUrl: string | null; posterUrl: string | null; seed?: number }
 export function normalizeVideoState(profile: string, body: any, expected?: string): NativeVideoState {
   const job = profile === 'PIKA_1' ? body?.job : body;
@@ -36,7 +37,7 @@ export class VideoProvider {
     let payload: any;
     if(profile.startsWith('FAL_')){
       const video=inputs.materials?.find(x=>x.kind==='video')?.url,audio=inputs.materials?.find(x=>x.kind==='audio')?.url;if(!video||profile==='FAL_LIPSYNC'&&!audio)throw Error('视频处理素材尚未准备完整');
-      payload=profile==='FAL_UPSCALE'?{enable_safety_checker:true,video_url:video,model:intent.enhanceModel,upscale_factor:intent.upscaleFactor,H264_output:true,...Object.fromEntries([['compression','compression'],['noise','noise'],['halo','halo'],['grain','grain'],['recoverDetail','recover_detail']].filter(([key])=>intent[key]!==undefined).map(([key,target])=>[target,intent[key]]))}:{enable_safety_checker:true,video_url:video,audio_url:audio,sync_mode:intent.syncMode};
+      payload=profile==='FAL_UPSCALE'?{enable_safety_checker:true,video_url:video,model:intent.enhanceModel,upscale_factor:intent.upscaleFactor,H264_output:true,...Object.fromEntries([['compression','compression'],['noise','noise'],['halo','halo'],['grain','grain'],['recoverDetail','recover_detail']].filter(([key])=>intent[key]!==undefined).map(([key,target])=>[target,intent[key]]))}:{enable_safety_checker:true,video_url:video,audio_url:audio,sync_mode:intent.syncMode,...(intent.speakerSelection?{options:{active_speaker_detection:{auto_detect:false,frame_number:intent.speakerSelection.frameNumber,coordinates:[intent.speakerSelection.x,intent.speakerSelection.y]}}}:{})};
     }else if (profile === 'PIKA_1') {
       const camera = Object.fromEntries(['pan', 'tilt', 'rotate', 'zoom'].filter(k => intent[k]).map(k => [k, intent[k]]));
       payload = { model: '1.0', sfx: true, promptText: (intent.style ? intent.style + ' ' : '') + intent.prompt, options: { aspectRatio: intent.ratio, frameRate: intent.frameRate, camera, parameters: { guidanceScale: intent.guidanceScale, motion: intent.motion, negativePrompt: intent.negativePrompt || '', seed: intent.seed ?? null }, extend: intent.mode === 'extend' }, ...(inputs.imageUrl ? { image: inputs.imageUrl } : {}), ...(inputs.videoUrl ? { video: inputs.videoUrl } : {}) };

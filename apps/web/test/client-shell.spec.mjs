@@ -1,3 +1,4 @@
+import {registerVideoSpeakerTests} from './video-speaker-ui.cases.mjs';
 import {registerVoiceComposerTests} from './voice-composer-ui.cases.mjs';
 /** 用真实 Vue 组件验证跨路由挂载及鉴权动作；jsdom 不承担像素或原生焦点验收。 */
 import { test, after } from 'node:test';
@@ -134,7 +135,7 @@ async function mount({ loggedIn = false, admin = false, pending = false, history
 function videoInterceptor(extra, data = videoFixtures('video-library')) {
   return async call => { const custom = await extra?.(call, data); if (custom) return custom; const url = new URL(call.url, 'http://qgauss.test'); if (call.method === 'GET' && Object.hasOwn(data, url.pathname)) return relayJson(data[url.pathname]); };
 }
-function videoClick(text) { const button = [...document.querySelectorAll('button')].find(button => button.textContent.trim() === text); assert.ok(button, text); button.click(); }
+function videoClick(text) { const scope=document.querySelector('dialog[open]')||document; const button = [...scope.querySelectorAll('button')].find(button => button.textContent.trim() === text); assert.ok(button, text); button.click(); }
 function mjInterceptor(extra,data=midjourneyFixtures('mj-gallery')) { return async call=>{const custom=await extra?.(call,data);if(custom)return custom;const url=new URL(call.url,'http://qgauss.test');if(call.method==='GET'&&url.pathname.startsWith('/api/mj/sample/'))return new Response(new Uint8Array([1,2,3]),{headers:{'Content-Type':'image/png'}});if(call.method==='GET'&&Object.hasOwn(data,url.pathname))return relayJson(data[url.pathname]);}; }
 test('MJ 控制台读取与保存真实字段，不自动调用生成',async()=>{
  const data=midjourneyFixtures('mj-gallery');const f=await mount({loggedIn:true,admin:true,initialPath:'/mj/manage',intercept:mjInterceptor(call=>call.method==='PUT'&&call.url.startsWith('/api/mj/admin/presets/')?relayJson({...call.body,id:'qg-mj-sample',version:4}):null,data)});
@@ -2335,3 +2336,5 @@ test('异常恢复：离开错误页后恢复原页面标题，不把异常状�
 registerExtensionWorkbenchTests({test,assert,mount,settle,relayJson});
 
 registerVoiceComposerTests({test,assert,mount,settle,relayJson});
+
+registerVideoSpeakerTests({test,assert,mount,settle,relayJson,filmToolsData,filmSelect,filmAddFile});

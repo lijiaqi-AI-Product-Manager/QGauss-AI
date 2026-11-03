@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, Res,UploadedFile,UseInterceptors,UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, Param, Patch, Post, Put, Query, Req, Res,UploadedFile,UseInterceptors,UseGuards } from '@nestjs/common';
 import {FileInterceptor} from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { pipeline } from 'node:stream/promises';
@@ -17,13 +17,14 @@ export class VideoController {
   constructor(private readonly video: VideoService, private readonly media: VideoMediaService, private readonly storage: StorageService,private readonly materials:VideoMaterialsService) {}
   @Post('materials/:kind') @UseGuards(VideoMaterialUploadGuard) @UseInterceptors(FileInterceptor('file',{limits:{fileSize:96*1024*1024,files:1,fields:0,parts:1}})) material(@CurrentUser() user:AuthUser,@Param('kind') kind:string,@UploadedFile() file:any){return this.materials.upload(user.id,kind,file);}
   @Post('materials/from-task/:id') @UseGuards(VideoMaterialUploadGuard) fromTask(@CurrentUser() user:AuthUser,@Param('id') id:string){return this.materials.fromTask(user.id,id);}
+  @Get('materials/:id/frames') @Header('Cache-Control','private, no-store') frames(@CurrentUser() user:AuthUser,@Param('id') id:string){return this.video.materialFrames(user.id,id);}
   @Roles('ADMIN') @Get('admin/config') config() { return this.video.adminConfig(); }
   @Roles('ADMIN') @Post('admin/presets') add(@Body() dto: VideoPresetDto) { return this.video.savePreset(dto); }
   @Roles('ADMIN') @Put('admin/presets/:id') save(@Param('id') id: string, @Body() dto: VideoPresetDto) { return this.video.savePreset(dto, id); }
   @Roles('ADMIN') @Get('admin/receipts') receipts() { return this.video.receipts(); }
   @Roles('ADMIN') @Post('admin/tasks/:id/check') check(@Param('id') id: string) { return this.video.checkAgain(id); }
   @Get('options') options() { return this.video.options(); }
-  @Post('quote') quote(@CurrentUser() user: AuthUser, @Body() dto: VideoQuoteDto) { return this.video.quote(user.id, dto); }
+  @Post('quote') @Header('Cache-Control','private, no-store') quote(@CurrentUser() user: AuthUser, @Body() dto: VideoQuoteDto) { return this.video.quote(user.id, dto); }
   @Post('tasks') create(@CurrentUser() user: AuthUser, @Body() dto: VideoCreateDto) { return this.video.create(user.id, dto); }
   @Get('tasks/by-request/:key') byRequest(@CurrentUser() user: AuthUser, @Param('key') key: string) { return this.video.byRequest(user.id, key); }
   @Get('tasks') list(@CurrentUser() user: AuthUser, @Query('page') page = '1', @Query('pageSize') size = '12') { return this.video.list(user.id, false, Number(page), Number(size)); }

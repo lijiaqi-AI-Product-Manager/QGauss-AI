@@ -1,7 +1,7 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **289** 条路由，分布在 **32** 个控制器。
+> 共 **290** 条路由，分布在 **32** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
@@ -35,7 +35,7 @@
 | `/statistic` | 6 | `src/modules/statistic/statistic.controller.ts` |
 | `/upload` | 5 | `src/modules/storage/upload.controller.ts` |
 | `/users` | 8 | `src/modules/users/users.controller.ts` |
-| `/video` | 22 | `src/modules/video/video.controller.ts` |
+| `/video` | 23 | `src/modules/video/video.controller.ts` |
 | `/voice` | 16 | `src/modules/voice/voice.controller.ts` |
 
 ## /agents
@@ -445,6 +445,7 @@
 |---|---|---|
 | POST | `/video/materials/:kind` | 登录 |
 | POST | `/video/materials/from-task/:id` | 登录 |
+| GET | `/video/materials/:id/frames` | 登录 |
 | GET | `/video/admin/config` | ADMIN |
 | POST | `/video/admin/presets` | ADMIN |
 | PUT | `/video/admin/presets/:id` | ADMIN |

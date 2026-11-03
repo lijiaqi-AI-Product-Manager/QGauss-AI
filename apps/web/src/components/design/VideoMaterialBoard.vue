@@ -19,6 +19,8 @@
         <div v-if="track.kind==='video'&&limits.video" class="qvm-library"><select v-model="movieId" aria-label="从当前片库页选择视频" :disabled="disabled || busy"><option value="">也可以从当前片库页带一条过来</option><option v-for="movie in movies" :key="movie.id" :value="movie.id">{{ movie.prompt || '我的成片' }}</option></select><button type="button" :disabled="!movieId || disabled || busy || ofKind('video').length >= limits.video" @click="fromMovie">带入 ↗</button></div>
       </section>
     </div>
+    <div v-if="mode==='lipsync'" class="qsp-control"><div><b>{{ speakerSelection ? '主角的位置，已经留住。' : '多人同框？让主角开口。' }}</b><p>{{ ofKind('video').length ? speakerCaption(speakerSelection,ofKind('video')[0]) : '先加入一条视频，再选择人物出现的画面。' }}</p></div><button type="button" :disabled="disabled || busy || !ofKind('video').length" @click="openSpeaker">{{ speakerSelection ? '更改人物与画面' : '选择说话人物' }} ↗</button><button v-if="speakerSelection" type="button" class="qsp-control-clear" :disabled="disabled || busy" @click="emit('update:speakerSelection',null)">清除选择</button></div>
+    <VideoSpeakerPicker ref="speakerPicker" :material="ofKind('video')[0] || null" :model-value="speakerSelection" @update:model-value="emit('update:speakerSelection',$event)" @busy="emit('busy',$event)" />
     <div v-if="busy" class="qvm-progress" role="status"><BrandLoader :size="20"/>正在检查并私有保存素材…</div>
     <p v-if="error||selectionError" class="qvm-error" role="alert">{{ error || selectionError }}</p>
     <footer>素材保持私有；确认开机后，只发送给你选择的创作服务。{{ mode==='reference' ? '用「图片 1」「视频 1」「声音 1」在描述里指引你的想法。' : '' }}</footer>
@@ -30,7 +32,10 @@ import {api,fetchBlob,uploadVideoMaterial} from '../../api/client.js';
 import {useAuth} from '../../stores/auth.js';
 import {materialLimits,validateVideoMaterials} from '../../lib/video-tools.js';
 import BrandLoader from './BrandLoader.vue';
-const props=defineProps({modelValue:{type:Array,default:()=>[]},mode:{type:String,default:'reference'},features:{type:Object,default:()=>({})},movies:{type:Array,default:()=>[]},disabled:{type:Boolean,default:false}}),emit=defineEmits(['update:modelValue','busy']);
+import VideoSpeakerPicker from './VideoSpeakerPicker.vue';
+import {speakerCaption} from '../../lib/video-speaker.js';
+const props=defineProps({modelValue:{type:Array,default:()=>[]},speakerSelection:{type:Object,default:null},mode:{type:String,default:'reference'},features:{type:Object,default:()=>({})},movies:{type:Array,default:()=>[]},disabled:{type:Boolean,default:false}}),emit=defineEmits(['update:modelValue','update:speakerSelection','busy']);
+const speakerPicker=ref(null);
 const board=ref(null),auth=useAuth(),owner=auth.user?.id,previews=reactive(new Map()),previewing=reactive(new Set()),busy=ref(false),error=ref(''),movieId=ref(''),previewControllers=new Map();let alive=true,controller;
 const current=()=>alive&&auth.isLoggedIn&&auth.user?.id===owner;
 const limits=computed(()=>materialLimits(props.mode,props.features));
@@ -38,6 +43,7 @@ const tracks=[{kind:'image',label:'画面',icon:'◈',hint:'颜色、人物、�
 const title=computed(()=>({reference:'把灵感，放上同一张桌子。',edit:'这条片子，还能长出新故事。',upscale:'让每一帧，再清楚一点。',lipsync:'让画面，接住这一段声音。'})[props.mode]);
 const subtitle=computed(()=>({reference:'画面、动作与声音，自由组合成下一幕。',edit:'加入原片，再用描述告诉我们想改变什么。',upscale:'保留原来的故事，把清晰和细节交给精修。',lipsync:'一条视频，一段声音，让角色自然开口。'})[props.mode]);
 const ofKind=kind=>props.modelValue.filter(x=>x.kind===kind);
+function openSpeaker(){if(current()&&!props.disabled&&!busy.value&&props.mode==='lipsync')speakerPicker.value?.open();}
 const selectionError=computed(()=>props.modelValue.length?validateVideoMaterials(props.mode,props.modelValue,props.features):'');
 function setBusy(value){busy.value=value;emit('busy',value);}
 function stopMedia(id){for(const player of board.value?.querySelectorAll('video,audio')||[])if(!id||player.dataset.materialId===id){player.pause();player.removeAttribute('src');player.load();}}
