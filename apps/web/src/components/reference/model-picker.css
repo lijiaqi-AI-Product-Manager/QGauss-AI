@@ -49,10 +49,10 @@
 .qgc-picker-name{width:100%;height:66px;padding:6px 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;overflow-wrap:break-word;text-align:center;font-size:14px;font-weight:650;line-height:1.4;color:#0b0e14}
 .dark .qgc-picker-name{color:#fff}
 .qgc-picker-meta{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;width:100%;margin:6px 0}
-.qgc-picker-price{display:inline-flex;align-items:center;white-space:nowrap;font-size:12px;line-height:12px;padding:4px 10px;border-radius:99px;background:#eceded;color:#000}
-.qgc-picker-price i{width:6px;height:6px;margin-right:6px;border-radius:50%;background:#10a37f}.dark .qgc-picker-price{background:#2c2c2d;color:#fff}
-.qgc-picker-capabilities{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:20px;color:#6b7280}
-.qgc-picker-capabilities span{display:flex;align-items:center;justify-content:center;width:18px;height:18px;cursor:help}.qgc-picker-capabilities svg{width:18px;height:18px}
+.qgc-picker-price{display:inline-flex;align-items:center;max-width:100%;white-space:normal;text-align:center;font-size:12px;line-height:1.4;padding:4px 10px;border-radius:99px;background:#eceded;color:#000}
+.qgc-picker-price i{flex:none;width:6px;height:6px;margin-right:6px;border-radius:50%;background:#10a37f}.dark .qgc-picker-price{background:#2c2c2d;color:#fff}
+.qgc-picker-capabilities{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px;width:100%;min-height:20px;color:#6b7280}
+.qgc-picker-capabilities span{flex:none;display:flex;align-items:center;justify-content:center;width:18px;height:18px;cursor:help}.qgc-picker-capabilities svg{width:18px;height:18px}
 .qgc-picker-actions{position:absolute;bottom:18px;display:flex;justify-content:center;width:100%}
 .qgc-picker-use{display:flex;align-items:center;justify-content:center;flex:none;gap:6px;width:100px;height:28px;padding:0 10px;border:0;border-radius:28px;background:#070707;color:#fafafa;line-height:14px}
 .qgc-picker-use svg{width:18px;height:18px;flex:none}.qgc-picker-use:disabled{cursor:default;opacity:.6}.dark .qgc-picker-use{background:#f3f3f3;color:#0a0a0a}

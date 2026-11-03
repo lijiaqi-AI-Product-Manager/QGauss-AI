@@ -1,9 +1,11 @@
+import {chatText as message} from '../i18n/chat-messages.js';
+const literal=(original,values)=>message('zh',original,values);
 const RUN_STATES = new Set(['waiting', 'running', 'completed', 'interrupted', 'failed']);
-export function agentQuote(agent) {
-  const billing = agent?.billing;
-  if (billing?.mode === 'none') return {label:'当前不扣次数', detail:'按站点当前设置；发送时再次核对。'};
-  if (billing?.mode === 'count' && billing.pool === 'agent' && Number.isSafeInteger(billing.amount) && billing.amount > 0) return {label:billing.amount+' 次 / 完成对话',detail:'使用智能体次数；失败或取消释放预留，到期次数随有效期结束。'};
-  return {label:'费用待确认',detail:'读取最新设置后再开始。'};
+export function agentQuote(agent, translate = literal) {
+ const billing=agent?.billing;
+ if(billing?.mode==='none')return{label:translate('当前不扣次数'),detail:translate('按站点当前设置；发送时再次核对。')};
+ if(billing?.mode==='count'&&billing.pool==='agent'&&Number.isSafeInteger(billing.amount)&&billing.amount>0)return{label:translate('{amount} 次 / 完成对话',{amount:billing.amount}),detail:translate('使用智能体次数；失败或取消释放预留，到期次数随有效期结束。')};
+ return{label:translate('费用待确认'),detail:translate('读取最新设置后再开始。')};
 }
 export function agentAvailability(agent) {
   return agent?.ready === true ? '已就位' : agent?.availability === 'demo' ? '演示模式暂不连接' : agent?.availability === 'disabled' ? '暂时休息' : '等待完成连接';

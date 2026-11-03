@@ -117,15 +117,15 @@
           <el-icon><Fold /></el-icon>
         </button>
         <button type="button" class="qg-icon-btn" :aria-label="t('appearance.open')" :title="t('shell.appearance')" @click="appearance.open = true"><ClientIcon name="palette" /></button>
-        <router-link v-if="agentId" class="cv-model" :to="{path:'/agent/app',query:{agent:agentId}}"><ClientIcon name="agent" /><span class="cv-model-name">{{ currentAgent?.name||'智能体搭档' }}</span></router-link>
+        <router-link v-if="agentId" class="cv-model" :to="{path:'/agent/app',query:{agent:agentId}}"><ClientIcon name="agent" /><span class="cv-model-name">{{ currentAgent?.name||ct("智能体搭档") }}</span></router-link>
         <button v-else type="button" class="cv-model" :title="t('conversation.switchModel')" aria-haspopup="dialog" :aria-expanded="panelOpen" @click="panelOpen = !panelOpen">
           <span class="cv-model-dot" :class="{ off: currentModel && !currentModel.ready }"></span>
           <span class="cv-model-name">{{ currentModel ? currentModel.displayName : t('chat.model') }}</span>
           <el-icon class="cv-model-caret"><ArrowDown /></el-icon>
         </button>
         <span v-if="appId||appError||appLoading" class="cv-app">
-          <AppAvatar v-if="appIcon" :icon="appIcon" :app-id="appId"/><el-icon v-else><Grid /></el-icon>{{ appName||(appLoading?'正在打开应用':'应用暂不可用') }}
-          <button type="button" aria-label="退出应用" @click="leaveApp">
+          <AppAvatar v-if="appIcon" :icon="appIcon" :app-id="appId"/><el-icon v-else><Grid /></el-icon>{{ appName||(appLoading?ct("正在打开应用"):ct("应用暂不可用")) }}
+          <button type="button" :aria-label="ct(&quot;退出应用&quot;)" @click="leaveApp">
             <el-icon><Close /></el-icon>
           </button>
         </span>
@@ -168,7 +168,7 @@
           <QLoader :text="t('conversation.loading')" />
         </div>
 
-        <section v-else-if="messages.length === 0 && agentId" class="qag-chat-intro"><span class="qag-mini-core" aria-hidden="true">Q</span><small>QGAUSS / YOUR ACTION PARTNER</small><h1>{{ currentAgent?.name||'正在迎接你的搭档…' }}</h1><p>{{ currentAgent?.greeting||'说说你的目标，让搭档一起向前推进。' }}</p><span>{{ contextOn?'沿当前分支接续协作':'使用独立的服务方会话' }}</span><router-link to="/agent">认识其他搭档<ClientIcon name="arrowUpRight" /></router-link></section>
+        <section v-else-if="messages.length === 0 && agentId" class="qag-chat-intro"><span class="qag-mini-core" aria-hidden="true">Q</span><small>QGAUSS / YOUR ACTION PARTNER</small><h1>{{ currentAgent?.name||ct("正在迎接你的搭档…") }}</h1><p>{{ currentAgent?.greeting||ct("说说你的目标，让搭档一起向前推进。") }}</p><span>{{ contextOn?ct("沿当前分支接续协作"):ct("使用独立的服务方会话") }}</span><router-link to="/agent">{{ ct("认识其他搭档") }}<ClientIcon name="arrowUpRight" /></router-link></section>
         <ChatWelcome v-else-if="messages.length === 0" :app-name="appName" :hide-hint="welcomeHintHidden" :hide-heading="welcomeHeadingHidden" :near-input="compactComposer && composerFocus && !welcomeHeadingHidden" />
 
         <div v-else class="cv-thread">
@@ -218,8 +218,8 @@
                 <MarkdownMessage v-else-if="m.content" :content="m.streaming?m.content:citationMarkdown(m.content,m.webSearch)" :streaming="!!m.streaming" @rendered="scrollToBottom()" />
                 <WebSearchSources :value="m.webSearch" :streaming="!!m.streaming" />
                 <AgentRunPanel :value="m.agentActivity" :disabled="streaming||loadingDetail" @select="fillAgentQuestion" />
-                <div v-if="m.notice" class="cv-notice" :class="m.noticeType">{{ m.notice }}</div>
-                <div v-if="m.billing?.limit" class="cv-billing" aria-label="本次对话次数"><QStar :size="12" /><span>{{ billingLabel(m.billing) }}</span></div>
+                <div v-if="m.notice" class="cv-notice" :class="m.noticeType">{{ ct(m.notice) }}</div>
+                <div v-if="m.billing" class="cv-billing" :aria-label="ct(&quot;本次对话次数&quot;)"><QStar :size="12" /><span>{{ billingLabel(m.billing) }}</span></div>
                 <div v-if="!m.streaming" class="cv-actions">
                   <span v-if="branchInfo(m)" class="cv-branch">
                     <button type="button" :disabled="branchInfo(m).index === 0" :aria-label="t('conversation.previous')" @click="switchBranch(m, -1)">
@@ -284,7 +284,7 @@
               :key="f.localId"
               class="cv-pending-item"
               :class="f.status"
-              :title="f.error || f.name"
+              :title="f.error ? ct(f.error) : f.name"
             >
               <img v-if="f.kind === 'image' && f.preview" :src="f.preview" class="cv-pending-thumb" :alt="f.name" />
               <span v-else class="cv-att-ext">{{ extOf(f.name) }}</span>
@@ -319,11 +319,11 @@
             style="display: none"
             @change="onPickFiles"
           />
-        <p v-if="entryPending||entryError" class="qgc-model-cost-note qag-composer-quote" :role="entryError?'alert':'status'"><ClientIcon name="sound"/><span>{{ entryPending?'正在打开指定的创作空间…':entryError }}</span><button v-if="entryError" type="button" @click="applyRouteEntry">重新打开</button><button v-if="entryError" type="button" @click="leaveEntry">开始普通对话</button></p>
-        <p v-if="agentId" class="qgc-model-cost-note qag-composer-quote"><ClientIcon name="agent" /><span>{{ agentQuote(currentAgent).label }}</span><small>{{ agentLoading?'正在核对搭档资料…':agentError||'问题与所选附件将交给搭档服务处理' }}</small><button type="button" :disabled="agentLoading||streaming" @click="loadCurrentAgent">刷新资料</button></p>
-        <p v-if="appId||appError||appLoading" class="qgc-model-cost-note qag-composer-quote" :role="appError?'alert':'status'"><AppAvatar v-if="appIcon" :icon="appIcon" :app-id="appId"/><ClientIcon v-else name="apps"/><span>{{ appName||'应用资料' }}</span><small>{{ appLoading?'正在核对应用设定…':appError||'已核对第 '+appVersion+' 版设定，发送时再开始生成' }}</small><button v-if="appId" type="button" :disabled="appLoading||streaming||loadingDetail" @click="loadCurrentApp()">刷新应用资料</button><button v-else type="button" @click="leaveApp">返回普通对话</button></p>
-        <p v-else-if="auth.isLoggedIn && currentModel" class="qgc-model-cost-note"><ClientIcon name="wallet" /><span>{{ modelBilling(currentModel).title }}</span><small>发送时按站点设置</small></p>
-        <p v-if="webSearchOn" class="cv-web-search-note" role="status"><ClientIcon name="globe" />{{ currentModel?.webSearchAvailable ? '本轮允许模型按需要联网，仅发送当前问题和附件；仍按当前模型设置结算。' : '当前模型尚未接入联网，请关闭联网或选择支持的模型后发送。' }}</p>
+        <p v-if="entryPending||entryError" class="qgc-model-cost-note qag-composer-quote" :role="entryError?'alert':'status'"><ClientIcon name="sound"/><span>{{ entryPending?ct("正在打开指定的创作空间…"):ct(entryError) }}</span><button v-if="entryError" type="button" @click="applyRouteEntry">{{ ct("重新打开") }}</button><button v-if="entryError" type="button" @click="leaveEntry">{{ ct("开始普通对话") }}</button></p>
+        <p v-if="agentId" class="qgc-model-cost-note qag-composer-quote"><ClientIcon name="agent" /><span>{{ agentQuote(currentAgent,ct).label }}</span><small>{{ agentLoading?ct("正在核对搭档资料…"):ct(agentError)||ct("问题与所选附件将交给搭档服务处理") }}</small><button type="button" :disabled="agentLoading||streaming" @click="loadCurrentAgent">{{ ct("刷新资料") }}</button></p>
+        <p v-if="appId||appError||appLoading" class="qgc-model-cost-note qag-composer-quote" :role="appError?'alert':'status'"><AppAvatar v-if="appIcon" :icon="appIcon" :app-id="appId"/><ClientIcon v-else name="apps"/><span>{{ appName||ct("应用资料") }}</span><small>{{ appLoading?ct("正在核对应用设定…"):ct(appError)||ct("已核对第 {p0} 版设定，发送时再开始生成",{p0:(appVersion)}) }}</small><button v-if="appId" type="button" :disabled="appLoading||streaming||loadingDetail" @click="loadCurrentApp()">{{ ct("刷新应用资料") }}</button><button v-else type="button" @click="leaveApp">{{ ct("返回普通对话") }}</button></p>
+        <p v-else-if="auth.isLoggedIn && currentModel" class="qgc-model-cost-note"><ClientIcon name="wallet" /><span>{{ modelBilling(currentModel,ct).title }}</span><small>{{ ct("发送时按站点设置") }}</small></p>
+        <p v-if="webSearchOn" class="cv-web-search-note" role="status"><ClientIcon name="globe" />{{ currentModel?.webSearchAvailable ? ct("本轮允许模型按需要联网，仅发送当前问题和附件；仍按当前模型设置结算。") : ct("当前模型尚未接入联网，请关闭联网或选择支持的模型后发送。") }}</p>
         <div class="cv-tools">
             <button v-if="!agentId" type="button" class="cv-chip" :aria-label="t('conversation.selectModel', {name:currentModel?.displayName || t('conversation.unselected')})" aria-haspopup="dialog" :aria-expanded="panelOpen" :aria-busy="modelSaving" @click="panelOpen = !panelOpen">
               <el-icon><Cpu /></el-icon>
@@ -340,18 +340,18 @@
               </template>
             </el-dropdown>
             <span class="cv-grow"></span>
-            <button v-if="!agentId" type="button" class="cv-chip qgc-compact-tool cv-web-search-chip" :class="{on:webSearchOn}" :disabled="!webSearchOn&&!currentModel?.webSearchAvailable" :aria-pressed="webSearchOn" aria-label="允许联网检索" :title="currentModel?.webSearchAvailable ? '按需要检索资料；本轮不带历史消息' : '当前模型尚未接入联网'" @click="webSearchOn=!webSearchOn"><ClientIcon name="globe" /><span class="cv-chip-text">联网</span></button>
+            <button v-if="!agentId" type="button" class="cv-chip qgc-compact-tool cv-web-search-chip" :class="{on:webSearchOn}" :disabled="!webSearchOn&&!currentModel?.webSearchAvailable" :aria-pressed="webSearchOn" :aria-label="ct(&quot;允许联网检索&quot;)" :title="currentModel?.webSearchAvailable ? ct(&quot;按需要检索资料；本轮不带历史消息&quot;) : ct(&quot;当前模型尚未接入联网&quot;)" @click="webSearchOn=!webSearchOn"><ClientIcon name="globe" /><span class="cv-chip-text">{{ ct("联网") }}</span></button>
             <button
               type="button"
               class="cv-chip qgc-compact-tool"
-              :aria-label="contextOn&&!webSearchOn ? '上下文开' : '上下文关'"
+              :aria-label="contextOn&amp;&amp;!webSearchOn ? ct(&quot;上下文开&quot;) : ct(&quot;上下文关&quot;)"
               :class="{ on: contextOn&&!webSearchOn }"
               :disabled="webSearchOn"
-              :title="webSearchOn ? '联网时只发送当前问题和附件' : contextOn ? '会带上本会话的历史消息' : '只发送本条消息，不带历史'"
+              :title="webSearchOn ? ct(&quot;联网时只发送当前问题和附件&quot;) : contextOn ? ct(&quot;会带上本会话的历史消息&quot;) : ct(&quot;只发送本条消息，不带历史&quot;)"
               :aria-pressed="contextOn&&!webSearchOn"
               @click="toggleContext"
             >
-              <el-icon><Connection /></el-icon><span class="cv-chip-text">{{ contextOn&&!webSearchOn ? '上下文开' : '上下文关' }}</span>
+              <el-icon><Connection /></el-icon><span class="cv-chip-text">{{ contextOn&&!webSearchOn ? ct("上下文开") : ct("上下文关") }}</span>
             </button>
             <button type="button" class="cv-plus" :title="t('conversation.attachHint')" :aria-label="t('conversation.attach')" @click="fileInput?.click()"><el-icon><Plus /></el-icon></button>
             <button type="button" class="cv-mic" :class="{ on: voice.recording }" :title="t('conversation.voice')" :aria-label="t('conversation.voice')" :aria-pressed="voice.open" @click="openVoice"><el-icon><Microphone /></el-icon></button>
@@ -368,12 +368,14 @@
 </template>
 
 <script setup>
+import {chatText as ct,chatLocale} from "../i18n/chat.js";
 import AppAvatar from '../components/design/AppAvatar.vue';
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
 import { api, fetchBlobUrl, streamChat, resumeChat, uploadFile, waitMessageSettled } from '../api/client.js';
 import { saveGuestDraft, takeGuestDraft } from '../lib/chat-draft.js';
+import {chatAppFailure,chatBilling,chatUsage} from '../lib/chat-presentation.js';
 import { imageOnly, modelBilling } from '../lib/model-presentation.js';
 import { citationMarkdown,webSearchReport } from '../lib/web-search.js';
 import WebSearchSources from '../components/design/WebSearchSources.vue';
@@ -422,7 +424,7 @@ const input = ref('');
 const editorMedia = window.matchMedia('(max-width:639px)');
 const compactComposer = ref(editorMedia.matches);
 function updateEditorSize(event) { compactComposer.value = event.matches; nextTick(autosize); }
-const composerPlaceholder = computed(() => dragging.value ? '松开即可添加附件' : compactComposer.value ? currentLang.value === 'en' ? 'Say something...' : currentLang.value === 'zh-TW' ? '來說點什麼...' : '来说点什么...' : currentLang.value === 'en' ? 'Say something... (Shift + Enter = newline; Enter = send)' : currentLang.value === 'zh-TW' ? '來說點什麼吧...（Shift + Enter = 換行； Enter = 發送）' : '来说点什么吧...（Shift + Enter = 换行； Enter = 发送）');
+const composerPlaceholder = computed(() => dragging.value ? ct('松开即可添加附件') : compactComposer.value ? currentLang.value === 'en' ? 'Say something...' : currentLang.value === 'zh-TW' ? '來說點什麼...' : '来说点什么...' : currentLang.value === 'en' ? 'Say something... (Shift + Enter = newline; Enter = send)' : currentLang.value === 'zh-TW' ? '來說點什麼吧...（Shift + Enter = 換行； Enter = 發送）' : '来说点什么吧...（Shift + Enter = 换行； Enter = 发送）');
 const streaming = ref(false);
 watch(() => streaming.value ? messages.value.some(message => message.streaming && message.content) ? 'responding' : 'thinking' : 'idle', value => { chatActivity.value = value; });
 const scroller = ref(null);
@@ -505,12 +507,12 @@ function trackUrl(url) {
 }
 
 async function addFiles(list) {
-  if(entryPending.value||entryError.value||loadingDetail.value)return ElMessage.info('请等待当前创作空间打开后再添加附件。');
+  if(entryPending.value||entryError.value||loadingDetail.value)return ElMessage.info(ct("请等待当前创作空间打开后再添加附件。"));
   const files = [...list];
   if (!files.length) return;
   const room = 9 - pendingFiles.value.length;
-  if (room <= 0) return ElMessage.warning('一条消息最多附带 9 个文件');
-  if (files.length > room) ElMessage.warning(`最多还能添加 ${room} 个文件，多出的已忽略`);
+  if (room <= 0) return ElMessage.warning(ct("一条消息最多附带 9 个文件"));
+  if (files.length > room) ElMessage.warning(ct("最多还能添加 {p0} 个文件，多出的已忽略",{p0:(room)}));
   for (const file of files.slice(0, room)) {
     const isImage = IMAGE_TYPES.includes(file.type);
     const item = reactive({
@@ -534,7 +536,7 @@ async function addFiles(list) {
       .catch((e) => {
         item.status = 'error';
         item.error = e?.message || '上传失败';
-        ElMessage.error(`「${item.name}」${item.error}`);
+        ElMessage.error(ct('附件「{name}」：{error}',{name:item.name,error:ct(item.error)}));
       });
   }
 }
@@ -652,19 +654,19 @@ async function loadFolders() {
 
 async function createFolder() {
   if (!auth.isLoggedIn) return newChat();
-  const name = await askFolderName('新建分组');
+  const name = await askFolderName(ct("新建分组"));
   if (!name) return;
   try { await api.post('/folders', { name }); await loadFolders(); }
-  catch (error) { ElMessage.error(error.message || '新建分组失败'); }
+  catch (error) { ElMessage.error(ct(error.message || ct("新建分组失败"))); }
 }
 
 async function askFolderName(title, initial = '') {
   try {
-    const { value } = await ElMessageBox.prompt('分组名称', title, {
+    const { value } = await ElMessageBox.prompt(ct("分组名称"), ct(title), {
       inputValue: initial,
-      inputValidator: (v) => (v.trim().length > 0 && v.trim().length <= 32) || '名称 1–32 个字',
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
+      inputValidator: (v) => (v.trim().length > 0 && v.trim().length <= 32) || ct("名称 1–32 个字"),
+      confirmButtonText: ct("保存"),
+      cancelButtonText: ct("取消"),
     });
     return value.trim();
   } catch {
@@ -673,22 +675,22 @@ async function askFolderName(title, initial = '') {
 }
 
 async function renameFolder(f) {
-  const name = await askFolderName('重命名分组', f.name);
+  const name = await askFolderName(ct("重命名分组"), f.name);
   if (!name) return;
   try {
     await api.patch(`/folders/${f.id}`, { name });
     await loadFolders();
   } catch (e) {
-    ElMessage.error(e?.message || '重命名失败');
+    ElMessage.error(ct(e?.message || ct("重命名失败")));
   }
 }
 
 async function removeFolder(f) {
   try {
-    await ElMessageBox.confirm(`删除分组「${f.name}」？其中的会话会回到未分组，不会被删除。`, '删除分组', {
+    await ElMessageBox.confirm(ct("删除分组「{p0}」？其中的会话会回到未分组，不会被删除。",{p0:(f.name)}), ct("删除分组"), {
       type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ct("删除"),
+      cancelButtonText: ct("取消"),
     });
   } catch {
     return;
@@ -698,7 +700,7 @@ async function removeFolder(f) {
     folderFilter.value = '';
     await Promise.all([loadFolders(), loadConversations()]);
   } catch (e) {
-    ElMessage.error(e?.message || '删除失败');
+    ElMessage.error(ct(e?.message || ct("删除失败")));
   }
 }
 
@@ -708,7 +710,7 @@ async function moveToFolder(c, folderId) {
     c.folderId = folderId;
     await loadFolders();
   } catch (e) {
-    ElMessage.error(e?.message || '移动失败');
+    ElMessage.error(ct(e?.message || ct("移动失败")));
   }
 }
 
@@ -719,13 +721,13 @@ async function onConvCommand(c, cmd) {
   if (cmd === 'unfolder') return moveToFolder(c, null);
   if (cmd.startsWith('move:')) return moveToFolder(c, cmd.slice(5));
   if (cmd === 'newfolder') {
-    const name = await askFolderName('新建分组');
+    const name = await askFolderName(ct("新建分组"));
     if (!name) return;
     try {
       const folder = await api.post('/folders', { name });
       await moveToFolder(c, folder.id);
     } catch (e) {
-      ElMessage.error(e?.message || '新建分组失败');
+      ElMessage.error(ct(e?.message || ct("新建分组失败")));
     }
   }
 }
@@ -772,7 +774,7 @@ async function togglePin(c) {
     await loadConversations();
   } catch (e) {
     c.pinned = !pinned;
-    ElMessage.error(e?.message || '置顶失败');
+    ElMessage.error(ct(e?.message || ct("置顶失败")));
   }
 }
 
@@ -805,32 +807,32 @@ async function bulkDelete(body) {
   // 分类、搜索和分组后的清理只提交可见 ID，不能误删另一个历史标签页。
   const request = { ids: body.unpinnedOnly ? [...visibleUnpinnedIds.value] : [...body.ids] };
   if (!request.ids.length) return;
-  const text = body.unpinnedOnly ? `删除当前列表中 ${request.ids.length} 个未置顶的会话？置顶会话会保留。` : `删除选中的 ${request.ids.length} 个会话？`;
+  const text = body.unpinnedOnly ? ct("删除当前列表中 {p0} 个未置顶的会话？置顶会话会保留。",{p0:(request.ids.length)}) : ct("删除选中的 {p0} 个会话？",{p0:(request.ids.length)});
   try {
-    await ElMessageBox.confirm(text, '批量删除', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' });
+    await ElMessageBox.confirm(text, ct("批量删除"), { type: 'warning', confirmButtonText: ct("删除"), cancelButtonText: ct("取消") });
   } catch {
     return;
   }
   try {
     const { count } = await api.post('/conversations/bulk-delete', request);
-    ElMessage.success(`已删除 ${count} 个会话`);
+    ElMessage.success(ct("已删除 {p0} 个会话",{p0:(count)}));
     await loadConversations();
     if (conversationId.value && !conversations.value.some((c) => c.id === conversationId.value)) newChat();
     selected.value = [];
     selecting.value = false;
   } catch (e) {
-    ElMessage.error(e?.message || '删除失败');
+    ElMessage.error(ct(e?.message || ct("删除失败")));
   }
 }
 
 async function renameConversation(c) {
   let value;
   try {
-    ({ value } = await ElMessageBox.prompt('新的会话标题', '重命名', {
+    ({ value } = await ElMessageBox.prompt(ct("新的会话标题"), ct("重命名"), {
       inputValue: c.title || '',
-      inputValidator: (v) => (v.trim().length > 0 && v.trim().length <= 60) || '标题 1–60 个字',
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
+      inputValidator: (v) => (v.trim().length > 0 && v.trim().length <= 60) || ct("标题 1–60 个字"),
+      confirmButtonText: ct("保存"),
+      cancelButtonText: ct("取消"),
     }));
   } catch {
     return;
@@ -839,19 +841,19 @@ async function renameConversation(c) {
     await api.patch(`/conversations/${c.id}`, { title: value.trim() });
     c.title = value.trim();
   } catch (e) {
-    ElMessage.error(e?.message || '重命名失败');
+    ElMessage.error(ct(e?.message || ct("重命名失败")));
   }
 }
 
 /** 导出当前可见分支为 Markdown 文件（纯前端，不经服务端） */
 function exportMarkdown() {
   const conv = conversations.value.find((c) => c.id === conversationId.value);
-  const title = conv?.title || '对话';
-  const lines = [`# ${title}`, '', `> 导出时间：${new Date().toLocaleString('zh-CN')} · 模型：${currentModel.value?.displayName || model.value}`, ''];
+  const title = conv?.title || ct('对话');
+  const lines = [`# ${title}`, '', ct('> 导出时间：{date} · 模型：{model}',{date:new Date().toLocaleString(chatLocale()),model:currentModel.value?.displayName||model.value}), ''];
   for (const m of visibleMessages.value) {
     if (!m.content) continue;
-    lines.push(m.role === 'user' ? '## 我' : '## 助手', '');
-    if (m.attachments?.length) lines.push(`> 附件：${m.attachments.map((a) => a.name).join('、')}`, '');
+    lines.push(m.role === 'user' ? ct('## 我') : ct('## 助手'), '');
+    if (m.attachments?.length) lines.push(ct('> 附件：{names}',{names:m.attachments.map(a=>a.name).join('、')}), '');
     lines.push(m.content, '');
   }
   const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
@@ -865,10 +867,10 @@ function exportMarkdown() {
 
 async function removeConversation(c) {
   try {
-    await ElMessageBox.confirm(`删除会话「${c.title || '新对话'}」？删除后不可恢复。`, '删除会话', {
+    await ElMessageBox.confirm(ct("删除会话「{p0}」？删除后不可恢复。",{p0:(c.title || ct("新对话"))}), ct("删除会话"), {
       type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: ct("删除"),
+      cancelButtonText: ct("取消"),
     });
   } catch {
     return;
@@ -878,7 +880,7 @@ async function removeConversation(c) {
     if (c.id === conversationId.value) newChat();
     await loadConversations();
   } catch (e) {
-    ElMessage.error(e?.message || '删除失败');
+    ElMessage.error(ct(e?.message || ct("删除失败")));
   }
 }
 
@@ -891,7 +893,7 @@ const currentModel = computed(() => models.value.find((m) => m.name === model.va
 
 async function selectModel(m) {
   if (agentId.value || modelSaving.value || loadingDetail.value) return;
-  if (!m.ready || imageOnly(m)) return ElMessage.warning('请选择已接入的对话模型；图像模型请到绘画创作。');
+  if (!m.ready || imageOnly(m)) return ElMessage.warning(ct("请选择已接入的对话模型；图像模型请到绘画创作。"));
   const selectedConversation = conversationId.value;
   const viewRevision = conversationViewRevision;
   const sessionRevision = auth.sessionRevision;
@@ -909,7 +911,7 @@ async function selectModel(m) {
     if (row) row.modelId = m.id;
     panelOpen.value = false;
   } catch (error) {
-    if (isCurrent()) ElMessage.error(error.message || '模型保存失败，请重试');
+    if (isCurrent()) ElMessage.error(ct(error.message || ct("模型保存失败，请重试")));
   } finally {
     if (selectionRevision === modelSelectionRevision) modelSaving.value = false;
   }
@@ -1058,9 +1060,9 @@ async function initializeChat(){
  if(!viewActive||!auth.isLoggedIn||auth.identityRevision!==identity||view!==conversationViewRevision)return;
  if(route.path==='/agent/chat'&&!agentId.value){void router.replace('/agent');return;}
  if(route.query.model&&!route.query.conversation&&!agentId.value&&choice===modelSelectionRevision)applyModelParam(route.query.model);
- if(results.some(result=>result.status==='rejected'))ElMessage.error('部分创作资料暂未加载，请刷新后再试。');
+ if(results.some(result=>result.status==='rejected'))ElMessage.error(ct("部分创作资料暂未加载，请刷新后再试。"));
 }
-function markAppUnavailable(error){if(appId.value&&/应用/.test(error.message||'')&&/变化|不存在|不可用|下架/.test(error.message||'')){appError.value=error.message;appVersion.value=null;}}
+function markAppUnavailable(error){if(!appId.value)return;const failure=chatAppFailure(error);if(failure==='stale'){appError.value=error.code===1001?'应用设定已变化，请刷新资料后继续。':error.message;appVersion.value=null;}else if(failure==='check-access')void loadCurrentApp();}
 
 async function loadCurrentAgent(){
   agentRead?.abort();const request=new AbortController(),id=agentId.value,identity=auth.identityRevision,view=conversationViewRevision;agentRead=request;if(!id||!auth.isLoggedIn)return;agentLoading.value=true;agentError.value='';
@@ -1124,7 +1126,7 @@ async function openConversation(id,{fromEntry=false}={}) {
     webSearchOn.value=!agentId.value&&!!messages.value.findLast(message=>message.role==='assistant')?.webSearch?.requested;
     messages.value.forEach((m) => m.attachments?.forEach(ensureThumb));
   } catch (e) {
-    if(isCurrent()){if(fromEntry)entryError.value=e.status===404?'这段对话已被移除，无法继续打开。':e.message||'原对话暂未打开，请重试。';else ElMessage.error(e?.message || '会话加载失败');}
+    if(isCurrent()){if(fromEntry)entryError.value=e.status===404?'这段对话已被移除，无法继续打开。':e.message||'原对话暂未打开，请重试。';else ElMessage.error(ct(e?.message || ct("会话加载失败")));}
   } finally {
     if(isCurrent()){loadingDetail.value=false;if(fromEntry)entryPending.value=false;}
   }
@@ -1145,19 +1147,8 @@ function statusNotice(status, finishReason) {
   return { notice: '', noticeType: '' };
 }
 
-function billingLabel(b) {
-  const pool = POOL_LABELS[b.pool] || '模型';
-  if (['RESERVED', 'SETTLING'].includes(b.state)) return '已预留 ' + b.reserved + ' 次 · ' + pool + ' · 完成后结算';
-  if (b.state === 'SETTLED') return '已结算 ' + b.charged + ' 次 · ' + pool;
-  if (b.state === 'RELEASED') return '本次未扣次数' + (b.returned ? ' · 已释放 ' + b.returned + ' 次' : '') + (b.expired ? ' · ' + b.expired + ' 次会员额度已到期' : '');
-  return '';
-}
-
-function usageLabel(u) {
-  const used = (u.promptTokens || 0) + (u.completionTokens || 0);
-  const source = u.usageEstimated === false ? '模型服务返回' : '估算';
-  return (u.contextLimit ? `上下文 ${used} / ${u.contextLimit}` : `用量 ${used}`) + ' · ' + source;
-}
+function billingLabel(b){return chatBilling(b,ct);}
+function usageLabel(u){return chatUsage(u,ct);}
 
 /* ---------------- 分支：同一父节点下的助手回复，默认显示最后一条 ---------------- */
 const siblingsByParent = computed(() => {
@@ -1182,7 +1173,7 @@ const visibleMessages = computed(() => {
   return messages.value.filter((m) => m.role !== 'assistant' || chosen.has(m));
 });
 
-const outlineEntries = computed(() => visibleMessages.value.map((message, index) => ({ index, role: message.role, label: String(message.content || '附件问题').replace(/\s+/g, ' ').trim().slice(0, 90) })).filter(item => item.role === 'user'));
+const outlineEntries = computed(() => visibleMessages.value.map((message, index) => ({ index, role: message.role, label: String(message.content || ct('附件问题')).replace(/\s+/g, ' ').trim().slice(0, 90) })).filter(item => item.role === 'user'));
 
 function branchInfo(message) {
   if (message.role !== 'assistant') return null;
@@ -1206,9 +1197,9 @@ function switchBranch(message, delta) {
 async function copyMessage(message) {
   try {
     await navigator.clipboard.writeText(message.content);
-    ElMessage.success('已复制');
+    ElMessage.success(ct("已复制"));
   } catch {
-    ElMessage.warning('当前环境不支持剪贴板');
+    ElMessage.warning(ct("当前环境不支持剪贴板"));
   }
 }
 
@@ -1233,9 +1224,9 @@ async function removeMessage(message) {
   try {
     await api.del(`/conversations/${conversationId.value}/messages/${message.serverId}`);
     messages.value = messages.value.filter((m) => m !== message);
-    ElMessage.success('已删除');
+    ElMessage.success(ct("已删除"));
   } catch (e) {
-    ElMessage.error(e?.message || '删除失败');
+    ElMessage.error(ct(e?.message || ct("删除失败")));
   }
 }
 
@@ -1316,7 +1307,7 @@ async function streamInto(payload, target, resumeId) {
       const summary = await api.get('/chat/quota').catch(() => null);
       if (!isCurrent()) return;
       if (summary) quota.value = summary;
-      if (data.charged?.amount && !resumeId && !operation.replay) { ElMessage.success('本次消耗 ' + data.charged.amount + ' 次（' + (POOL_LABELS[data.charged.pool] || data.charged.pool) + '）'); void refreshBalance(); }
+      if (data.charged?.amount && !resumeId && !operation.replay) { ElMessage.success(ct("本次消耗 {p0} 次（{p1}）",{p0:(data.charged.amount),p1:(POOL_LABELS[data.charged.pool]?ct(POOL_LABELS[data.charged.pool]):data.charged.pool)})); void refreshBalance(); }
     },
   };
   try {
@@ -1337,7 +1328,7 @@ async function streamInto(payload, target, resumeId) {
       } else { target.notice = '暂时无法续接，稍后重新打开此会话即可查看'; target.noticeType = 'warn'; }
     }
   } catch (error) {
-    if (isCurrent()) { markAppUnavailable(error);target.notice = error.message || '请求失败'; target.noticeType = 'error'; }
+    if (isCurrent()) { markAppUnavailable(error);target.notice = appId.value&&chatAppFailure(error)==='stale'?'应用设定已变化，请刷新资料后继续。':error.message || '请求失败'; target.noticeType = 'error'; }
   } finally {
     if (isCurrent()) { streaming.value = false; stopping.value = false; controller = null; activeRun = null; target.streaming = false; }
   }
@@ -1358,8 +1349,8 @@ async function cancelRun(operation) {
 async function send() {
   const text = input.value.trim();
   if (!canSend.value || streaming.value) return;
-  if (!agentId.value&&!model.value) return ElMessage.warning('请先选择模型');
-  if (!agentId.value&&!currentModel.value?.ready) { panelOpen.value = true; return ElMessage.warning('当前模型已停用或未接入，请选择可用模型'); }
+  if (!agentId.value&&!model.value) return ElMessage.warning(ct("请先选择模型"));
+  if (!agentId.value&&!currentModel.value?.ready) { panelOpen.value = true; return ElMessage.warning(ct("当前模型已停用或未接入，请选择可用模型")); }
 
   const attachments = readyFiles.value.map((f) => ({
     id: f.id,
@@ -1369,7 +1360,7 @@ async function send() {
     preview: f.preview,
   }));
   if (!agentId.value&&attachments.some((a) => a.kind === 'image') && !currentModel.value?.capabilities?.includes('vision')) {
-    return ElMessage.warning('当前模型不支持识图，请先在模型列表里换一个支持图片理解的模型');
+    return ElMessage.warning(ct("当前模型不支持识图，请先在模型列表里换一个支持图片理解的模型"));
   }
 
   input.value = '';
@@ -1402,11 +1393,11 @@ async function send() {
 async function regenerate(message) {
   const viewRevision = conversationViewRevision, sessionRevision = auth.sessionRevision;
   if (streaming.value) return;
-  if(entryPending.value||entryError.value)return ElMessage.warning('请先打开并核对当前创作空间');
-  if(appLoading.value||appError.value||appId.value&&!Number.isInteger(appVersion.value))return ElMessage.warning('请先刷新并核对应用资料');
-  if(agentId.value&&(!currentAgent.value?.ready||!currentAgent.value.offerRevision||agentLoading.value))return ElMessage.warning('请先刷新并核对搭档资料与费用');
-  if(webSearchOn.value&&!currentModel.value?.webSearchAvailable)return ElMessage.warning('请关闭联网或先选择支持联网的模型');
-  if (!message.serverId) return ElMessage.warning('这条消息还不能重新生成');
+  if(entryPending.value||entryError.value)return ElMessage.warning(ct("请先打开并核对当前创作空间"));
+  if(appLoading.value||appError.value||appId.value&&!Number.isInteger(appVersion.value))return ElMessage.warning(ct("请先刷新并核对应用资料"));
+  if(agentId.value&&(!currentAgent.value?.ready||!currentAgent.value.offerRevision||agentLoading.value))return ElMessage.warning(ct("请先刷新并核对搭档资料与费用"));
+  if(webSearchOn.value&&!currentModel.value?.webSearchAvailable)return ElMessage.warning(ct("请关闭联网或先选择支持联网的模型"));
+  if (!message.serverId) return ElMessage.warning(ct("这条消息还不能重新生成"));
   const visible = visibleMessages.value;
   const index = visible.indexOf(message);
   if (index < 0) return;
@@ -1479,7 +1470,7 @@ function applyModelParam(name) {
   if (!target) return;
   if(agentId.value){agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';conversationKind.value='chat';newChat();}
   model.value = target; draftStarted.value = true;
-  if (models.value.length && !models.value.some((m) => m.name === target && m.ready)) ElMessage.warning('指定模型当前不可用，请重新选择对话模型。');
+  if (models.value.length && !models.value.some((m) => m.name === target && m.ready)) ElMessage.warning(ct("指定模型当前不可用，请重新选择对话模型。"));
 }
 
 watch(

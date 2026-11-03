@@ -3,6 +3,8 @@
 </template>
 
 <script setup>
+import {currentLang} from '../i18n/index.js';
+import {chatText as ct} from '../i18n/chat.js';
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js/lib/common';
@@ -18,6 +20,10 @@ const root = ref(null);
 const sanitize = html => DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
 let revision = 0, actions = new WeakMap();
 const timers = new Set();
+const labels = new Map();
+function uiText(node, key) { const value=labels.get(node)||{attributes:{}}; value.text=key; labels.set(node,value); node.textContent=ct(key); }
+function uiAttribute(node, name, key) { const value=labels.get(node)||{attributes:{}}; value.attributes[name]=key; labels.set(node,value); node.setAttribute(name,ct(key)); }
+watch(currentLang,()=>{for(const[node,value]of labels){if(!root.value?.contains(node)){labels.delete(node);continue;}if(value.text!==undefined)node.textContent=ct(value.text);for(const[name,key]of Object.entries(value.attributes))node.setAttribute(name,ct(key));}});
 const html = computed(() => {
   if (!props.streaming) return renderMarkdown(props.content, sanitize);
   const chars = [...props.content], tail = chars.slice(-6);
@@ -27,7 +33,7 @@ const html = computed(() => {
 function clearTimers() { for (const timer of timers) clearTimeout(timer); timers.clear(); }
 function button(parent, text, label, action) {
   const node = document.createElement('button');
-  node.type = 'button'; node.className = 'qg-code-action'; node.textContent = text; node.setAttribute('aria-label', label);
+  node.type = 'button'; node.className = 'qg-code-action'; uiText(node,text); uiAttribute(node,'aria-label',label);
   actions.set(node, action); parent.appendChild(node); return node;
 }
 function saveText(text, name, type = 'text/plain;charset=utf-8') {
@@ -37,10 +43,10 @@ function saveText(text, name, type = 'text/plain;charset=utf-8') {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 async function copyCode(node, source) {
-  try { await navigator.clipboard.writeText(source); node.textContent = '已复制'; }
-  catch { node.textContent = '复制失败'; }
+  try { await navigator.clipboard.writeText(source); if(node.isConnected)uiText(node,'已复制'); }
+  catch { if(node.isConnected)uiText(node,'复制失败'); }
   if (!node.isConnected) return;
-  const timer = setTimeout(() => { timers.delete(timer); if (node.isConnected) node.textContent = '复制'; }, 1500);
+  const timer = setTimeout(() => { timers.delete(timer); if (node.isConnected) uiText(node,'复制'); }, 1500);
   timers.add(timer);
 }
 async function onClick(event) {
@@ -50,7 +56,7 @@ async function onClick(event) {
 }
 watch(html, async () => {
   const version = ++revision;
-  clearTimers(); actions = new WeakMap();
+  clearTimers(); actions = new WeakMap(); labels.clear();
   await nextTick();
   const host = root.value;
   const current = () => version === revision && root.value === host && host?.isConnected && !props.streaming;
@@ -58,12 +64,12 @@ watch(html, async () => {
   const tasks = [];
   for (const [index, node] of [...host.querySelectorAll('.qg-md-math')].entries()) {
     const token = readMath(node.textContent);
-    if (!token || index >= 128) { node.title = '公式数量较多，已保留源码'; continue; }
+    if (!token || index >= 128) { uiAttribute(node,'title','公式数量较多，已保留源码'); continue; }
     node.setAttribute('aria-busy', 'true');
     tasks.push(Promise.resolve().then(() => renderMath(token.math, token.display)).then(result => {
       if (current() && host.contains(node)) { node.innerHTML = result; node.classList.add('is-ready'); }
     }).catch(() => {
-      if (current() && host.contains(node)) { node.classList.add('is-error'); node.title = '公式未能呈现，已保留源码'; }
+      if (current() && host.contains(node)) { node.classList.add('is-error'); uiAttribute(node,'title','公式未能呈现，已保留源码'); }
     }).finally(() => { if (current() && host.contains(node)) node.removeAttribute('aria-busy'); }));
   }
   let diagrams = 0;
@@ -74,7 +80,7 @@ watch(html, async () => {
     const isDiagram = language === 'mermaid';
     const card = document.createElement('section'); card.className = 'qg-code-card' + (isDiagram ? ' qg-diagram-card' : '');
     const header = document.createElement('div'); header.className = 'qg-code-head';
-    const title = document.createElement('span'); title.className = 'qg-code-language'; title.textContent = isDiagram ? /^\s*mindmap\b/.test(source) ? '思维导图' : 'Mermaid 图表' : language.toUpperCase();
+    const title = document.createElement('span'); title.className = 'qg-code-language'; if(isDiagram)uiText(title,/^\s*mindmap\b/.test(source)?'思维导图':'Mermaid 图表');else title.textContent=language.toUpperCase();
     header.appendChild(title);
     card.appendChild(header); pre.replaceWith(card); card.appendChild(pre);
     button(header, '复制', '复制代码', node => copyCode(node, source));
@@ -84,20 +90,20 @@ watch(html, async () => {
       continue;
     }
     const canvas = document.createElement('div'); canvas.className = 'qg-diagram-canvas';
-    const caption = document.createElement('div'); caption.className = 'qg-diagram-caption'; caption.textContent = '图表较宽时可左右滚动，也可适应宽度查看全貌。'; caption.hidden = true;
+    const caption = document.createElement('div'); caption.className = 'qg-diagram-caption'; uiText(caption,'图表较宽时可左右滚动，也可适应宽度查看全貌。'); caption.hidden = true;
     const status = document.createElement('div'); status.className = 'qg-diagram-status'; status.setAttribute('role', 'status');
     card.insertBefore(status, pre); card.insertBefore(canvas, pre); card.insertBefore(caption, pre);
     let svg = '', showingSource = false, fitted = false, naturalWidth = 600;
     const showView = sourceView => {
       showingSource = sourceView; pre.hidden = !sourceView; canvas.hidden = sourceView;
       caption.hidden = sourceView;
-      toggle.textContent = sourceView ? '查看图表' : '查看源码'; toggle.setAttribute('aria-pressed', String(sourceView));
+      uiText(toggle,sourceView ? '查看图表' : '查看源码'); toggle.setAttribute('aria-pressed', String(sourceView));
     };
     const toggle = button(header, '查看源码', '切换图表与源码', () => showView(!showingSource));
     const fit = button(header, '适应宽度', '切换图表缩放', () => {
       fitted = !fitted;
       canvas.querySelector('svg').style.minWidth = fitted ? '0' : naturalWidth * .85 + 'px';
-      fit.textContent = fitted ? '实际大小' : '适应宽度'; fit.setAttribute('aria-pressed', String(fitted));
+      uiText(fit,fitted ? '实际大小' : '适应宽度'); fit.setAttribute('aria-pressed', String(fitted));
     });
     fit.hidden = true;
     const downloadSvg = button(header, 'SVG', '下载 SVG 图表', () => saveText(svg, 'qgauss-diagram.svg', 'image/svg+xml;charset=utf-8'));
@@ -105,7 +111,7 @@ watch(html, async () => {
     const allowed = ++diagrams <= 16;
     const draw = async () => {
       if (!current()) return;
-      status.hidden = false; status.textContent = '正在绘制图表…'; status.className = 'qg-diagram-status is-loading';
+      status.hidden = false; uiText(status,'正在绘制图表…'); status.className = 'qg-diagram-status is-loading';
       toggle.disabled = true; pre.hidden = true;
       try {
         if (!allowed) throw new Error('图表数量较多');
@@ -119,8 +125,8 @@ watch(html, async () => {
         actions.set(toggle, () => showView(!showingSource)); showView(false);
       } catch {
         if (!current() || !host.contains(card)) return;
-        status.hidden = false; status.textContent = '图表未能呈现，源码已保留，可复制或下载。'; status.className = 'qg-diagram-status is-error';
-        pre.hidden = false; canvas.hidden = true; toggle.textContent = '重试图表'; actions.set(toggle, draw);
+        status.hidden = false; uiText(status,'图表未能呈现，源码已保留，可复制或下载。'); status.className = 'qg-diagram-status is-error';
+        pre.hidden = false; canvas.hidden = true; uiText(toggle,'重试图表'); actions.set(toggle, draw);
       } finally { if (current()) toggle.disabled = false; }
     };
     tasks.push(draw());
@@ -129,5 +135,5 @@ watch(html, async () => {
   await Promise.allSettled(tasks);
   if (current()) emit('rendered');
 }, { immediate: true });
-onBeforeUnmount(() => { revision += 1; clearTimers(); actions = new WeakMap(); });
+onBeforeUnmount(() => { revision += 1; clearTimers(); actions = new WeakMap(); labels.clear(); });
 </script>

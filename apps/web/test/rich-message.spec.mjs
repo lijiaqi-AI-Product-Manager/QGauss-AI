@@ -36,7 +36,7 @@ const bundle = await rollup({
         if (id.endsWith('/rich-renderers.js')) return '\0qgauss-test-renderers';
       },
       load(id) {
-        if (id === '\0qgauss-rich-test') return 'export {default as MarkdownMessage} from ' + JSON.stringify(join(webRoot, 'src/components/MarkdownMessage.vue')) + ';export {default as ConversationOutline} from ' + JSON.stringify(join(webRoot, 'src/components/ConversationOutline.vue')) + ';';
+        if (id === '\0qgauss-rich-test') return 'export {setLang} from '+JSON.stringify(join(webRoot,'src/i18n/index.js'))+';export {default as MarkdownMessage} from ' + JSON.stringify(join(webRoot, 'src/components/MarkdownMessage.vue')) + ';export {default as ConversationOutline} from ' + JSON.stringify(join(webRoot, 'src/components/ConversationOutline.vue')) + ';';
         if (id === '\0qgauss-test-renderers') return 'export const renderMath=(...args)=>globalThis.qgaussRichHandlers.math(...args);export const renderDiagram=(...args)=>globalThis.qgaussRichHandlers.diagram(...args);';
       },
     },
@@ -52,11 +52,12 @@ await writeFile(modulePath, compiled);
 await bundle.close();
 after(async () => { assert.ok(resolve(temp).startsWith(resolve(tmpdir()) + sep + 'qgauss-rich-test-')); await rm(temp, { recursive: true, force: true }); dom.window.close(); });
 const { createApp, h, reactive, nextTick } = await import('vue');
-const { MarkdownMessage, ConversationOutline } = await import(pathToFileURL(modulePath).href);
+const { MarkdownMessage, ConversationOutline, setLang } = await import(pathToFileURL(modulePath).href);
 const tick = String.fromCharCode(96), fence = tick.repeat(3);
 const block = (language, code) => fence + language + '\n' + code + '\n' + fence;
 const settle = async () => { for (let i = 0; i < 3; i += 1) { await nextTick(); await new Promise(resolve => setImmediate(resolve)); } };
 async function mount(content = '', options = {}) {
+  setLang('zh');
   copied.length = 0; downloads.length = 0;
   const calls = [], errors = [], state = reactive({ content, streaming: false, ...options });
   globalThis.qgaussRichHandlers = {
@@ -147,6 +148,7 @@ test('卸载后图表迟到不挂回页面，也不产生未处理异常', async
 });
 
 async function mountOutline() {
+  setLang('zh');
   const scroller = document.querySelector('#scroll'); scroller.innerHTML = '<article data-qg-turn="0" tabindex="-1">第一个问题</article><article data-qg-turn="2" tabindex="-1">第二个问题</article>';
   scroller.getBoundingClientRect = () => ({ top: 100 }); scroller.scrollTop = 30;
   [...scroller.children].forEach((node, index) => { node.getBoundingClientRect = () => ({ top: 130 + index * 300 }); });
@@ -157,6 +159,30 @@ async function mountOutline() {
   app.mount('#mount'); await settle();
   return { app, state, scroller, positions, navigations: () => navigations, close: () => app.unmount() };
 }
+test('阅读语言原位更新，图表缩放、源码视图、滚动和渲染结果沿用原内容', async () => {
+  const source='flowchart LR\n  A[费用待确认]-->B[自己的文字]';
+  const fixture=await mount(block('mermaid',source));
+  try {
+    const graphic=document.querySelector('.qg-diagram-canvas svg'),pre=document.querySelector('.qg-code-card pre');
+    control('切换图表缩放').click();await settle();pre.scrollLeft=51;
+    setLang('en');await settle();
+    assert.equal(document.querySelector('.qg-diagram-canvas svg'),graphic);
+    assert.equal(graphic.style.minWidth,'0');
+    assert.equal(pre.scrollLeft,51);
+    assert.equal(control('Change diagram scale').textContent,'Actual size');
+    const toggle=control('Switch between diagram and source');toggle.click();await settle();
+    assert.equal(pre.hidden,false);
+    setLang('zh-TW');await settle();
+    assert.equal(document.querySelector('.qg-diagram-canvas svg'),graphic);
+    assert.equal(pre.hidden,false);
+    assert.equal(pre.scrollLeft,51);
+    assert.equal(toggle.getAttribute('aria-pressed'),'true');
+    assert.match(toggle.textContent,/圖表/);
+    assert.equal(document.querySelector('.qg-code-card code').textContent,source+'\n');
+    assert.equal(fixture.calls.filter(row=>row[0]==='diagram').length,1);
+  } finally {await fixture.close();setLang('zh');}
+});
+
 test('对话目录定位到问题，并让焦点跟随目标消息', async () => {
   const fixture = await mountOutline();
   try {

@@ -1,3 +1,4 @@
+import {registerChatLanguageTests} from './chat-language-ui.cases.mjs';
 import {registerVoiceLanguageTests} from './voice-language-ui.cases.mjs';
 import {registerVoiceProgressiveTests} from './voice-progressive-ui.cases.mjs';
 import {registerAppExperienceTests} from './app-experience-ui.cases.mjs';
@@ -887,7 +888,7 @@ test('对话历史区分模型服务报送和估算用量，并解释输出上�
 
 test('本轮完成使用模型报送用量，保留原次数回执且不自动继续生成', async () => {
   const fixture = await mount({ loggedIn: true, intercept: call => {
-    if (call.url === '/api/chat/completions') return new Response(runFrame(1, 'meta', { messageId: 'native-done', conversationId: 'c1' }) + runFrame(2, 'delta', { v: '原生接口的回复' }) + runFrame(3, 'done', { status: 'COMPLETED', finishReason: 'length', promptTokens: 23, completionTokens: 12, usageEstimated: false, contextLimit: 16000, billing: { state: 'SETTLED', pool: 'model3', limit: 2, charged: 2, reserved: 0 } }));
+    if (call.url === '/api/chat/completions') return new Response(runFrame(1, 'meta', { messageId: 'native-done', conversationId: 'c1' }) + runFrame(2, 'delta', { v: '原生接口的回复' }) + runFrame(3, 'done', { status: 'COMPLETED', finishReason: 'length', promptTokens: 23, completionTokens: 12, usageEstimated: false, contextLimit: 16000, billing: { state: 'SETTLED', pool: 'model3', limit: 2, charged: 2, reserved: 0, returned: 0, expired: 0 } }));
   } });
   try {
     document.querySelector('.qgc-empty-new').click(); await settle(); typeChat('检查本轮用量'); await settle(); document.querySelector('.cv-send').click(); await settle(); await settle();
@@ -923,7 +924,7 @@ test('编辑原生渠道保持原地址和空密钥，明确保存才提交通�
 
 test('对话显示预留、保存结算与最终消耗，结算期间不能重复生成或停止', async () => {
   let live;
-  const reserved = { state: 'RESERVED', pool: 'model3', limit: 2, reserved: 2, charged: 0 };
+  const reserved = { state: 'RESERVED', pool: 'model3', limit: 2, reserved: 2, charged: 0, returned: 0, expired: 0 };
   const fixture = await mount({ loggedIn: true, intercept: call => {
     if (call.url === '/api/chat/completions') { live = runResponse(call, runFrame(1, 'meta', { messageId: 'count-run', conversationId: 'c1', billing: reserved }) + runFrame(2, 'delta', { v: '这是一段完整回复' })); return live.response; }
   } });
@@ -2366,3 +2367,5 @@ registerAppExperienceTests({test,assert,mount,settle,relayJson,creatorIntercepto
 registerVoiceProgressiveTests({test,assert,mount,settle,relayJson});
 
 registerVoiceLanguageTests({test,assert,mount,mountVoiceLibrary,settle,relayJson,setLang});
+
+registerChatLanguageTests({test,assert,mount,settle,relayJson,setLang,runFrame,runResponse});

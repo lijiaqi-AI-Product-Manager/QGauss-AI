@@ -1,10 +1,10 @@
 <template>
-  <nav v-if="entries.length > 1" ref="root" class="qg-thread-outline" aria-label="对话目录">
-    <button ref="trigger" type="button" class="qg-icon-btn" aria-label="打开对话目录" title="对话目录" :aria-expanded="open" :aria-controls="panelId" @click="toggle">
+  <nav v-if="entries.length > 1" ref="root" class="qg-thread-outline" :aria-label="ct(&quot;对话目录&quot;)">
+    <button ref="trigger" type="button" class="qg-icon-btn" :aria-label="ct(&quot;打开对话目录&quot;)" :title="ct(&quot;对话目录&quot;)" :aria-expanded="open" :aria-controls="panelId" @click="toggle">
       <span aria-hidden="true">≡</span><span class="qg-outline-count">{{ entries.length }}</span>
     </button>
-    <section v-if="open" :id="panelId" class="qg-outline-panel" aria-label="本次对话的问题">
-      <header><span>这一路的想法</span><small>{{ entries.length }} 轮</small><button type="button" aria-label="关闭对话目录" @click="close(true)">×</button></header>
+    <section v-if="open" :id="panelId" class="qg-outline-panel" :aria-label="ct(&quot;本次对话的问题&quot;)">
+      <header><span>{{ ct("这一路的想法") }}</span><small>{{ ct("{p0} 轮",{p0:(entries.length)}) }}</small><button type="button" :aria-label="ct(&quot;关闭对话目录&quot;)" @click="close(true)">×</button></header>
       <ol>
         <li v-for="(entry, index) in entries" :key="entry.index">
           <button type="button" :aria-current="active === entry.index ? 'location' : undefined" @click="navigate(entry)">
@@ -16,6 +16,7 @@
   </nav>
 </template>
 <script setup>
+import {chatText as ct} from "../i18n/chat.js";
 import { nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 const props = defineProps({ entries: { type: Array, default: () => [] }, scroller: { type: Object, default: null }, threadKey: { type: String, default: '' } });
 const emit = defineEmits(['navigate']);
