@@ -12,9 +12,11 @@ function fixture(){
  const root=mkdtempSync(join(tmpdir(),'qgauss-publication-test-')),word='sampleblockedterm';
  const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']});
  mkdirSync(join(root,'scripts'));for(const file of ['release-check.mjs','brand-check.mjs'])writeFileSync(join(root,'scripts',file),readFileSync(join(project,'scripts',file)));
+ mkdirSync(join(root,'scripts/brand'));writeFileSync(join(root,'scripts/brand/scan.mjs'),readFileSync(join(project,'scripts/brand/scan.mjs')));
  writeFileSync(join(root,'.qgauss-brand.json'),JSON.stringify({deniedProductTokens:[{length:word.length,firstCodePoint:word.charCodeAt(0),lastCodePoint:word.charCodeAt(word.length-1),sha256:createHash('sha256').update(word).digest('hex')}]}));
  writeFileSync(join(root,'README.md'),'QGauss AI\n');git('init','-b','main');git('config','user.name','QGauss Maintainer');git('config','user.email','maintainer@qgauss.test');
  const run=(file,args=[])=>spawnSync(process.execPath,['scripts/'+file+'.mjs',...args],{cwd:root,encoding:'utf8',windowsHide:true});
+ const initial=run('brand-check');if(initial.status!==0){rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});assert.equal(initial.status,0,initial.stderr);}
  return{root,git,run,write:(path,data)=>writeFileSync(join(root,path),data),close:()=>{assert.ok(resolve(root).startsWith(resolve(tmpdir())+sep+'qgauss-publication-test-'));rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100});}};
 }
 test('clean publication works before the first commit and after a human-authored root commit',()=>{const f=fixture();try{for(const file of ['release-check','brand-check'])assert.equal(f.run(file).status,0);f.git('add','.');f.git('commit','-m','chore: initialize product workspace');assert.equal(f.run('release-check').status,0);}finally{f.close();}});

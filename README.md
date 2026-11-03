@@ -55,6 +55,8 @@ npm run verify:compose
 
 完整验证需要先准备开发数据库，HTTP 测试使用数据库副本、临时存储与本地服务。已有服务运行时，应通过 `E2E_PORT` 和 `FAKE_PORT` 指定空闲端口。测试不需要真实模型、支付或邮箱凭据。
 
+`npm run brand:check` 完整检查当前源码，`npm run brand:dist` 同时覆盖保留的历史页面资源。检查包括路径、Unicode 变体、无扩展名文件与二进制可读元信息，每次读取当前文件的全部内容。需要文件数、实际读取字节数、耗时和问题路径时，可以运行 `node scripts/brand-check.mjs --dist --json`；发现受限内容时返回失败状态。
+
 问题与功能改动通过 Issue 跟踪，改动分支通过 Pull Request 合入。提交要求见 [贡献规范](CONTRIBUTING.md)。
 
 - [产品状态](docs/STATUS.md)

@@ -6,26 +6,20 @@ import { execFileSync } from 'node:child_process';
 import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {createBrandMatcher, scanBrandFiles} from './brand/scan.mjs';
 
+const started = performance.now();
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const policy = JSON.parse(await readFile(join(repo, '.qgauss-brand.json'), 'utf8'));
 const digest = (text) => createHash('sha256').update(text).digest('hex');
-function forbidden(text, markers = policy.deniedProductTokens) {
-  const normalized = text.normalize('NFKC').toLowerCase().replace(/[-_\s\u200b-\u200d\ufeff]/g, '');
-  for (const marker of markers) {
-    for (let offset = 0; offset <= normalized.length - marker.length; offset += 1) {
-      if (normalized.charCodeAt(offset) !== marker.firstCodePoint || normalized.charCodeAt(offset + marker.length - 1) !== marker.lastCodePoint) continue;
-      if (digest(normalized.slice(offset, offset + marker.length)) === marker.sha256) return true;
-    }
-  }
-  return false;
-}
+const forbidden = createBrandMatcher(policy.deniedProductTokens);
 // 规则样例使用中性测试词，不把被禁产品标识重新写回测试源码。
 const testMarker = { length: 10, firstCodePoint: 108, lastCodePoint: 100, sha256: digest('legacyword') };
-assert.equal(forbidden('LEGACY_WORD', [testMarker]), true);
-assert.equal(forbidden('legacy-word', [testMarker]), true);
-assert.equal(forbidden('legacy word', [testMarker]), true);
-assert.equal(forbidden('QGauss AI', [testMarker]), false);
+const sample = createBrandMatcher([testMarker]);
+assert.equal(sample('LEGACY_WORD'), true);
+assert.equal(sample('legacy-word'), true);
+assert.equal(sample('legacy word'), true);
+assert.equal(sample('QGauss AI'), false);
 
 const files = new Set(execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: repo, encoding: 'utf8', windowsHide: true }).split('\0').filter(Boolean));
 async function addDirectory(directory) {
@@ -35,18 +29,10 @@ async function addDirectory(directory) {
   }
 }
 if (process.argv.includes('--dist')) await addDirectory('apps/web/dist');
-const failures = [];
-let checked = 0;
-for (const path of [...files].sort()) {
-  if (forbidden(path)) { failures.push(`${path}（路径）`); continue; }
-  let bytes; try { bytes = await readFile(join(repo, path)); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
-  // 不依赖扩展名白名单，后续新增脚本和无扩展名配置也会受检。
-  // 字体、压缩包、位图等含 NUL 的二进制不作为文本；路径仍一律检查。
-  // 二进制附带的可读元信息也纳入检查。
-
-  const text = bytes.toString('utf8');
-  checked += 1;
-  if (forbidden(text)) failures.push(path);
-}
-if (failures.length) { console.error(`品牌检查失败：${failures.length} 个文件残留受限表述\n${failures.join('\n')}`); process.exitCode = 1; }
+// 所有文件完整读取，包括无扩展名配置和二进制中的可读元信息。
+const {checked, bytesRead, missing, failures} = await scanBrandFiles(files, {root: repo, matches: forbidden});
+const result = {status: failures.length ? 'failed' : 'passed', files: checked, bytesRead, missing, elapsedMs: Math.round(performance.now() - started), failures};
+if (process.argv.includes('--json')) console.log(JSON.stringify(result));
+else if (failures.length) console.error(`品牌检查失败：${failures.length} 个文件残留受限表述\n${failures.join('\n')}`);
 else console.log(`QGauss 品牌检查通过：${checked} 个文本文件，产品名称与发布内容符合规则`);
+if (failures.length) process.exitCode = 1;
