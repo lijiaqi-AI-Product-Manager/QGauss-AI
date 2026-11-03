@@ -3,6 +3,7 @@ import type {VideoQuoteDto} from './video.dto';
 import type {NativeVideoIntent} from './video.provider';
 import type {VideoMaterial} from './video-materials';
 import {videoFeatures,UPSCALE_MODELS} from './video-profiles';
+import {normalizeVideoSpeaker} from './video-speaker';
 function bad(message:string):never{throw new BusinessException(ErrorCode.PARAM_INVALID,message,400);}
 const controls=['upscaleFactor','enhanceModel','compression','noise','halo','grain','recoverDetail'];
 export function videoToolIntent(dto:VideoQuoteDto,profile:string,presetId:string):NativeVideoIntent{
@@ -13,12 +14,13 @@ export function videoToolIntent(dto:VideoQuoteDto,profile:string,presetId:string
  if(following?seconds!==0:!features.seconds.includes(seconds))bad('此处理的时长选项无效');if(mode==='edit'?ratio!=='adaptive':!features.ratios.includes(ratio))bad('所选处理方式不支持此画幅');
  if(fal?(dto.resolution!==undefined||dto.seed!==undefined||dto.sound!==undefined):!features.resolutions.includes(resolution))bad('所选处理方式不支持此清晰度、种子或同步声音参数');
  if(mode!=='upscale'&&controls.some(k=>dto[k]!==undefined)||mode!=='lipsync'&&dto.syncMode!==undefined)bad('处理选项与当前创作方式不符');
+ if(mode!=='lipsync'&&dto.speakerSelection!==undefined)bad('人物选择只用于口型同步');
  const caps=mode==='edit'?{...features.referenceLimits!,video:1}:features.referenceLimits!,counts=Object.fromEntries(['image','video','audio'].map(kind=>[kind,(dto[kind+'Ids']||[]).length]));
  const all=['image','video','audio'].flatMap(kind=>dto[kind+'Ids']||[]);if(!all.length||new Set(all).size!==all.length)bad('请加入不重复的素材');for(const kind of ['image','video','audio'])if(counts[kind]>caps[kind])bad('素材数量超过当前模型上限');
  if(following&&counts.video!==1||mode==='lipsync'&&counts.audio!==1)bad('请选择一条原片；口型同步还需要一段声音');if(mode==='reference'&&!features.audioOnly&&!counts.image&&!counts.video)bad('这个模型不能只用声音生成视频，请搭配图片或视频');
  const result:NativeVideoIntent={presetId,mode,prompt,ratio,seconds,resolution,...Object.fromEntries(['imageIds','videoIds','audioIds'].filter(k=>dto[k]!==undefined).map(k=>[k,[...dto[k]]])),...(!fal?{sound:dto.sound??true,...(dto.seed===undefined?{}:{seed:dto.seed})}:{})};
  if(mode==='upscale'){const factor=dto.upscaleFactor??2,model=dto.enhanceModel||'Proteus';if(!Number.isFinite(factor)||factor<1||factor>4||!UPSCALE_MODELS.includes(model))bad('精修模型或放大倍率无效');if(['Proteus Natural','Gaia 2'].includes(model)&&factor!==2)bad('这个精修模型只支持 2 倍放大');Object.assign(result,{upscaleFactor:factor,enhanceModel:model});for(const k of controls.slice(2))if(dto[k]!==undefined){if(!Number.isFinite(dto[k])||dto[k]<0||dto[k]>(k==='grain'?.1:1))bad('精修强度超出范围');result[k]=dto[k];}}
- if(mode==='lipsync'){const syncMode=dto.syncMode||'cut_off';if(!['cut_off','loop','bounce','silence','remap'].includes(syncMode))bad('请选择支持的时长处理方式');result.syncMode=syncMode;}
+ if(mode==='lipsync'){const syncMode=dto.syncMode||'cut_off';if(!['cut_off','loop','bounce','silence','remap'].includes(syncMode))bad('请选择支持的时长处理方式');result.syncMode=syncMode;const speaker=normalizeVideoSpeaker(dto.speakerSelection);if(speaker){if(speaker.videoId!==dto.videoIds?.[0])bad('人物选择与原视频不符，请重新点选');result.speakerSelection=speaker;}}
  return result;
 }
 export function validateVideoToolMaterials(intent:NativeVideoIntent,profile:string,materials:VideoMaterial[]){

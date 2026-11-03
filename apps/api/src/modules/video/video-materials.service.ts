@@ -7,6 +7,7 @@ import {StorageService,decodeFilename,type IncomingFile} from '../storage/storag
 import {prepareImageInputs} from '../image/image-inputs';
 import {inspectAudioMaterial,inspectVideoMaterial,type VideoMaterial} from './video-materials';
 import {videoFiles} from './video-accounting.service';
+import {videoFrameTimeline,validateVideoSpeaker,type VideoSpeakerSelection} from './video-speaker';
 const bad=(message:string,status=400)=>new BusinessException(ErrorCode.PARAM_INVALID,message,status);
 const sha=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
 @Injectable()
@@ -20,6 +21,9 @@ export class VideoMaterialsService{
   return{id:result.id,kind,filename:result.filename,mime:info.mime,size:file.buffer.length,...(['width','height','duration','fps','codec'].reduce((out,key)=>{if(info[key]!==undefined)out[key]=info[key];return out;},{} as any))};
  }
  async fromTask(userId:string,id:string){const parent=await this.prisma.videoTask.findFirst({where:{id,userId,status:'SUCCESS',deletedAt:null}}),files=videoFiles(parent?.resultJson);if(!parent||!files)throw bad('只能选择自己的已完成成片');return this.prepareOne(userId,files.videoFileId,'video');}
+ async frames(userId:string,id:string){const material=await this.prepareOne(userId,id,'video');return this.frameTimeline(userId,material);}
+ private async frameTimeline(userId:string,material:VideoMaterial){const file=await this.readExpected(userId,material);try{return videoFrameTimeline(file.buffer);}catch(e){throw bad((e as Error).message);}}
+ async validateSpeaker(userId:string,selection:VideoSpeakerSelection,materials:VideoMaterial[]){const material=materials.find(x=>x.kind==='video'&&x.id===selection.videoId);if(!material)throw bad('人物选择与原视频不符，请重新点选');const timeline=await this.frameTimeline(userId,material);validateVideoSpeaker(selection,material,timeline.frames.length);}
  async prepareOne(userId:string,id:string,kind:VideoMaterial['kind'],expected?:VideoMaterial){
   let file:Awaited<ReturnType<StorageService['read']>>;try{file=await this.storage.read(id,userId,'USER');}catch{throw bad('素材不存在、已移除或不属于当前账户');}
   const meta=await this.storage.detail(id,userId,'USER');let sourceTaskId:string|undefined;if(kind==='video'&&meta.scope==='video'){const parent=await this.prisma.videoTask.findFirst({where:{userId,status:'SUCCESS',deletedAt:null,resultJson:{contains:id}},select:{id:true,resultJson:true}});if(!parent||videoFiles(parent.resultJson)?.videoFileId!==id)throw bad('来源成片已经回收或移除');sourceTaskId=parent.id;}

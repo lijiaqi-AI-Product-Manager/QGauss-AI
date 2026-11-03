@@ -3,7 +3,7 @@ export function videoIntent(owner, storage = sessionStorage) {
   const key = 'qg:video:intent:' + owner;
   return {
     read() { try { const value = JSON.parse(storage.getItem(key)), p = value?.payload; return value && /^[A-Za-z0-9_-]{8,100}$/.test(value.requestKey) && /^[a-f0-9]{64}$/.test(value.quoteRevision) && p && typeof p === 'object' && !Array.isArray(p) && typeof p.presetId === 'string' && typeof p.prompt === 'string' && p.prompt.length <= 4000 && ['text','image','extend','reference','edit','upscale','lipsync'].includes(p.mode) ? value : null; } catch { return null; } },
-    save(value) { try { storage.setItem(key, JSON.stringify(value)); } catch {} },
+    save(value) { try { storage.setItem(key, JSON.stringify(value)); return true; } catch { return false; } },
     clear() { try { storage.removeItem(key); } catch {} },
   };
 }

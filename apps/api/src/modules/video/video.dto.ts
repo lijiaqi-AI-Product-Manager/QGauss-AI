@@ -1,6 +1,7 @@
-import { Transform } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsString, Length, Matches, Max, MaxLength, Min, ValidateIf } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { ArrayMaxSize, ArrayMinSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsObject, IsString, Length, Matches, Max, MaxLength, Min, ValidateIf, ValidateNested } from 'class-validator';
 import { VIDEO_PROFILES, VIDEO_STYLES,UPSCALE_MODELS } from './video-profiles';
+import {normalizeVideoSpeaker} from './video-speaker';
 const Raw = () => Transform(({ obj, key }) => obj[key]);
 const Optional = () => ValidateIf((_, value) => value !== undefined);
 export class VideoPresetDto {
@@ -15,6 +16,12 @@ export class VideoPresetDto {
   @Raw() @IsIn(['model3', 'model4', 'drawMj', 'agent']) pool: string;
   @Raw() @IsInt() @Min(2) @Max(120) maxWaitMinutes: number;
   @Raw() @IsString() @MaxLength(500) publicBaseUrl: string;
+}
+export class VideoSpeakerSelectionDto {
+  @Raw() @IsString() @Length(1,128) videoId:string;
+  @Raw() @IsInt() @Min(0) @Max(99999) frameNumber:number;
+  @Raw() @IsInt() @Min(0) @Max(16383) x:number;
+  @Raw() @IsInt() @Min(0) @Max(16383) y:number;
 }
 export class VideoQuoteDto {
   @Raw() @IsString() @Length(1, 128) presetId: string;
@@ -32,6 +39,7 @@ export class VideoQuoteDto {
   @Raw() @Optional() @IsNumber() @Min(1) @Max(4) upscaleFactor?:number;
   @Raw() @Optional() @IsIn(UPSCALE_MODELS) enhanceModel?:string;
   @Raw() @Optional() @IsIn(['cut_off','loop','bounce','silence','remap']) syncMode?:string;
+  @Transform(({value,obj,key})=>{normalizeVideoSpeaker(obj[key]);return value;}) @Optional() @IsObject() @ValidateNested() @Type(()=>VideoSpeakerSelectionDto) speakerSelection?:VideoSpeakerSelectionDto;
   @Raw() @Optional() @IsNumber() @Min(0) @Max(1) compression?:number;
   @Raw() @Optional() @IsNumber() @Min(0) @Max(1) noise?:number;
   @Raw() @Optional() @IsNumber() @Min(0) @Max(1) halo?:number;
