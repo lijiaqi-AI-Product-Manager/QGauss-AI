@@ -196,6 +196,7 @@ async function main() {
     { name: '生成任务 chat-runs.e2e.mjs', script: join(here, 'chat-runs.e2e.mjs') },
     { name: '绘画工作台 image-workspace.e2e.mjs', script: join(here, 'image-workspace.e2e.mjs') },
     { name: '多图与局部重绘 image-edit.e2e.mjs', script: join(here, 'image-edit.e2e.mjs') },
+    { name: '图像编辑台 image-editor.e2e.mjs', script: join(here, 'image-editor.e2e.mjs') },
     { name: 'MJ 进阶创作 mj.e2e.mjs', script: join(here, 'mj.e2e.mjs') },
     { name: 'MJ 进程恢复 mj-recovery.e2e.mjs', script: join(here, 'mj-recovery.e2e.mjs') },
     { name: '原生视频 video.e2e.mjs', script: join(here, 'video.e2e.mjs') },

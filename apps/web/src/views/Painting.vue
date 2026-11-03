@@ -6,6 +6,7 @@
       <div class="qp-studio-note"><span class="qp-live-dot"></span> {{ pendingCount ? '本页 ' + pendingCount + ' 个灵感正在生成' : '给灵感一点空间' }} <router-link to="/mj">打开 MJ 进阶创作 ↗</router-link></div>
     </header>
     <GalleryEntryNotice :entry="galleryEntry" />
+    <ImageEditorEntryNotice :entry="editorEntry" />
 
     <aside class="qp-params qp-composer" aria-label="绘画创作台">
       <div class="qp-section-heading"><span class="qp-step">01</span><div><h2>你的创作台</h2><p>描述画面，其他交给想象。</p></div><ClientIcon name="palette" /></div>
@@ -23,10 +24,11 @@
       <section v-if="form.mode === 'img2img'" class="qp-reference-board" aria-label="参考图板">
         <div class="qp-reference-heading"><span>把灵感放在一起</span><b>{{ referenceItems.length }} / {{ maxReferences }}</b></div><p class="qp-reference-hint">第一张是主图。可把主体、材质、氛围分开放进来，在描述里说明各图的用途。</p>
         <div class="qp-reference-grid"><div v-for="(item, i) in referenceItems" :key="item.id" class="qp-reference-tile"><img v-if="referenceUrl(item)" :src="referenceUrl(item)" :alt="item.name || '参考图 ' + (i + 1)" /><span>{{ i === 0 ? '主图' : '参考 ' + (i + 1) }}</span><button type="button" :aria-label="'移除参考图 ' + (i + 1)" :disabled="uploading || creating" @click="removeReference(i)"><ClientIcon name="close" /></button><button v-if="i" type="button" class="qp-reference-move" :aria-label="'将参考图 ' + (i + 1) + ' 设为主图'" :disabled="uploading || creating" @click="makePrimary(i)">置首</button></div><button v-if="referenceItems.length < maxReferences" type="button" class="qp-reference-tile qp-reference-add" :disabled="uploading || creating" @click="fileInput?.click()"><ClientIcon name="plus" /><b>{{ uploading ? '上传中…' : '加入参考图' }}</b></button></div>
-        <button v-if="referenceItems.length" type="button" class="qp-mask-action" :disabled="!features.mask || uploading || creating || !referenceSource" @click="maskEditor?.open(mask?.strokes || [])"><ClientIcon name="palette" /><span>{{ mask ? '调整重绘区域' : '涂抹局部重绘' }}</span><span>{{ features.mask ? '打开画布 ↗' : '此模型未开放' }}</span></button>
+        <button v-if="referenceItems.length" type="button" class="qp-mask-action" :disabled="!features.mask || uploading || creating || !referenceSource" @click="adjustMask"><ClientIcon name="palette" /><span>{{ mask ? '调整重绘区域' : '涂抹局部重绘' }}</span><span>{{ features.mask ? '打开画布 ↗' : '此模型未开放' }}</span></button>
         <div v-if="mask" class="qp-mask-saved"><span>✦ {{ mask.id ? '已选择重绘区域' : '选区未保存，请重新确认' }}</span><button type="button" :disabled="uploading || creating" @click="mask = null">移除选区</button></div><p v-if="referenceItems.length > maxReferences || (mask && !features.mask)" role="alert" class="qp-reference-note">当前模型不支持这组参考设置，请减少图片或移除选区后再生成。</p><p class="qp-reference-note">每张最多 10 MB / 800 万像素。图片与选区私有保存，移除只改变本次草稿。</p>
       </section>
       <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden @change="onRefPicked" />
+      <button v-if="referenceItems.length" type="button" class="qp-mask-action" :disabled="uploading||creating||!referenceSource" @click="openImageEditor()"><ClientIcon name="palette"/>在图像编辑台调整<span>颜色选区 / 自由涂抹 ↗</span></button>
       <ImageMaskEditor ref="maskEditor" :source="referenceSource" @apply="saveMask" />
       <details class="qp-settings">
         <summary><span><ClientIcon name="layout" />画面与进阶设置</span><b>{{ form.ratio }} · {{ form.resolution }} · {{ form.n }} 张</b><ClientIcon name="chevronRight" /></summary>
@@ -39,7 +41,7 @@
           <p class="qp-size-note">画布尺寸 <strong>{{ sizeHint }}</strong></p>
         </div>
       </details>
-      <div class="qp-actions"><button type="button" class="qp-generate" :disabled="creating || uploading || !optionsReady || galleryEntry.blocked" :aria-busy="creating" @click="submit"><ClientIcon name="spark" /><span>{{ creating ? '正在提交…' : '开始生成' }}</span><ClientIcon name="arrow" /></button><p>{{ costHint }}</p></div>
+      <div class="qp-actions"><button type="button" class="qp-generate" :disabled="creating || uploading || !optionsReady || galleryEntry.blocked || editorEntry.blocked" :aria-busy="creating" @click="submit"><ClientIcon name="spark" /><span>{{ creating ? '正在提交…' : '开始生成' }}</span><ClientIcon name="arrow" /></button><p>{{ costHint }}</p></div>
       <div class="qp-composer-footer"><span class="qp-tiny-spark">✦</span> 提示词保留着，随时试试下一个版本。</div>
     </aside>
 
@@ -83,13 +85,16 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute,useRouter } from 'vue-router';
 import { ElInput, ElInputNumber, ElMessage, ElOption, ElSelect } from 'element-plus';
 import { api, uploadFile } from '../api/client.js';
 import { useAuth } from '../stores/auth.js';
 import { createArtworkAssets } from '../lib/artwork-assets.js';
 import ClientIcon from '../components/reference/ClientIcon.vue';
 import GalleryEntryNotice from '../components/design/GalleryEntryNotice.vue';
+import ImageEditorEntryNotice from '../components/design/ImageEditorEntryNotice.vue';
+import {useImageEditorEntry} from '../composables/useImageEditorEntry.js';
+import {saveImageEditorTransfer} from '../lib/image-editor-transfer.js';
 import ArtworkPublication from '../components/design/ArtworkPublication.vue';
 import {useGalleryEntry} from '../composables/useGalleryEntry.js';
 import BrandLoader from '../components/design/BrandLoader.vue';
@@ -97,10 +102,10 @@ import ArtworkBilling from '../components/design/ArtworkBilling.vue';
 import ImageMaskEditor from '../components/design/ImageMaskEditor.vue';
 import '../components/design/painting-workspace.css';
 
-const route = useRoute(), auth = useAuth(), owner = auth.user?.id;
+const route = useRoute(), router=useRouter(),auth = useAuth(), owner = auth.user?.id,ownerIdentity=auth.identityRevision;
 let alive = true, poller, detailVersion = 0, uploadVersion = 0, opener;
 const controllers = new Map(), versions = new Map(), downloadTimers = new Map();
-const isCurrent = () => alive && auth.isLoggedIn && auth.user?.id === owner;
+const isCurrent = () => alive && auth.isLoggedIn && auth.user?.id === owner && auth.identityRevision===ownerIdentity;
 const assets = createArtworkAssets(isCurrent);
 const form = reactive({ prompt: '', negativePrompt: '', ratio: '1:1', resolution: '1K', quality: 'auto', n: 1, seed: undefined, catId: '', mode: 'text2img', model: String(route.query.model || ''), editOf: '' });
 const ratios = ref([]), resolutions = ref([]), cats = ref([]), imageModels = ref([]), billing = ref(null), defaultFeatures = ref(null), optionsReady = ref(false), optionsError = ref('');
@@ -110,7 +115,8 @@ const creating = ref(false), uploading = ref(false), fileInput = ref(null), refN
 const references = ref([]), mask = ref(null), maskEditor = ref(null), editOrigin = ref(null), localPreviews = new Map();
 const referenceItems = computed(() => references.value.length ? references.value : form.editOf ? [{ id: form.editOf, name: refName.value || '原作参考图' }] : []);
 const maxReferences = computed(() => features.value.maxReferences || 1);
-const referenceUrl = item => localPreviews.get(item.id) || assets.urls.get('/api/upload/' + item.id + '/raw') || '';
+const referencePath=item=>item.url||'/api/upload/'+item.id+'/raw';
+const referenceUrl = item => localPreviews.get(item.id) || assets.urls.get(referencePath(item)) || '';
 const detailDialog = ref(null), detail = ref(null), detailTask = ref(null), detailLoading = ref(false), detailError = ref(''), selectedImage = ref(0), detailBusy = ref(false), downloading = ref(false), publishConfirm = ref(false), deleteConfirm = ref(false);
 const ideas = [
   { title: '云端工作室', tags: '柔光 · 玻璃 · 3D', shape: 'qgd-paint-sphere', prompt: '一个漂浮在柔软云层上的未来工作室，薰衣草与天蓝渐变，透明玻璃和珍珠白软胶材质，柔和的工作室光线，3D 艺术渲染，干净构图' },
@@ -142,15 +148,31 @@ function requestScope(key) { controllers.get(key)?.abort(); const controller = n
 function retainAssets() {
   const paths = new Set([...tasks.value, ...square.value].flatMap(t => t.results?.slice(0, 1).map(r => r.url) || []));
   for (const r of detail.value?.results || []) paths.add(r.url);
-  for (const item of referenceItems.value) paths.add('/api/upload/' + item.id + '/raw');
+  for (const item of referenceItems.value) paths.add(referencePath(item));
   assets.retain(paths);
 }
 function loadVisibleImages(rows) { for (const t of rows) if (t.results?.[0]) void assets.load(t.results[0]); retainAssets(); }
 const galleryInitial={...form};let galleryBaseline=JSON.stringify(form);
-const galleryEntry=useGalleryEntry({auth,target:'/painting',canApply:()=>isCurrent()&&optionsReady.value&&!creating.value&&!uploading.value,hasDraft:()=>!!form.prompt.trim()||referenceItems.value.length>0||JSON.stringify(form)!==galleryBaseline,apply(draft){
+const galleryEntry=useGalleryEntry({auth,target:'/painting',canApply:()=>isCurrent()&&optionsReady.value&&!creating.value&&!uploading.value&&route.query.editor===undefined,hasDraft:()=>!!form.prompt.trim()||referenceItems.value.length>0||JSON.stringify(form)!==galleryBaseline,apply(draft){
  if(typeof draft.model!=='string'||!draft.model||typeof draft.ratio!=='string'||typeof draft.resolution!=='string'||draft.prompt.length>4000)throw Error('公开绘画设定不完整，请重新核对。');
  clearReference();Object.assign(form,galleryInitial,Object.fromEntries(["prompt","negativePrompt","model","ratio","resolution","quality","seed","n","catId"].filter(key=>Object.hasOwn(draft,key)).map(key=>[key,draft[key]])),{mode:'text2img',editOf:''});tab.value='mine';
 }});
+const editorEntry=useImageEditorEntry({auth,canApply:()=>isCurrent()&&optionsReady.value&&!creating.value&&!uploading.value&&route.query.gallery===undefined,hasDraft:()=>!!form.prompt.trim()||referenceItems.value.length>0||JSON.stringify(form)!==galleryBaseline,currentModel:()=>form.model,apply({record,inputs}){
+ const saved=record.returnDraft;
+ if(inputs.source.id!==record.sourceId||(inputs.mask?.id||null)!==record.maskId)throw Error('重绘设定不完整。');
+ clearReference();
+ if(saved)Object.assign(form,Object.fromEntries(['prompt','negativePrompt','model','ratio','resolution','quality','n','seed','catId'].map(key=>[key,key==='seed'?saved[key]:saved[key]??'']))) ;
+ references.value=(saved?.references||[{id:record.sourceId,name:inputs.source.name||'重绘原图'}]).map((row,index)=>({...row,url:index===0?'/api/image/editor/files/'+row.id:'/api/upload/'+row.id+'/raw'}));
+ form.mode='img2img';form.editOf=record.sourceId;if(record.prompt.trim())form.prompt=record.prompt;if(!saved)form.n=1;
+ mask.value=record.maskId?{id:record.maskId,sourceId:record.sourceId,editor:true,strokes:[]}:null;editOrigin.value=saved?.editOrigin||null;tab.value='mine';
+ for(const item of references.value)void assets.load({url:referencePath(item)});retainAssets();
+}});
+function openImageEditor(){
+ if(!isCurrent()||uploading.value||creating.value||!referenceItems.value.length)return;
+ if(mask.value&&!mask.value.id)return ElMessage.warning('请先重新确认并保存当前选区，再打开图像编辑台。');
+ try{const transfer=saveImageEditorTransfer(owner,{sourceId:referenceItems.value[0].id,maskId:mask.value?.id||null,prompt:form.prompt,returnDraft:{...form,references:referenceItems.value.map(row=>({id:row.id,name:(row.name||'参考图片').slice(0,255)})),editOrigin:editOrigin.value}});void router.push({path:'/inpaint',query:{editor:transfer.id}});}catch(error){ElMessage.error(error.message);}
+}
+function adjustMask(){if(mask.value?.editor)return openImageEditor();maskEditor.value?.open(mask.value?.strokes||[]);}
 async function loadOptions() { const req = requestScope('options'); optionsError.value = ''; try { const data = await api.get('/image/options', { signal: req.signal }); if (!req.current()) return; ratios.value = data.ratios || []; resolutions.value = data.resolutions || []; cats.value = data.cats || []; imageModels.value = data.models || []; billing.value = data.billing; defaultFeatures.value = data.defaultFeatures; optionsReady.value = true; } catch (error) { if (req.current()) { optionsReady.value = false; optionsError.value = '创作参数暂未加载，请重试。'; } } }
 async function loadGallery(kind = tab.value) {
   const mine = kind === 'mine', loading = mine ? mineLoading : squareLoading, errorState = mine ? mineError : squareError;
@@ -192,7 +214,7 @@ async function saveMask(data) {
   catch (error) { if (req.current()) ElMessage.error(error.message || '选区保存失败'); }
   finally { if (req.current() && revision === uploadVersion) uploading.value = false; }
 }
-async function submit() { if (galleryEntry.blocked) return;if(galleryEntry.applied&&[['ratios','ratio'],['resolutions','resolution'],['qualities','quality']].some(([cap,key])=>!Array.isArray(features.value[cap])||!features.value[cap].includes(form[key])))return ElMessage.warning('原作品的画面设置当前不再支持，请明确调整后再生成。'); if (creating.value || uploading.value || !optionsReady.value) return; if (!form.prompt.trim()) return ElMessage.warning('先给画面写一句描述吧'); const model = imageModels.value.find(m => m.name === form.model); if (form.model && (!model || model.ready === false)) return ElMessage.warning('原绘画模型已停用或未接入，请重新选择模型'); if (form.mode === 'img2img' && !form.editOf) return ElMessage.warning('请先选择自己的参考图'); if (form.mode === 'img2img' && (referenceItems.value.length > maxReferences.value || (mask.value && !features.value.mask))) return ElMessage.warning('所选模型不支持当前参考设置，请调整后再生成'); if (form.mode === 'img2img' && mask.value && !mask.value.id) return ElMessage.warning('选区尚未保存，请打开画布重新确认'); creating.value = true; try { const data = await api.post('/image/tasks', { prompt: form.prompt, negativePrompt: form.negativePrompt || undefined, ratio: form.ratio, resolution: form.resolution, quality: form.quality, n: form.n, seed: form.seed, catId: form.catId || undefined, mode: form.mode, model: form.model || undefined, expectedUnitCost: billing.value ? (billing.value.enabled ? billing.value.costPerImage * (billing.value.qualityFactors?.[form.quality] || 1) : 0) : undefined, versionName: model?.displayName || model?.name || undefined, editOf: form.mode === 'img2img' ? form.editOf : undefined, referenceIds: form.mode === 'img2img' && references.value.length ? references.value.map(item => item.id) : undefined, maskId: form.mode === 'img2img' ? mask.value?.id : undefined, parentId: form.mode === 'img2img' && editOrigin.value?.fileId === form.editOf ? editOrigin.value.taskId : undefined, action: form.mode === 'img2img' && editOrigin.value?.fileId === form.editOf ? (mask.value ? 'redraw' : 'variant') : undefined }); if (!isCurrent()) return; if (data?.id) tasks.value = [{ ...data, results: data.results || [], mine: true }, ...tasks.value.filter(t => t.id !== data.id)].slice(0, pageSize); ElMessage.success('灵感已进入队列，创作台留给下一个想法。'); minePage.value = 1; if (tab.value !== 'mine') tab.value = 'mine'; else await loadGallery('mine'); } catch (error) { if (isCurrent()) { if (error.status === 409) await loadOptions(); if (isCurrent()) ElMessage.error(error.message || '提交失败，请稍后重试'); } } finally { if (isCurrent()) creating.value = false; } }
+async function submit() { if (galleryEntry.blocked||editorEntry.blocked) return;if((galleryEntry.applied||editorEntry.applied)&&[['ratios','ratio'],['resolutions','resolution'],['qualities','quality']].some(([cap,key])=>!Array.isArray(features.value[cap])||!features.value[cap].includes(form[key])))return ElMessage.warning('原作品的画面设置当前不再支持，请明确调整后再生成。'); if (creating.value || uploading.value || !optionsReady.value) return; if (!form.prompt.trim()) return ElMessage.warning('先给画面写一句描述吧'); const model = imageModels.value.find(m => m.name === form.model); if (form.model && (!model || model.ready === false)) return ElMessage.warning('原绘画模型已停用或未接入，请重新选择模型'); if (form.mode === 'img2img' && !form.editOf) return ElMessage.warning('请先选择自己的参考图'); if (form.mode === 'img2img' && (referenceItems.value.length > maxReferences.value || (mask.value && !features.value.mask))) return ElMessage.warning('所选模型不支持当前参考设置，请调整后再生成'); if (form.mode === 'img2img' && mask.value && !mask.value.id) return ElMessage.warning('选区尚未保存，请打开画布重新确认'); creating.value = true; try { const data = await api.post('/image/tasks', { prompt: form.prompt, negativePrompt: form.negativePrompt || undefined, ratio: form.ratio, resolution: form.resolution, quality: form.quality, n: form.n, seed: form.seed, catId: form.catId || undefined, mode: form.mode, model: form.model || undefined, expectedUnitCost: billing.value ? (billing.value.enabled ? billing.value.costPerImage * (billing.value.qualityFactors?.[form.quality] || 1) : 0) : undefined, versionName: model?.displayName || model?.name || undefined, editOf: form.mode === 'img2img' ? form.editOf : undefined, referenceIds: form.mode === 'img2img' && references.value.length ? references.value.map(item => item.id) : undefined, maskId: form.mode === 'img2img' ? mask.value?.id : undefined, parentId: form.mode === 'img2img' && editOrigin.value?.fileId === form.editOf ? editOrigin.value.taskId : undefined, action: form.mode === 'img2img' && editOrigin.value?.fileId === form.editOf ? (mask.value ? 'redraw' : 'variant') : undefined }); if (!isCurrent()) return; if (data?.id) tasks.value = [{ ...data, results: data.results || [], mine: true }, ...tasks.value.filter(t => t.id !== data.id)].slice(0, pageSize); ElMessage.success('灵感已进入队列，创作台留给下一个想法。'); minePage.value = 1; if (tab.value !== 'mine') tab.value = 'mine'; else await loadGallery('mine'); } catch (error) { if (isCurrent()) { if (error.status === 409) await loadOptions(); if (isCurrent()) ElMessage.error(error.message || '提交失败，请稍后重试'); } } finally { if (isCurrent()) creating.value = false; } }
 async function cancel(t) { if (busyTasks.has(t.id)) return; busyTasks.add(t.id); try { await api.post('/image/tasks/' + t.id + '/cancel'); if (!isCurrent()) return; await loadGallery('mine'); } catch (error) { if (isCurrent()) ElMessage.error(error.message); } finally { busyTasks.delete(t.id); } }
 async function openDetail(task, index = 0, event) { if (!task) return; controllers.get('detail-refresh')?.abort(); const revision = ++detailVersion, req = requestScope('detail'); if (event?.currentTarget) opener = event.currentTarget; detailTask.value = task; detail.value = null; selectedImage.value = index; detailError.value = ''; detailLoading.value = true; publishConfirm.value = deleteConfirm.value = false; await nextTick(); if (!req.current() || revision !== detailVersion) return; if (!detailDialog.value.open) detailDialog.value.showModal(); try { const data = await api.get('/image/tasks/' + task.id, { signal: req.signal }); if (!req.current() || revision !== detailVersion) return; detail.value = { ...data, results: Array.isArray(data.results) ? data.results : [] }; selectedImage.value = Math.max(0, Math.min(index, detail.value.results.length - 1)); for (const result of detail.value.results) void assets.load(result); retainAssets(); } catch (error) { if (req.current()) detailError.value = error.message || '作品详情暂时不可用'; } finally { if (req.current()) detailLoading.value = false; } }
 function closeDetail() {
@@ -217,12 +239,12 @@ function editArtwork() { const t = detail.value, result = selectedResult.value, 
 async function downloadSelected() { const result = selectedResult.value, id = detail.value?.id, index = selectedImage.value; if (!result || downloading.value) return; downloading.value = true; try { const entry = await assets.load(result, true); if (!entry?.blob || !isCurrent() || detail.value?.id !== id) return; const extensions = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif', 'image/svg+xml': 'svg' }; const url = URL.createObjectURL(entry.blob), link = document.createElement('a'); link.href = url; link.download = 'QGauss-' + id.replace(/[^a-zA-Z0-9_-]/g, '').slice(-12) + '-' + (index + 1) + '.' + (extensions[entry.blob.type.split(';')[0]] || 'png'); document.body.append(link); link.click(); link.remove(); downloadTimers.set(url, setTimeout(() => { URL.revokeObjectURL(url); downloadTimers.delete(url); }, 30000)); } finally { if (isCurrent()) downloading.value = false; } }
 async function publicationUpdated(value) { if(!isCurrent()||detail.value?.id!==value.id)return;Object.assign(detail.value,value);await Promise.all([loadGallery('mine'),squareTotal.value!==null?loadGallery('square'):Promise.resolve()]); }
 async function remove() { const t = detail.value; if (!t?.mine || !deleteConfirm.value || detailBusy.value) return; detailBusy.value = true; try { await api.del('/image/tasks/' + t.id); if (!isCurrent()) return; if (detail.value?.id === t.id) closeDetail(); await Promise.all([loadGallery('mine'), squareTotal.value !== null ? loadGallery('square') : Promise.resolve()]); ElMessage.success('作品已移入回收'); } catch (error) { if (isCurrent()) ElMessage.error(error.message); } finally { if (isCurrent()) detailBusy.value = false; } }
-watch(features, value => { if(galleryEntry.applied&&form.model===galleryEntry.sourceDraft?.model)return; if (!value.qualities.includes(form.quality)) form.quality = 'auto'; if (!value.resolutions.includes(form.resolution)) form.resolution = value.resolutions[0]; if (!value.ratios.includes(form.ratio)) form.ratio = value.ratios[0] || '1:1'; });
+watch(features, value => { if(galleryEntry.applied&&form.model===galleryEntry.sourceDraft?.model||editorEntry.applied&&form.model===editorEntry.sourceModel)return; if (!value.qualities.includes(form.quality)) form.quality = 'auto'; if (!value.resolutions.includes(form.resolution)) form.resolution = value.resolutions[0]; if (!value.ratios.includes(form.ratio)) form.ratio = value.ratios[0] || '1:1'; });
 watch(tab, () => { void loadGallery(); });
 watch(() => route.query.tab, value => { if (value === 'square' || value === 'mine') tab.value = value; });
 watch(() => route.query.model, value => { if (typeof value === 'string' && value) form.model = value; });
 function dispose() { alive = false; clearInterval(poller); for (const controller of controllers.values()) controller.abort(); assets.close(); for (const url of localPreviews.values()) URL.revokeObjectURL(url); localPreviews.clear(); for (const [url, timer] of downloadTimers) { clearTimeout(timer); URL.revokeObjectURL(url); } downloadTimers.clear(); tasks.value = []; square.value = []; closeDetail(); }
-watch(() => auth.user?.id, id => { if (id !== owner) dispose(); });
-onMounted(async () => { await Promise.all([loadOptions(), loadGallery()]); await nextTick();galleryBaseline=JSON.stringify(form);if(isCurrent())void galleryEntry.initialize(); if (isCurrent()) poller = setInterval(() => { if (isCurrent() && !mineLoading.value && tasks.value.some(t => isPending(t.status))) void loadGallery('mine'); }, 2500); });
+watch([() => auth.user?.id,()=>auth.identityRevision], ([id,identity]) => { if (id !== owner||identity!==ownerIdentity) dispose(); });
+onMounted(async () => { await Promise.all([loadOptions(), loadGallery()]); await nextTick();galleryBaseline=JSON.stringify(form);if(isCurrent()){void galleryEntry.initialize();void editorEntry.initialize();} if (isCurrent()) poller = setInterval(() => { if (isCurrent() && !mineLoading.value && tasks.value.some(t => isPending(t.status))) void loadGallery('mine'); }, 2500); });
 onUnmounted(dispose);
 </script>

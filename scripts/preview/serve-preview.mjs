@@ -20,9 +20,9 @@ const output = resolve(process.env.QGAUSS_PREVIEW_DIR);
 const port = Number(process.env.PREVIEW_PORT ?? 9433);
 await mkdir(output, { recursive: true });
 if(process.argv.includes('--styles-only')){
- const entry=join(output,'index.html'),html=await readFile(entry,'utf8'),href='/mindmap/workspace-preview.css';
+ const editor=process.env.QGAUSS_PREVIEW_PAGE==='image-editor',directory=editor?'image-editor':'mindmap',entry=join(output,'index.html'),html=await readFile(entry,'utf8'),href='/'+directory+'/workspace-preview.css';
  if(!html.includes('/preview.js'))throw Error('请先完成一次完整预览构建');
- await mkdir(join(output,'mindmap'),{recursive:true});await copyFile(join(repo,'apps/web/src/components/design/mindmap-workspace.css'),join(output,'mindmap/workspace-preview.css'));
+ await mkdir(join(output,directory),{recursive:true});await copyFile(join(repo,'apps/web/src/components/design',editor?'image-editor.css':'mindmap-workspace.css'),join(output,directory,'workspace-preview.css'));
  if(!html.includes(href))await writeFile(entry,html.replace('</head>','<link rel="stylesheet" href="'+href+'"></head>'));
  console.log('QGauss focused preview styles rebuilt');process.exit(0);
 }
@@ -40,7 +40,11 @@ await copyFile(join(here, 'midjourney-grid.svg'), join(output, 'qgauss-mj-grid.s
 const bundle = await rollup({
   input: join(here, 'preview-entry.mjs'),
   plugins: [
-    process.env.QGAUSS_PREVIEW_PAGE==='mindmap'&&{name:'qgauss-focused-preview',resolveId(source){if(source==='../../apps/web/src/router.js')return'\0qgauss:focused-router';},load(id){if(id!=='\0qgauss:focused-router')return;return'import {createRouter,createWebHistory} from "vue-router";import Mindmap from '+JSON.stringify(join(repo,'apps/web/src/views/Mindmap.vue').replaceAll('\\','/'))+';export const router=createRouter({history:createWebHistory(),routes:[{path:"/mindmap",name:"mindmap",component:Mindmap,meta:{ownTitle:true,title:"思维导图"}},{path:"/:pathMatch(.*)*",redirect:"/mindmap"}]});';}},
+    ['mindmap','image-editor'].includes(process.env.QGAUSS_PREVIEW_PAGE)&&{name:'qgauss-focused-preview',resolveId(source){if(source==='../../apps/web/src/router.js')return'\0qgauss:focused-router';},load(id){
+      if(id!=='\0qgauss:focused-router')return;const header='import {createRouter,createWebHistory} from "vue-router";',view=name=>JSON.stringify(join(repo,'apps/web/src/views/'+name+'.vue').replaceAll('\\','/'));
+      if(process.env.QGAUSS_PREVIEW_PAGE==='image-editor')return header+'import Editor from '+view('ImageEditor')+';import Painting from '+view('Painting')+';export const router=createRouter({history:createWebHistory(),routes:[{path:"/inpaint",alias:"/repaint",name:"imageEditor",component:Editor,meta:{ownTitle:true,title:"图像编辑台"}},{path:"/painting",name:"painting",component:Painting,meta:{ownTitle:true,title:"智能绘画"}},{path:"/:pathMatch(.*)*",redirect:"/inpaint"}]});';
+      return header+'import Mindmap from '+view('Mindmap')+';export const router=createRouter({history:createWebHistory(),routes:[{path:"/mindmap",name:"mindmap",component:Mindmap,meta:{ownTitle:true,title:"思维导图"}},{path:"/:pathMatch(.*)*",redirect:"/mindmap"}]});';
+    }},
     replace({ preventAssignment: true, 'process.env.NODE_ENV': '"production"', __VUE_OPTIONS_API__: 'true', __VUE_PROD_DEVTOOLS__: 'false', __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: 'false' }),
     vue({ css: false }), richAssets(), mindmapAssets(), postcss({ extract: 'preview.css' }), nodeResolve({ browser: true, extensions: ['.mjs', '.js', '.vue'] }), commonjs(),
   ].filter(Boolean),

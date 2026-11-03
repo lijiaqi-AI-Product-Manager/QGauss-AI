@@ -67,12 +67,12 @@ const favorites = ref([]);
 try { floating.value = localStorage.getItem('qg:client-layout') === 'floating'; } catch { /* 只影响布局偏好保存 */ }
 try { const saved = JSON.parse(localStorage.getItem('qg:client-favorites') || '[]'); if (Array.isArray(saved)) favorites.value = saved.filter((path) => typeof path === 'string'); } catch { /* 无效偏好使用空列表 */ }
 const isChat = computed(() => route.name === 'chat');
-function navActive(path){if(path==='/agent')return ['agents','agentDetail'].includes(route.name)||route.path==='/agent/chat';if(path==='/chat')return isChat.value&&route.path!=='/agent/chat';return route.path===path;}
+function navActive(path){if(path==='/agent')return ['agents','agentDetail'].includes(route.name)||route.path==='/agent/chat';if(path==='/chat')return isChat.value&&route.path!=='/agent/chat';if(path==='/inpaint')return route.name==='imageEditor';return route.path===path;}
 const pageTitle = computed(() => isChat.value ? clientChatTitle.value || (currentLang.value === 'en' ? 'Chat' : '对话聊天') : route.meta.title || props.title || 'QGauss AI');
 const languages = [{ key: 'zh', title: '简体中文' }, { key: 'zh-TW', title: '繁體中文' }, { key: 'en', title: 'English' }];
 const languageLabel = computed(() => languages.find((item) => item.key === currentLang.value)?.title || '简体中文');
 const navigation = computed(() => {
-  const base = [{ path: '/chat', title: '对话聊天', icon: 'chat' }, { path: '/apps', title: '应用广场', icon: 'apps' }, { path: '/agent', title: '行动搭档', icon: 'agent' }, { path: '/painting', title: '智能绘画', icon: 'image' }, { path: '/market', title: '创意广场', icon: 'gallery' }, { path: '/mindmap', title: '思维导图', icon: 'mindmap' }, { path: '/video', title: '视频创作', icon: 'video' }, { path: '/plaza', title: '模型广场', icon: 'model' }];
+  const base = [{ path: '/chat', title: '对话聊天', icon: 'chat' }, { path: '/apps', title: '应用广场', icon: 'apps' }, { path: '/agent', title: '行动搭档', icon: 'agent' }, { path: '/painting', title: '智能绘画', icon: 'image' }, { path: '/inpaint', title:'图像编辑台',icon:'palette' }, { path: '/market', title: '创意广场', icon: 'gallery' }, { path: '/mindmap', title: '思维导图', icon: 'mindmap' }, { path: '/video', title: '视频创作', icon: 'video' }, { path: '/plaza', title: '模型广场', icon: 'model' }];
   const paths = new Set(base.map((item) => item.path));
   function include(rows) {
     for (const row of rows) {
