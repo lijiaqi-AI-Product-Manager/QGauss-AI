@@ -81,7 +81,7 @@ const navigation = computed(() => {
       if (!row.path || paths.has(row.path)) continue;
       const match = router.resolve(row.path);
       if (!isImplementedRoute(router,row.path) || match.meta.admin) continue;
-      paths.add(row.path); base.push({ path: row.path, title: row.title, icon: 'apps' });
+      paths.add(row.path); base.push({ path: row.path, title: routeTitle(row.path) || row.title, icon: 'apps' });
     }
   }
   include(props.menus);

@@ -9,6 +9,7 @@
  */
 import { computed, reactive } from 'vue';
 import { api } from '../api/client.js';
+import {currentLang,t} from '../i18n/index.js';
 
 const EMPTY = { model3: 0, model4: 0, drawMj: 0, agent: 0 };
 
@@ -30,14 +31,9 @@ const balanceYuan = computed(() => (state.balanceCents / 100).toFixed(2));
 const tooltip = computed(() => {
   if (!state.enabled) return '';
   const c = state.counts;
-  const parts = [
-    `低价模型 ${c.model3 || 0}`,
-    `高价模型 ${c.model4 || 0}`,
-    `绘图 ${c.drawMj || 0}`,
-    `智能体 ${c.agent || 0}`,
-  ];
-  const tail = state.isMember ? `｜会员至 ${formatDate(state.expirationTime)}` : '';
-  return `${parts.join(' · ')}｜余额 ¥${balanceYuan.value}${tail}`;
+  const counts=t('balance.counts',{basic:c.model3||0,advanced:c.model4||0,images:c.drawMj||0,agents:c.agent||0});
+  const tail=state.isMember?t('balance.membership',{date:formatDate(state.expirationTime)}):'';
+  return counts+t('balance.amount',{amount:balanceYuan.value})+tail;
 });
 
 function formatDate(value) {

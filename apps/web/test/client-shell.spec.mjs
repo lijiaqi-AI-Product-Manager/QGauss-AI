@@ -1,3 +1,4 @@
+import {registerVoiceLanguageTests} from './voice-language-ui.cases.mjs';
 import {registerVoiceProgressiveTests} from './voice-progressive-ui.cases.mjs';
 import {registerAppExperienceTests} from './app-experience-ui.cases.mjs';
 import {registerLanguageTests} from './language-ui.cases.mjs';
@@ -2363,3 +2364,5 @@ registerLanguageTests({test,assert,mount,settle,relayJson,setLang});
 registerAppExperienceTests({test,assert,mount,settle,relayJson,creatorInterceptor,appStudioFixtures,creatorRow});
 
 registerVoiceProgressiveTests({test,assert,mount,settle,relayJson});
+
+registerVoiceLanguageTests({test,assert,mount,mountVoiceLibrary,settle,relayJson,setLang});

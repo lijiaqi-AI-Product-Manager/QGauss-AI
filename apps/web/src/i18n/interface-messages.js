@@ -1,10 +1,14 @@
 import {CREATIVE_MESSAGES} from './creative-messages.js';
 
 export const ROUTE_LANGUAGE_KEYS=Object.freeze({
- '/chat':'shell.chat','/apps':'shell.apps','/agent':'shell.agent','/painting':'shell.painting','/inpaint':'shell.editor','/market':'shell.market','/mindmap':'shell.mindmap','/extend':'shell.extensions','/voice/create':'shell.voice','/voice':'shell.voiceHistory','/video':'shell.video','/plaza':'shell.models','/recharge':'shell.membership','/sales':'shell.referral','/statistic':'shell.admin','/wallet':'shell.wallet','/account':'shell.account','/image':'nav.image','/role':'shell.creator','/apps/manage':'shell.review',
+ '/chat':'shell.chat','/apps':'shell.apps','/agent':'shell.agent','/painting':'shell.painting','/inpaint':'shell.editor','/market':'shell.market','/mindmap':'shell.mindmap','/extend':'shell.extensions','/voice/create':'shell.voice','/voice':'shell.voiceHistory','/voice/manage':'shell.voiceControls','/video':'shell.video','/plaza':'shell.models','/recharge':'shell.membership','/sales':'shell.referral','/statistic':'shell.admin','/wallet':'shell.wallet','/account':'shell.account','/image':'nav.image','/role':'shell.creator','/apps/manage':'shell.review',
 });
 export const INTERFACE_MESSAGES={
  zh:{
+  "shell.voiceControls":"声音控制台",
+  "balance.counts":"低价模型 {basic} · 高价模型 {advanced} · 绘图 {images} · 智能体 {agents}",
+  "balance.amount":"｜余额 ¥{amount}",
+  "balance.membership":"｜会员至 {date}",
   ...CREATIVE_MESSAGES.zh,
   'language.autoOption':'跟随设备',
   "shell.mail":"邮件投递台","shell.welcome":"启航清单","sculpture.activate":"激活 QGauss 灵感雕塑","sculpture.greet":"和 QGauss 灵感伙伴打招呼","sculpture.playAlt":"青柠色 QGauss 充气 Q 形立体雕塑","sculpture.alt":"挥手的 QGauss 立体灵感伙伴","sculpture.delighted":"收到！一起把想法变成作品 ✦","sculpture.orbit":"灵感信号，已连接","sculpture.idea":"一点想法，也值得发光。","appearance.open":"打开外观实验室","appearance.close":"关闭外观实验室","appearance.title":"给灵感，换一种心情。","appearance.description":"三种构图，同一个 QGauss。随时切换，继续创作。","appearance.studio.label":"光屿工作室","appearance.play.label":"青柠游乐场","appearance.orbit.label":"星际液态","appearance.studio.description":"漂浮软胶伙伴、拼贴工作台和柔光玻璃。","appearance.play.description":"大字、异形页签、轻快撞色和横向创作桌。","appearance.orbit.description":"环绕星轨、流动极光和半透明指挥舱。","appearance.motion":"让界面动起来","appearance.motionDescription":"呼吸、漂浮、弹性切换。系统减弱动态设置优先。","appearance.motionLabel":"界面动效","appearance.glass":"玻璃的通透感","appearance.glassDescription":"拖动调节，找到舒服的层次。","appearance.glassLabel":"玻璃不透明度","appearance.continue":"就用这个，继续创作","appearance.choose":"选择适合你的外观","appearance.session":"外观仅本次生效",
@@ -16,6 +20,10 @@ export const INTERFACE_MESSAGES={
   'entry.passwordChanged':'密码已更新，请使用新密码重新登录。','entry.passwordUnknown':'密码修改结果尚未确认。请先尝试使用新密码登录；如果无法登录，再试原密码或重新申请重置。',
  },
  'zh-TW':{
+  "shell.voiceControls":"聲音控制台",
+  "balance.counts":"低價模型 {basic} · 高價模型 {advanced} · 繪圖 {images} · 智慧體 {agents}",
+  "balance.amount":"｜餘額 ¥{amount}",
+  "balance.membership":"｜會員至 {date}",
   ...CREATIVE_MESSAGES['zh-TW'],
   'language.autoOption':'跟隨裝置',
   "shell.mail":"郵件投遞台","shell.welcome":"啟航清單","sculpture.activate":"啟動 QGauss 靈感雕塑","sculpture.greet":"和 QGauss 靈感夥伴打招呼","sculpture.playAlt":"青檸色 QGauss 充氣 Q 形立體雕塑","sculpture.alt":"揮手的 QGauss 立體靈感夥伴","sculpture.delighted":"收到！一起把想法變成作品 ✦","sculpture.orbit":"靈感訊號，已連線","sculpture.idea":"一點想法，也值得發光。","appearance.open":"開啟外觀實驗室","appearance.close":"關閉外觀實驗室","appearance.title":"給靈感，換一種心情。","appearance.description":"三種構圖，同一個 QGauss。隨時切換，繼續創作。","appearance.studio.label":"光嶼工作室","appearance.play.label":"青檸遊樂場","appearance.orbit.label":"星際液態","appearance.studio.description":"漂浮軟膠夥伴、拼貼工作台和柔光玻璃。","appearance.play.description":"大字、異形頁籤、輕快撞色和橫向創作桌。","appearance.orbit.description":"環繞星軌、流動極光和半透明指揮艙。","appearance.motion":"讓介面動起來","appearance.motionDescription":"呼吸、漂浮、彈性切換。系統減少動態設定優先。","appearance.motionLabel":"介面動效","appearance.glass":"玻璃的通透感","appearance.glassDescription":"拖曳調整，找到舒服的層次。","appearance.glassLabel":"玻璃不透明度","appearance.continue":"就用這個，繼續創作","appearance.choose":"選擇適合你的外觀","appearance.session":"外觀僅本次生效",
@@ -28,6 +36,10 @@ export const INTERFACE_MESSAGES={
   'nav.chat':'對話','nav.apps':'應用','nav.image':'圖像','nav.statistic':'概覽',logout:'登出','login.subtitle':'自架 AI 對話平台 · 多模型接入','login.tab.login':'登入','login.tab.register':'註冊','login.account':'信箱或使用者名稱','login.password':'密碼','login.email':'信箱','login.username':'使用者名稱（3–20 字元）','login.password.rule':'密碼（8–32 字元）','login.captcha':'驗證碼','login.submit':'登入','login.register':'建立帳戶','login.forgot':'忘記密碼？','login.forgot.title':'找回密碼','login.forgot.desc':'我們會寄送重設連結至該信箱（30 分鐘內有效）。','login.send':'寄送','common.cancel':'取消','chat.new':'新對話','chat.empty':'開始一段新對話','chat.empty.hint':'從下方的預設挑選一個，或直接輸入問題','chat.input':'輸入訊息，Enter 傳送，Shift+Enter 換行','chat.send':'傳送','chat.stop':'停止','chat.model':'選擇模型','chat.preset':'預設','chat.quota':'今日',
  },
  en:{
+  "shell.voiceControls":"Voice controls",
+  "balance.counts":"Basic models {basic} · Advanced models {advanced} · Images {images} · Agents {agents}",
+  "balance.amount":" | Balance ¥{amount}",
+  "balance.membership":" | Member until {date}",
   ...CREATIVE_MESSAGES.en,
   'shell.apps.short':'Apps','shell.agent.short':'Agents','shell.painting.short':'Images','shell.editor.short':'Edit','shell.market.short':'Gallery','shell.mindmap.short':'Maps','shell.extensions.short':'Tools','shell.voice.short':'Voice','shell.video.short':'Video','shell.models.short':'Models','shell.membership.short':'Plans','shell.referral.short':'Referrals',
   'language.autoOption':'Auto',

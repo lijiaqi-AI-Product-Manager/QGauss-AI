@@ -7,6 +7,7 @@ import {StorageService} from '../storage/storage.service';
 import {voiceResults} from './voice-accounting.service';
 import {syncVoiceRecordingExpiry,VOICE_TERMINAL,voiceContentActive,voiceFileActive} from './voice-retention';
 import {purgeVoiceRequestText,voiceSourceKind,voiceTaskSources,VoiceRequestRow} from './voice-request';
+import {voiceSearchIds} from './voice-search';
 
 const missing=()=>new BusinessException(ErrorCode.NOT_FOUND,'声音记录不存在或已被清理',404);
 const invalid=(message:string)=>new BusinessException(ErrorCode.PARAM_INVALID,message,400);
@@ -51,7 +52,7 @@ export class VoiceLibraryService implements OnModuleInit,OnModuleDestroy {
   const kind=this.scalar(query.kind,'all'),state=this.scalar(query.state,'all'),q=this.scalar(query.q,'').trim(),page=this.page(query.page,1,100000),pageSize=this.page(query.pageSize,9,30),now=new Date();
   if(!['all','speech','transcription'].includes(kind)||!['all','completed','processing','failed','canceled','expired'].includes(state)||q.length>100)throw invalid('声音筛选条件不正确');
   const where:Prisma.VoiceTaskWhereInput={userId,deletedAt:null,...(kind==='all'?{}:{kind})},conditions:Prisma.VoiceTaskWhereInput[]=[];
-  if(q)conditions.push({purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:now}}]},{OR:[{label:{contains:q}},{voice:{contains:q}},{transcript:{contains:q}}]});
+  if(q){const voices=voiceSearchIds(q),terms=[...new Set([q,q.normalize('NFKC')])];conditions.push({purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:now}}]},{OR:[...terms.flatMap(term=>[{label:{contains:term}},{kind:'speech',voice:{contains:term}},{transcript:{contains:term}}]),...(voices.length?[{kind:'speech',voice:{in:voices}}]:[])]});}
   if(state==='expired')conditions.push({status:{in:VOICE_TERMINAL},expiresAt:{lte:now}});
   else if(state==='processing')conditions.push({status:{notIn:VOICE_TERMINAL}});
   else if(state!=='all')conditions.push({status:({completed:'COMPLETED',failed:'FAILED',canceled:'CANCELED'} as Record<string,string>)[state],OR:[{expiresAt:null},{expiresAt:{gt:now}}]});
