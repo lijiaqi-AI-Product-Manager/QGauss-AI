@@ -26,7 +26,8 @@ export class VideoController {
   @Get('options') options() { return this.video.options(); }
   @Post('quote') @Header('Cache-Control','private, no-store') quote(@CurrentUser() user: AuthUser, @Body() dto: VideoQuoteDto) { return this.video.quote(user.id, dto); }
   @Post('tasks') create(@CurrentUser() user: AuthUser, @Body() dto: VideoCreateDto) { return this.video.create(user.id, dto); }
-  @Get('tasks/by-request/:key') byRequest(@CurrentUser() user: AuthUser, @Param('key') key: string) { return this.video.byRequest(user.id, key); }
+  @Get('tasks/by-request/:key') @Header('Cache-Control','private, no-store') byRequest(@CurrentUser() user: AuthUser, @Param('key') key: string) { return this.video.byRequest(user.id, key); }
+  @Post('requests/:key/end') endRequest(@CurrentUser() user:AuthUser,@Param('key') key:string){return this.video.endRequest(user.id,key);}
   @Get('tasks') list(@CurrentUser() user: AuthUser, @Query('page') page = '1', @Query('pageSize') size = '12') { return this.video.list(user.id, false, Number(page), Number(size)); }
   @Get('trash') trash(@CurrentUser() user: AuthUser, @Query('page') page = '1', @Query('pageSize') size = '12') { return this.video.list(user.id, false, Number(page), Number(size), true); }
   @Get('square') square(@CurrentUser() user: AuthUser, @Query('page') page = '1', @Query('pageSize') size = '12') { return this.video.list(user.id, true, Number(page), Number(size)); }

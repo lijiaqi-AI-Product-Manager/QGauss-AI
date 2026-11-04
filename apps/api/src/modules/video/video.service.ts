@@ -21,6 +21,7 @@ import type {VideoMaterial} from './video-materials';
 import {videoToolIntent,validateVideoToolMaterials} from './video-tools-intent';
 import {VIDEO_TOOL_MODES,FAL_VIDEO_MODELS} from './video-profiles';
 import { videoEndpoint } from './video-protocol';
+import {acceptVideoRequest,assertVideoOwner,endVideoRequest,lockVideoOwner,replayVideoRequest,videoRequest,videoRequestEnded,videoRequestKey} from './video-request';
 const bad = (message: string, status = 400) => new BusinessException(ErrorCode.PARAM_INVALID, message, status);
 const absent = () => new BusinessException(ErrorCode.NOT_FOUND, '视频任务不存在', 404);
 const parse = <T>(raw: string | null | undefined, fallback: T): T => { try { return raw ? JSON.parse(raw) : fallback; } catch { return fallback; } };
@@ -99,17 +100,26 @@ export class VideoService {
   async materialFrames(userId:string,id:string){if(!this.rate.tryConsume('video-frames:'+userId,30)||this.preparing.has(userId)||this.preparing.size>=4)throw bad('画面正在准备中，请稍后再试',429);this.preparing.add(userId);try{return await this.materials.frames(userId,id);}finally{this.preparing.delete(userId);}}
   async quote(userId: string, dto: VideoQuoteDto) { if (!this.rate.tryConsume('video-quote:' + userId, await this.settings.get<number>('security.videoQuoteRateLimit'))) throw bad('费用核对过于频繁，请稍后重试', 429); const p = await this.prepare(userId, dto); return { revision: p.revision, cost: p.cost, pool: p.preset.pool, name: p.preset.name, seconds: p.intent.billingSeconds??p.intent.seconds, followsSource: ['edit','upscale','lipsync'].includes(p.intent.mode), multiplier:p.intent.mode==='upscale'?Math.pow(p.intent.upscaleFactor!,2):1, materials:p.inputs?.materials?.map(({kind,filename,duration,width,height})=>({kind,filename,duration,width,height})), mode: p.intent.mode,...(p.intent.speakerSelection?{speakerSelection:p.intent.speakerSelection}:{}) }; }
   async create(userId: string, dto: VideoCreateDto) {
-    const signature = requestHash(dto), previous = await this.prisma.videoTask.findUnique({ where: { userId_requestKey: { userId, requestKey: dto.requestKey } } });
-    if (previous) { if (previous.intentHash !== signature) throw bad('同一提交标识不能用于不同创意', 409); if (previous.deletedAt) throw absent(); return this.view(previous, userId); }
+    videoRequestKey(dto.requestKey);await assertVideoOwner(this.prisma,userId);
+    const signature=requestHash(dto),previous=await replayVideoRequest(this.prisma,userId,dto.requestKey,signature);
+    if(previous)return this.view(previous,userId);
     if (!this.rate.tryConsume('video-create:' + userId, await this.settings.get<number>('security.videoRateLimit'))) throw bad('开机过于频繁，请稍后重试', 429);
-    const p = await this.prepare(userId, dto); if (p.revision !== dto.quoteRevision) throw bad('连接、素材或费用已变化，请再次确认后开机', 409);
+    let p:Awaited<ReturnType<VideoService['prepare']>>;
+    try{p=await this.prepare(userId,dto);}catch(error){const replay=await replayVideoRequest(this.prisma,userId,dto.requestKey,signature);if(replay)return this.view(replay,userId);throw error;}
     try {
       const task = await this.prisma.$transaction(async tx => {
+        await lockVideoOwner(tx,userId);const replay=await replayVideoRequest(tx,userId,dto.requestKey,signature);if(replay)return replay;
+        if(p.revision!==dto.quoteRevision)throw bad('连接、素材或费用已变化，请再次确认后开机',409);
         const row = await tx.videoTask.create({ data: { userId, requestKey: dto.requestKey, intentHash: signature, presetId: p.preset.id, presetName: p.preset.name, profile: p.preset.profile, presetJson: JSON.stringify(presetView(p.preset)), intentJson: JSON.stringify(p.intent), inputJson: p.inputs ? JSON.stringify(p.inputs) : null, routeJson: p.inheritedRoute, pool: p.preset.pool, totalCost: p.cost, deadlineAt: new Date(Date.now() + p.preset.maxWaitMinutes * 60000), message: '这一幕已进入片场队列' } });
         if (await tx.videoTask.count({ where: { userId, deletedAt: null, status: { in: VIDEO_ACTIVE } } }) > 3) throw bad('同时等待的创作最多三条，请等一条完成', 429);
+        await acceptVideoRequest(tx,row);
         const accepted = await this.accounting.reserveTx(tx, row); await tx.videoTaskEvent.create({ data: { taskId: row.id, status: 'QUEUED', message: row.totalCost ? `已确认开机，预留 ${row.totalCost} 次` : '已确认开机，本次不扣次数' } }); return accepted;
       }); return this.view(task, userId);
-    } catch (error) { if ((error as any)?.code === 'P2002') { const row = await this.prisma.videoTask.findUnique({ where: { userId_requestKey: { userId, requestKey: dto.requestKey } } }); if (row && row.intentHash === signature && !row.deletedAt) return this.view(row, userId); throw bad('同一提交标识不能用于不同创意', 409); } throw error; }
+    } catch (error) { if ((error as any)?.code === 'P2002') {const row=await replayVideoRequest(this.prisma,userId,dto.requestKey,signature);if(row)return this.view(row,userId);}throw error; }
+  }
+  async endRequest(userId:string,key:string){
+    videoRequestKey(key);if(!this.rate.tryConsume('video-end:'+userId,60))throw bad('操作有些频繁，请稍后再试。',429);
+    return this.prisma.$transaction(async tx=>{await lockVideoOwner(tx,userId);const task=await tx.videoTask.findUnique({where:{userId_requestKey:{userId,requestKey:key}}});if(task&&!task.deletedAt)return{ended:false,requestKey:key,task:this.view(task,userId)};await endVideoRequest(tx,userId,key);return{ended:true,requestKey:key};});
   }
   view(task: VideoTask, actor: string, admin = false) {
     const mine = task.userId === actor, intent = parse<NativeVideoIntent>(task.intentJson, {} as NativeVideoIntent), files = videoFiles(task.resultJson), features = videoFeatures(task.profile), params: any = { ...intent }; if (!mine) { delete params.imageIds; delete params.sourceTaskId; delete params.videoIds; delete params.audioIds; delete params.speakerSelection; }
@@ -117,7 +127,7 @@ export class VideoService {
   }
   async visible(userId: string, id: string) { const row = await this.prisma.videoTask.findUnique({ where: { id } }); if (!row || row.deletedAt || row.userId !== userId && (!row.published || row.status !== 'SUCCESS' || !await this.prisma.user.findFirst({where:{id:row.userId,status:'ACTIVE',deletedAt:null},select:{id:true}}))) throw absent(); return row; }
   async detail(userId: string, id: string) { const row = await this.visible(userId, id), mine = row.userId === userId, events = mine ? await this.prisma.videoTaskEvent.findMany({ where: { taskId: id }, orderBy: { createdAt: 'asc' } }) : []; return { ...this.view(row, userId), events }; }
-  async byRequest(userId: string, requestKey: string) { const row = await this.prisma.videoTask.findUnique({ where: { userId_requestKey: { userId, requestKey } } }); if (!row || row.deletedAt) throw absent(); return this.detail(userId, row.id); }
+  async byRequest(userId: string, requestKey: string) { videoRequestKey(requestKey);const row = await this.prisma.videoTask.findUnique({ where: { userId_requestKey: { userId, requestKey } } }); if (!row || row.deletedAt){if((await videoRequest(this.prisma,userId,requestKey))?.state==='ENDED')throw videoRequestEnded();throw absent();}return this.detail(userId,row.id); }
   async list(userId:string,square:boolean,page:number,size:number,trash=false){page=Number.isFinite(page)?Math.max(1,Math.min(100000,Math.floor(page))):1;size=Number.isFinite(size)?Math.max(1,Math.min(30,Math.floor(size))):12;return this.prisma.$transaction(async tx=>{const shared=square?await galleryPublicPage(tx,'video',page,size):null;const where:any=shared?{id:{in:shared.ids}}:{deletedAt:trash?{not:null}:null,userId};const [rows,total]=await Promise.all([tx.videoTask.findMany({where,...(shared?{}:{skip:(page-1)*size,take:size}),orderBy:[{createdAt:'desc'},{id:'desc'}]}),shared?Promise.resolve(shared.total):tx.videoTask.count({where})]);if(shared)rows.sort((a,b)=>shared.ids.indexOf(a.id)-shared.ids.indexOf(b.id));return{items:rows.map(row=>this.view(row,userId)),total,page,pageSize:size};});}
   async cancel(userId: string, id: string) { const row = await this.prisma.videoTask.findFirst({ where: { id, userId, deletedAt: null } }); if (!row) throw absent(); if (['SUCCESS', 'FAILED', 'CANCELED'].includes(row.status)) return this.detail(userId, id); if (['SAVING', 'SETTLING'].includes(row.status)) throw bad('成片正在保存与结算，请等待完成'); if (await this.accounting.stop(id, 'CANCELED', '已停止站内等待，未结算预留已释放；外部服务可能继续处理', undefined, userId)) this.runs.abort(id); return this.detail(userId, id); }
   async publish(userId:string,id:string,published:boolean,catId?:string,expectedUpdatedAt?:string){await saveGalleryPublication(this.prisma,userId,'video',id,published,catId,expectedUpdatedAt);return this.detail(userId,id);}
