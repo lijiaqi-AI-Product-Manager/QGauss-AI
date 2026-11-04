@@ -19,8 +19,8 @@ export function speakerTime(seconds) {
   return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${(seconds % 60).toFixed(2).padStart(5, '0')}`;
 }
 
-export function speakerCaption(selection, material) {
-  if (!selection) return '沿用服务的默认人物选择';
-  const position = material?.width && material?.height ? ` · 横向 ${Math.round(100 * selection.x / material.width)}% · 纵向 ${Math.round(100 * selection.y / material.height)}%` : '';
-  return `已指定人物 · 第 ${selection.frameNumber + 1} 帧${position}`;
+export function speakerCaption(selection, material, translate = (text, values) => values ? text.replace(/\{(\w+)\}/g, (token, key) => Object.hasOwn(values, key) ? String(values[key]) : token) : text) {
+  if (!selection) return translate('沿用服务的默认人物选择');
+  const position = material?.width && material?.height ? translate(' · 横向 {x}% · 纵向 {y}%', {x: Math.round(100 * selection.x / material.width), y: Math.round(100 * selection.y / material.height)}) : '';
+  return translate('已指定人物 · 第 {frame} 帧{position}', {frame: selection.frameNumber + 1, position});
 }

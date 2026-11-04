@@ -1,32 +1,33 @@
 <template>
-  <section ref="board" class="qvm-board" aria-label="视频素材台">
-    <header><div><span>MIX / A LITTLE OF EVERYTHING</span><h3>{{ title }}</h3></div><b>{{ modelValue.length }} <small>份灵感</small></b></header>
-    <p>{{ subtitle }}</p>
+  <section ref="board" class="qvm-board" :aria-label="vt(&quot;视频素材台&quot;)">
+    <header><div><span>MIX / A LITTLE OF EVERYTHING</span><h3>{{ vt(title) }}</h3></div><b>{{ modelValue.length }} <small>{{ vt("份灵感",{count:modelValue.length}) }}</small></b></header>
+    <p>{{ vt(subtitle) }}</p>
     <div class="qvm-tracks">
-      <section v-for="track in tracks" :key="track.kind" class="qvm-track" :class="'qvm-'+track.kind" :aria-label="track.label+'素材轨'">
-        <header><span class="qvm-token" aria-hidden="true">{{ track.icon }}</span><div><h4>{{ track.label }}</h4><small>{{ track.hint }}</small></div><b>{{ ofKind(track.kind).length }} / {{ limits[track.kind] }}</b></header>
+      <section v-for="track in tracks" :key="track.kind" class="qvm-track" :class="'qvm-'+track.kind" :aria-label="vt(&quot;{p0}素材轨&quot;,{p0:(vt(track.label))})">
+        <header><span class="qvm-token" aria-hidden="true">{{ track.icon }}</span><div><h4>{{ vt(track.label) }}</h4><small>{{ vt(track.hint) }}</small></div><b>{{ ofKind(track.kind).length }} / {{ limits[track.kind] }}</b></header>
         <div class="qvm-cards">
           <article v-for="(item,index) in ofKind(track.kind)" :key="item.id" class="qvm-card">
-            <img v-if="track.kind==='image'&&previews.get(item.id)" :src="previews.get(item.id)" :alt="item.filename || '画面参考'"/>
-            <video v-else-if="track.kind==='video'&&previews.get(item.id)" :src="previews.get(item.id)" :data-material-id="item.id" controls playsinline preload="metadata" :aria-label="'预览视频素材 '+(index+1)"></video>
-            <audio v-else-if="track.kind==='audio'&&previews.get(item.id)" :src="previews.get(item.id)" :data-material-id="item.id" controls preload="metadata" :aria-label="'预览声音素材 '+(index+1)"></audio>
-            <button v-else type="button" class="qvm-placeholder qvm-preview" :disabled="previewing.has(item.id)" :aria-label="'预览'+track.label+'素材 '+(index+1)" @click="preview(item)"><BrandLoader v-if="previewing.has(item.id)" :size="24"/><span v-else aria-hidden="true">{{ track.icon }}</span><small>{{ previewing.has(item.id) ? '正在打开…' : '预览素材' }}</small></button>
-            <div class="qvm-caption"><b>{{ track.label }} {{ index+1 }}</b><span>{{ item.filename || '从我的片库带来' }}</span><small v-if="item.duration">{{ Number(item.duration).toFixed(1) }} 秒</small></div>
-            <button type="button" class="qvm-remove" :aria-label="'移除'+track.label+'素材 '+(index+1)" :disabled="disabled || busy" @click="remove(item.id)">×</button>
+            <img v-if="track.kind==='image'&&previews.get(item.id)" :src="previews.get(item.id)" :alt="item.filename || vt(&quot;画面参考&quot;)"/>
+            <video v-else-if="track.kind==='video'&&previews.get(item.id)" :src="previews.get(item.id)" :data-material-id="item.id" controls playsinline preload="metadata" :aria-label="vt(&quot;预览视频素材 {p0}&quot;,{p0:(index+1)})"></video>
+            <audio v-else-if="track.kind==='audio'&&previews.get(item.id)" :src="previews.get(item.id)" :data-material-id="item.id" controls preload="metadata" :aria-label="vt(&quot;预览声音素材 {p0}&quot;,{p0:(index+1)})"></audio>
+            <button v-else type="button" class="qvm-placeholder qvm-preview" :disabled="previewing.has(item.id)" :aria-label="vt(&quot;预览{p0}素材 {p1}&quot;,{p0:(vt(track.label)),p1:(index+1)})" @click="preview(item)"><BrandLoader v-if="previewing.has(item.id)" :size="24"/><span v-else aria-hidden="true">{{ track.icon }}</span><small>{{ previewing.has(item.id) ? vt("正在打开…") : vt("预览素材") }}</small></button>
+            <div class="qvm-caption"><b>{{ vt(track.label) }} {{ index+1 }}</b><span>{{ item.filename || vt("从我的片库带来") }}</span><small v-if="item.duration">{{ vt("{p0} 秒",{p0:(Number(item.duration).toFixed(1))}) }}</small></div>
+            <button type="button" class="qvm-remove" :aria-label="vt(&quot;移除{p0}素材 {p1}&quot;,{p0:(vt(track.label)),p1:(index+1)})" :disabled="disabled || busy" @click="remove(item.id)">×</button>
           </article>
-          <label v-if="limits[track.kind]" class="qvm-add" :class="{ 'is-disabled': disabled || busy || ofKind(track.kind).length >= limits[track.kind] }"><input type="file" :accept="track.accept" :multiple="limits[track.kind]>1" :disabled="disabled || busy || ofKind(track.kind).length >= limits[track.kind]" :aria-label="'加入'+track.label+'素材'" @change="upload($event,track.kind)"/><span aria-hidden="true">＋</span><b>{{ busy ? '素材准备中…' : '加入'+track.label }}</b><small>{{ track.limit }}</small></label>
+          <label v-if="limits[track.kind]" class="qvm-add" :class="{ 'is-disabled': disabled || busy || ofKind(track.kind).length >= limits[track.kind] }"><input type="file" :accept="track.accept" :multiple="limits[track.kind]>1" :disabled="disabled || busy || ofKind(track.kind).length >= limits[track.kind]" :aria-label="vt(&quot;加入{p0}素材&quot;,{p0:(vt(track.label))})" @change="upload($event,track.kind)"/><span aria-hidden="true">＋</span><b>{{ busy ? vt("素材准备中…") : vt("加入{p0}",{p0:(vt(track.label))}) }}</b><small>{{ vt(track.limit) }}</small></label>
         </div>
-        <div v-if="track.kind==='video'&&limits.video" class="qvm-library"><select v-model="movieId" aria-label="从当前片库页选择视频" :disabled="disabled || busy"><option value="">也可以从当前片库页带一条过来</option><option v-for="movie in movies" :key="movie.id" :value="movie.id">{{ movie.prompt || '我的成片' }}</option></select><button type="button" :disabled="!movieId || disabled || busy || ofKind('video').length >= limits.video" @click="fromMovie">带入 ↗</button></div>
+        <div v-if="track.kind==='video'&&limits.video" class="qvm-library"><select v-model="movieId" :aria-label="vt(&quot;从当前片库页选择视频&quot;)" :disabled="disabled || busy"><option value="">{{ vt("也可以从当前片库页带一条过来") }}</option><option v-for="movie in movies" :key="movie.id" :value="movie.id">{{ movie.prompt || vt("我的成片") }}</option></select><button type="button" :disabled="!movieId || disabled || busy || ofKind('video').length >= limits.video" @click="fromMovie">{{ vt("带入 ↗") }}</button></div>
       </section>
     </div>
-    <div v-if="mode==='lipsync'" class="qsp-control"><div><b>{{ speakerSelection ? '主角的位置，已经留住。' : '多人同框？让主角开口。' }}</b><p>{{ ofKind('video').length ? speakerCaption(speakerSelection,ofKind('video')[0]) : '先加入一条视频，再选择人物出现的画面。' }}</p></div><button type="button" :disabled="disabled || busy || !ofKind('video').length" @click="openSpeaker">{{ speakerSelection ? '更改人物与画面' : '选择说话人物' }} ↗</button><button v-if="speakerSelection" type="button" class="qsp-control-clear" :disabled="disabled || busy" @click="emit('update:speakerSelection',null)">清除选择</button></div>
+    <div v-if="mode==='lipsync'" class="qsp-control"><div><b>{{ speakerSelection ? vt("主角的位置，已经留住。") : vt("多人同框？让主角开口。") }}</b><p>{{ ofKind('video').length ? speakerCaption(speakerSelection,ofKind('video')[0],vt) : vt("先加入一条视频，再选择人物出现的画面。") }}</p></div><button type="button" :disabled="disabled || busy || !ofKind('video').length" @click="openSpeaker">{{ speakerSelection ? vt("更改人物与画面") : vt("选择说话人物") }} ↗</button><button v-if="speakerSelection" type="button" class="qsp-control-clear" :disabled="disabled || busy" @click="emit('update:speakerSelection',null)">{{ vt("清除选择") }}</button></div>
     <VideoSpeakerPicker ref="speakerPicker" :material="ofKind('video')[0] || null" :model-value="speakerSelection" @update:model-value="emit('update:speakerSelection',$event)" @busy="emit('busy',$event)" />
-    <div v-if="busy" class="qvm-progress" role="status"><BrandLoader :size="20"/>正在检查并私有保存素材…</div>
-    <p v-if="error||selectionError" class="qvm-error" role="alert">{{ error || selectionError }}</p>
-    <footer>素材保持私有；确认开机后，只发送给你选择的创作服务。{{ mode==='reference' ? '用「图片 1」「视频 1」「声音 1」在描述里指引你的想法。' : '' }}</footer>
+    <div v-if="busy" class="qvm-progress" role="status"><BrandLoader :size="20"/>{{ vt("正在检查并私有保存素材…") }}</div>
+    <p v-if="error||selectionError" class="qvm-error" role="alert">{{ vt(error) || vt(selectionError) }}</p>
+    <footer>{{ vt("素材保持私有；确认开机后，只发送给你选择的创作服务。{p0}",{p0:(mode==='reference' ? vt("用「图片 1」「视频 1」「声音 1」在描述里指引你的想法。") : '')}) }}</footer>
   </section>
 </template>
 <script setup>
+import {videoText as vt} from "../../i18n/video.js";
 import {computed,onBeforeUnmount,onUnmounted,reactive,ref,watch} from 'vue';
 import {api,fetchBlob,uploadVideoMaterial} from '../../api/client.js';
 import {useAuth} from '../../stores/auth.js';
