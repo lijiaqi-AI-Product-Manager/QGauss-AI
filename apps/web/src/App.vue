@@ -202,7 +202,8 @@ import { ElAlert, ElButton, ElConfigProvider, ElIcon, ElTag } from 'element-plus
 import zhCn from 'element-plus/es/locale/lang/zh-cn.mjs';
 import zhTw from 'element-plus/es/locale/lang/zh-tw.mjs';
 import en from 'element-plus/es/locale/lang/en.mjs';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import {bindAppearanceSync} from './lib/appearance-sync.js';
 import {isImplementedRoute} from './lib/route-recovery.js';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from './api/client.js';
@@ -225,7 +226,10 @@ import LanguagePicker from './components/design/LanguagePicker.vue';
 
 const auth = useAuth();
 const componentLocale=computed(()=>currentLang.value==='en'?en:currentLang.value==='zh-TW'?zhTw:zhCn);
-useAppearance().initialize();
+const appearance=useAppearance();
+appearance.initialize();
+const stopAppearanceSync=bindAppearanceSync(appearance,useTheme());
+onUnmounted(stopAppearanceSync);
 const route = useRoute();
 const router = useRouter();
 const menus = ref([]);

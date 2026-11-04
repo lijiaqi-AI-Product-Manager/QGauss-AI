@@ -1,27 +1,28 @@
 <template>
   <dialog ref="dialog" class="qsp-dialog" aria-labelledby="qsp-title" @cancel.prevent="close" @click="backdrop">
-    <header><div><span class="qsp-eyebrow">QGAUSS / FIND YOUR LEADING VOICE</span><h2 id="qsp-title">这一幕，<em>让谁开口？</em></h2></div><button type="button" class="qsp-close" aria-label="关闭人物选择" @click="close">×</button></header>
-    <div class="qsp-body"><p class="qsp-intro">先停在人物清晰的画面，再点一下想让他开口的脸。选择会跟随这条视频保存。</p>
-    <div v-if="loading" class="qsp-loading" role="status"><BrandLoader :size="38" text="正在打开你的画面…" /></div>
-    <div v-else-if="error" class="qsp-error" role="alert"><b>画面还没有准备好</b><p>{{ error }}</p><button type="button" @click="open">再打开一次</button></div>
+    <header><div><span class="qsp-eyebrow">QGAUSS / FIND YOUR LEADING VOICE</span><h2 id="qsp-title">{{ vt("这一幕，") }}<em>{{ vt("让谁开口？") }}</em></h2></div><button type="button" class="qsp-close" :aria-label="vt(&quot;关闭人物选择&quot;)" @click="close">×</button></header>
+    <div class="qsp-body"><p class="qsp-intro">{{ vt("先停在人物清晰的画面，再点一下想让他开口的脸。选择会跟随这条视频保存。") }}</p>
+    <div v-if="loading" class="qsp-loading" role="status"><BrandLoader :size="38" :text="vt(&quot;正在打开你的画面…&quot;)" /></div>
+    <div v-else-if="error" class="qsp-error" role="alert"><b>{{ vt("画面还没有准备好") }}</b><p>{{ vt(error) }}</p><button type="button" @click="open">{{ vt("再打开一次") }}</button></div>
     <template v-else-if="timeline && url">
       <div class="qsp-screen" :class="{'is-ready':frameReady}">
         <video ref="video" :src="url" muted playsinline preload="auto" aria-hidden="true" @loadeddata="seek" @seeked="renderFrame" @error="mediaError" />
         <div class="qsp-canvas-wrap" :style="{aspectRatio:timeline.width+'/'+timeline.height}">
-          <canvas ref="canvas" :width="timeline.width" :height="timeline.height" tabindex="0" role="button" aria-label="选择画面中的说话人物，点按脸部或使用方向键定位" :aria-disabled="!frameReady" @pointerdown="locate" @keydown="move" />
-          <span v-if="point && frameReady" class="qsp-pin" :style="{left:100*(point.x+.5)/timeline.width+'%',top:100*(point.y+.5)/timeline.height+'%'}" aria-hidden="true"><i></i><b>主角</b></span>
-          <div v-if="!frameReady" class="qsp-frame-loading"><BrandLoader :size="26" text="正在停住这一帧…" /></div>
+          <canvas ref="canvas" :width="timeline.width" :height="timeline.height" tabindex="0" role="button" :aria-label="vt(&quot;选择画面中的说话人物，点按脸部或使用方向键定位&quot;)" :aria-disabled="!frameReady" @pointerdown="locate" @keydown="move" />
+          <span v-if="point && frameReady" class="qsp-pin" :style="{left:100*(point.x+.5)/timeline.width+'%',top:100*(point.y+.5)/timeline.height+'%'}" aria-hidden="true"><i></i><b>{{ vt("主角") }}</b></span>
+          <div v-if="!frameReady" class="qsp-frame-loading"><BrandLoader :size="26" :text="vt(&quot;正在停住这一帧…&quot;)" /></div>
         </div>
       </div>
-      <div class="qsp-frame-head"><span>寻找人物清晰的时刻</span><b>{{ speakerTime(timeline.frames[frameNumber]) }}</b><small>第 {{ frameNumber+1 }} / {{ timeline.frames.length }} 帧</small></div>
-      <input v-model.number="frameNumber" class="qsp-timeline" type="range" min="0" :max="timeline.frames.length-1" step="1" aria-label="选择人物出现的画面" @input="changeFrame" />
-      <div class="qsp-frame-buttons"><button type="button" :disabled="frameNumber===0" @click="step(-1)">← 上一帧</button><span>换一帧后，请重新点选人物</span><button type="button" :disabled="frameNumber===timeline.frames.length-1" @click="step(1)">下一帧 →</button></div>
-      <div class="qsp-selection" role="status"><span class="qsp-selection-icon" aria-hidden="true">{{ point ? '◎' : '⌖' }}</span><div><b>{{ point ? '主角，已经找到。' : '点一下画面里的脸。' }}</b><p>{{ point ? '这一帧与人物位置会一起用于本次口型同步。' : '也可以聚焦画面后按空格定位，再用方向键微调。' }}</p></div><button v-if="point" type="button" @click="point=null">重新点选</button></div>
+      <div class="qsp-frame-head"><span>{{ vt("寻找人物清晰的时刻") }}</span><b>{{ speakerTime(timeline.frames[frameNumber]) }}</b><small>{{ vt("第 {p0} / {p1} 帧",{p0:(frameNumber+1),p1:(timeline.frames.length)}) }}</small></div>
+      <input v-model.number="frameNumber" class="qsp-timeline" type="range" min="0" :max="timeline.frames.length-1" step="1" :aria-label="vt(&quot;选择人物出现的画面&quot;)" @input="changeFrame" />
+      <div class="qsp-frame-buttons"><button type="button" :disabled="frameNumber===0" @click="step(-1)">{{ vt("← 上一帧") }}</button><span>{{ vt("换一帧后，请重新点选人物") }}</span><button type="button" :disabled="frameNumber===timeline.frames.length-1" @click="step(1)">{{ vt("下一帧 →") }}</button></div>
+      <div class="qsp-selection" role="status"><span class="qsp-selection-icon" aria-hidden="true">{{ point ? '◎' : '⌖' }}</span><div><b>{{ point ? vt("主角，已经找到。") : vt("点一下画面里的脸。") }}</b><p>{{ point ? vt("这一帧与人物位置会一起用于本次口型同步。") : vt("也可以聚焦画面后按空格定位，再用方向键微调。") }}</p></div><button v-if="point" type="button" @click="point=null">{{ vt("重新点选") }}</button></div>
     </template></div>
-    <footer><p>这里只选择画面，不会开始生成或扣次。</p><div><button type="button" class="qsp-secondary" @click="close">再想一想</button><button type="button" class="qsp-primary" :disabled="!frameReady || !point || loading || !!error" @click="confirm">让这位主角开口 ↗</button></div></footer>
+    <footer><p>{{ vt("这里只选择画面，不会开始生成或扣次。") }}</p><div><button type="button" class="qsp-secondary" @click="close">{{ vt("再想一想") }}</button><button type="button" class="qsp-primary" :disabled="!frameReady || !point || loading || !!error" @click="confirm">{{ vt("让这位主角开口 ↗") }}</button></div></footer>
   </dialog>
 </template>
 <script setup>
+import {videoText as vt} from "../../i18n/video.js";
 import {nextTick,onBeforeUnmount,ref,watch} from 'vue';
 import {api,fetchBlob} from '../../api/client.js';
 import {useAuth} from '../../stores/auth.js';

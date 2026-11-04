@@ -1,3 +1,4 @@
+import{registerVideoLanguageTests}from'./video-language-ui.cases.mjs';
 import{registerPaintingLanguageTests}from'./painting-language-ui.cases.mjs';
 import {registerChatLanguageTests} from './chat-language-ui.cases.mjs';
 import {registerVoiceLanguageTests} from './voice-language-ui.cases.mjs';
@@ -2372,3 +2373,5 @@ registerVoiceLanguageTests({test,assert,mount,mountVoiceLibrary,settle,relayJson
 registerChatLanguageTests({test,assert,mount,settle,relayJson,setLang,runFrame,runResponse});
 
 registerPaintingLanguageTests({test,assert,mountPainting,paintingTask,paintOptions,multiPaintOptions,paintResponse,settle,relayJson,setLang});
+
+registerVideoLanguageTests({test,assert,mount,settle,relayJson,filmToolsData,filmSelect,filmAddFile,videoInterceptor,relayInput,setLang});

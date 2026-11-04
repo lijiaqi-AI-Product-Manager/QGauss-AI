@@ -4,7 +4,9 @@
  */
 import { computed, reactive } from 'vue';
 
-const KEY = 'qg:theme';
+export const THEME_STORAGE_KEY = 'qg:theme';
+const KEY = THEME_STORAGE_KEY;
+let temporaryChoice = false;
 
 const media = typeof window !== 'undefined' && window.matchMedia
   ? window.matchMedia('(prefers-color-scheme: dark)')
@@ -38,8 +40,9 @@ function set(mode) {
   state.mode = mode;
   try {
     localStorage.setItem(KEY, mode);
+    temporaryChoice = false;
   } catch {
-    /* 忽略 */
+    temporaryChoice = true;
   }
   apply();
 }
@@ -48,9 +51,16 @@ function toggle() {
   set(state.mode === 'dark' ? 'light' : 'dark');
 }
 
+function syncFromStorage() {
+  if(temporaryChoice)return false;
+  let saved;try{saved=localStorage.getItem(KEY);}catch{return false;}
+  if(saved!==null&&saved!=='light'&&saved!=='dark')return false;
+  state.mode=saved??systemMode();apply();return true;
+}
+
 // 没手动选过时，系统切换深浅色要跟着走
 media?.addEventListener?.('change', () => {
-  if (savedMode()) return;
+  if (temporaryChoice || savedMode()) return;
   state.mode = systemMode();
   apply();
 });
@@ -58,5 +68,5 @@ media?.addEventListener?.('change', () => {
 apply();
 
 export function useTheme() {
-  return { state, isDark: computed(() => state.mode === 'dark'), set, toggle };
+  return { state, isDark: computed(() => state.mode === 'dark'), set, toggle, syncFromStorage };
 }

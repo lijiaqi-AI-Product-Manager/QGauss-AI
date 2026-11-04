@@ -10,7 +10,7 @@ export function registerVideoSpeakerTests({test,assert,mount,settle,relayJson,fi
       if(call.method==='POST'&&call.url==='/api/video/materials/audio')return relayJson({id:'speaker-audio',kind:'audio',mime:'audio/wav',filename:'QGauss 台词.wav',duration:3,size:1000});
       if(call.url==='/api/video/materials/'+point.videoId+'/frames')return relayJson({width:640,height:640,frames:Array.from({length:144},(_,i)=>(i+.5)/24)});
       if(call.url==='/api/upload/'+point.videoId+'/raw')return new Response(new Uint8Array([0,1,2]),{headers:{'Content-Type':'video/mp4'}});
-      if(call.method==='POST'&&call.url==='/api/video/quote')return relayJson({revision:'a'.repeat(64),cost:8,pool:'drawMj',name:'声音搭档',mode:'lipsync',followsSource:true,seconds:6,speakerSelection:call.body.speakerSelection,materials:[material]});
+      if(call.method==='POST'&&call.url==='/api/video/quote')return relayJson({revision:'a'.repeat(64),cost:8,pool:'drawMj',name:'声音搭档',mode:'lipsync',followsSource:true,seconds:6,multiplier:1,speakerSelection:call.body.speakerSelection,materials:[material]});
       if(call.method==='GET'&&call.url.includes('/api/video/tasks/by-request/'))return relayJson({message:'稍后核对'},404);
       const path=new URL(call.url,'http://qgauss.test').pathname;if(call.method==='GET'&&Object.hasOwn(data,path))return relayJson(data[path]);
     }});await wait(()=>document.querySelector('[aria-label="视频创作模型"]'));filmSelect('[aria-label="视频创作模型"]','qg-film-lipsync');await settle();return f;
