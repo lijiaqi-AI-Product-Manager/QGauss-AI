@@ -119,6 +119,7 @@ async function mount({ loggedIn = false, admin = false, pending = false, history
     calls.push(call);
     const intercepted = await intercept?.(call);
     if (intercepted) return intercepted;
+    if(call.url==='/api/upload/attachments/check'&&call.method==='POST')return relayJson({items:call.body.ids.map(id=>({id,status:'available'}))});
     if(call.url === '/api/installation/status')return relayJson({required:false,canInitialize:false,needsSecureConnection:false});
     if (pending && ['/api/conversations', '/api/models/available', '/api/folders'].includes(url)) { await new Promise((resolve) => setTimeout(resolve, 60)); return new Response(JSON.stringify({ message: '会话已退出' }), { status: 401 }); }
     if (call.url === '/api/users/profile') {if(call.method==='PATCH')profileRow={...profileRow,...call.body};return relayJson(profileRow);}
@@ -2383,3 +2384,6 @@ registerVideoWaitingTests({test,assert,mount,settle,relayJson,filmToolsData,vide
 
 registerPartnerWorkflowTests({test,assert,mountAgents,agentReply,settle,relayJson,setLang});
 registerPartnerResultsTests({test,assert,mountAgents,settle,relayJson,setLang});
+
+import {registerChatAttachmentTests} from './chat-attachment-ui.cases.mjs';
+registerChatAttachmentTests({test,assert,mount,settle,relayJson,setLang});

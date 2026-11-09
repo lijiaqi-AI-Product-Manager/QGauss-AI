@@ -74,6 +74,9 @@ async function request(path, { method = 'GET', body, headers = {}, retry = true,
 export async function uploadFile(file, { retry = true, signal } = {}) {
   return uploadMultipart('/upload', file, { retry, signal });
 }
+export async function uploadChatFile(file,requestKey,expectedVersion,{signal}={}){
+  return uploadMultipart('/upload/requests/'+encodeURIComponent(requestKey),file,{signal,fields:{expectedVersion:String(expectedVersion)}});
+}
 
 export async function uploadVoiceRecording(file, options = {}) {
   return uploadMultipart('/voice/recordings', file, options);

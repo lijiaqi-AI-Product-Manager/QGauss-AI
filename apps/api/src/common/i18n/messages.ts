@@ -26,6 +26,9 @@ const ERROR_MESSAGES: Record<number, { zh: string; en: string }> = {
   3003: { zh: '上游调用失败', en: 'Upstream request failed' },
 
   4001: { zh: '会话不存在', en: 'Conversation not found' },
+  4011: {zh:'附件已不可用，请恢复文件或从编辑区移除后再发送',en:'An attachment is unavailable. Restore it or remove it from the composer before sending.'},
+  4012: {zh:'附件内容暂不能读取，请更换文件或从编辑区移除',en:'An attachment could not be read. Replace it or remove it from the composer.'},
+  4013: {zh:'文件暂未核对，请稍后重试。',en:'This file could not be checked. Please try again later.'},
 
   5000: { zh: '服务器异常', en: 'Internal server error' },
 

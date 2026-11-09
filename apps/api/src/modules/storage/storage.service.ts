@@ -8,6 +8,7 @@ import { BusinessException, ErrorCode } from '../../common/exceptions/business.e
 import { StorageDriver } from '../../common/storage/storage.driver';
 import { createStorageDriver } from '../../common/storage/s3.driver';
 import { detectType } from '../../common/storage/file-type';
+import {isDocumentMime} from '../../common/storage/extract-text';
 import { SettingsService } from '../settings/settings.service';
 
 export interface IncomingFile {
@@ -262,6 +263,28 @@ export class StorageService {
   }
 
   async artifactLimit(){return Math.min(20,await this.settings.get<number>('upload.maxSizeMb'))*1024*1024;}
+  async prepareChatUpload(file:IncomingFile):Promise<ArtifactStage>{
+    if(!file?.buffer?.length)throw new BusinessException(ErrorCode.PARAM_INVALID,'没有收到文件',400);
+    const maximum=Math.min(50,await this.settings.get<number>('upload.maxSizeMb'))*1024*1024;
+    if(file.buffer.length>maximum)throw new BusinessException(ErrorCode.PARAM_INVALID,'附件超过当前文件大小上限',413);
+    const type=detectType(file.buffer),allowed=(await this.settings.get<string>('upload.allowedMime')).split(',').map(value=>value.trim()).filter(Boolean);
+    if(!type||allowed.length&&!allowed.includes(type.mime))throw new BusinessException(ErrorCode.PARAM_INVALID,'这个附件格式暂不支持上传',415);
+    if(!/^image\/(png|jpeg|gif|webp)$/.test(type.mime)&&!isDocumentMime(type.mime))throw new BusinessException(ErrorCode.PARAM_INVALID,'这个格式暂不能作为对话附件',415);
+    const now=new Date(),id=randomUUID();return{id,storedKey:`${now.getUTCFullYear()}/${String(now.getUTCMonth()+1).padStart(2,'0')}/${id}.${type.ext}`,filename:decodeFilename(file.originalname)?.slice(0,200)||`QGauss-file.${type.ext}`,mime:type.mime,size:file.buffer.length,sha256:createHash('sha256').update(file.buffer).digest('hex'),backend:this.driver.name};
+  }
+  async checkAttachments(userId:string,ids:string[]){
+    const rows=await this.prisma.uploadFile.findMany({where:{id:{in:ids},userId,deletedAt:null,purgedAt:null,scope:{not:'app-icon'},OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}}),byId=new Map(rows.map(row=>[row.id,row]));
+    return{items:await Promise.all(ids.map(async id=>{const row=byId.get(id);if(!row||!/^image\/(png|jpeg|gif|webp)$/.test(row.mime)&&!isDocumentMime(row.mime))return{id,status:'unavailable'};
+      try{if(!await this.driver.exists(row.storedKey))return{id,status:'unavailable'};}catch{return{id,status:'unknown'};}
+      return{id,status:'available',file:this.view(row)};
+    }))};
+  }
+  async chatUploadFile(userId:string,id:string){
+    const row=await this.prisma.uploadFile.findFirst({where:{id,userId,scope:'chat',deletedAt:null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}});
+    if(!row)return{status:'unavailable'};
+    try{if(!await this.driver.exists(row.storedKey))return{status:'unavailable'};}catch{return{status:'verifying'};}
+    return{status:'stored',file:this.view(row)};
+  }
   async prepareArtifact(buffer:Buffer,title:string):Promise<ArtifactStage>{
     if(!buffer.length||buffer.length>await this.artifactLimit())throw new Error('TOO_LARGE');
     const type=detectType(buffer),allowed=(await this.settings.get<string>('upload.allowedMime')).split(',').map(value=>value.trim()).filter(Boolean);

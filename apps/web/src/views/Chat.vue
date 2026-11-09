@@ -244,7 +244,7 @@
                     class="cv-act"
                     :title="t('conversation.regenerate')"
                     :aria-label="t('conversation.regenerate')"
-                    :disabled="streaming || m.status === 'SETTLING'"
+                    :disabled="streaming || preparingSend || m.status === 'SETTLING'"
                     @click="regenerate(m)"
                   >
                     <el-icon><RefreshRight /></el-icon>
@@ -278,24 +278,7 @@
           @dragleave.self="dragging = false"
           @drop.prevent="onDrop"
         >
-          <div v-if="pendingFiles.length" class="cv-pending">
-            <div
-              v-for="f in pendingFiles"
-              :key="f.localId"
-              class="cv-pending-item"
-              :class="f.status"
-              :title="f.error ? ct(f.error) : f.name"
-            >
-              <img v-if="f.kind === 'image' && f.preview" :src="f.preview" class="cv-pending-thumb" :alt="f.name" />
-              <span v-else class="cv-att-ext">{{ extOf(f.name) }}</span>
-              <span class="cv-pending-name">{{ f.name }}</span>
-              <span v-if="f.status === 'uploading'" class="cv-pending-state">{{ t('conversation.uploading') }}</span>
-              <span v-else-if="f.status === 'error'" class="cv-pending-state">{{ t('conversation.failed') }}</span>
-              <button type="button" class="cv-pending-x" :aria-label="t('conversation.removeFile', {name:f.name})" @click="removePending(f)">
-                <el-icon><Close /></el-icon>
-              </button>
-            </div>
-          </div>
+          <ComposerAttachmentTray :items="pendingFiles" :checking="attachmentQueue.checking.value" @remove="removePending" @retry="attachmentQueue.retry" @check="attachmentQueue.inspect" @choose="chooseOriginalFile" @library="openPersonalFiles"/>
           <div class="cv-inputrow">
             <textarea
               ref="inputEl"
@@ -354,10 +337,10 @@
               <el-icon><Connection /></el-icon><span class="cv-chip-text">{{ contextOn&&!webSearchOn ? ct("上下文开") : ct("上下文关") }}</span>
             </button>
             <button type="button" class="cv-plus" :title="t('conversation.attachHint')" :aria-label="t('conversation.attach')" @click="fileInput?.click()"><el-icon><Plus /></el-icon></button>
-            <button type="button" class="cv-plus" :title="ct('我的创作文件')" :aria-label="ct('我的创作文件')" @click="personalFiles.show()"><ClientIcon name="folder"/></button>
+            <button type="button" class="cv-plus" :title="ct('我的创作文件')" :aria-label="ct('我的创作文件')" @click="openPersonalFiles"><ClientIcon name="folder"/></button>
             <button type="button" class="cv-mic" :class="{ on: voice.recording }" :title="t('conversation.voice')" :aria-label="t('conversation.voice')" :aria-pressed="voice.open" @click="openVoice"><el-icon><Microphone /></el-icon></button>
             <button v-if="streaming" type="button" class="cv-stop" :aria-label="t('conversation.stop')" :disabled="stopping || activeRun?.target.status === 'SETTLING'" @click="stop"><span class="cv-stop-square"></span></button>
-            <button v-else type="button" class="cv-send" :disabled="!canSend" :aria-label="t('chat.send')" @click="send"><el-icon><Top /></el-icon></button>
+            <button v-else type="button" class="cv-send" :disabled="!canSend" :aria-label="preparingSend?ct('正在核对附件…'):t('chat.send')" @click="send"><BrandLoader v-if="preparingSend" :size="20"/><el-icon v-else><Top /></el-icon></button>
         </div>
         </div>
       </div>
@@ -375,7 +358,7 @@ import AppAvatar from '../components/design/AppAvatar.vue';
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
-import { api, fetchBlobUrl, streamChat, resumeChat, uploadFile, waitMessageSettled } from '../api/client.js';
+import { api, fetchBlobUrl, streamChat, resumeChat, waitMessageSettled } from '../api/client.js';
 import { saveGuestDraft, takeGuestDraft } from '../lib/chat-draft.js';
 import {chatAppFailure,chatBilling,chatUsage} from '../lib/chat-presentation.js';
 import { imageOnly, modelBilling } from '../lib/model-presentation.js';
@@ -384,6 +367,9 @@ import WebSearchSources from '../components/design/WebSearchSources.vue';
 import AgentRunPanel from '../components/design/AgentRunPanel.vue';
 import PersonalFileLibrary from '../components/design/PersonalFileLibrary.vue';
 import {usePersonalFiles} from '../composables/usePersonalFiles.js';
+import {useChatAttachments} from '../composables/useChatAttachments.js';
+import ComposerAttachmentTray from '../components/design/ComposerAttachmentTray.vue';
+import BrandLoader from '../components/design/BrandLoader.vue';
 import {agentQuote,agentRunReport} from '../lib/agent-presentation.js';
 import {agentPreparation} from '../lib/agent-capabilities.js';
 import {partnerText as pt} from '../i18n/partner.js';
@@ -485,8 +471,11 @@ function detachStream() {
 const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,.pdf,.doc,.docx,.xlsx,.txt,.md,.csv,.json';
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const fileInput = ref(null);
-const pendingFiles = ref([]);
+const attachmentQueue=useChatAttachments({notify:(message,values)=>ElMessage.warning(ct(message,values))});
+const pendingFiles = attachmentQueue.files;
 const personalFiles=usePersonalFiles();
+function openPersonalFiles(tab='active'){if(!auth.isLoggedIn){saveGuestDraft(input.value);router.push({path:'/login',query:{redirect:route.fullPath}});return;}personalFiles.show(typeof tab==='string'?tab:'active');}
+function chooseOriginalFile(file){removePending(file);fileInput.value?.click();}
 async function reusePersonalFile(id){
  if(streaming.value||loadingDetail.value||entryPending.value||entryError.value)return;
  if(pendingFiles.value.some(file=>file.id===id))return ElMessage.info(ct('这个文件已在编辑区。'));
@@ -506,9 +495,10 @@ const dragging = ref(false);
 const thumbs = reactive({});
 const objectUrls = new Set();
 
-const uploading = computed(() => pendingFiles.value.some((f) => f.status === 'uploading'));
-const readyFiles = computed(() => pendingFiles.value.filter((f) => f.status === 'done'));
-const canSend = computed(() => !entryPending.value&&!entryError.value&&!appLoading.value&&!appError.value&&(!appId.value||Number.isInteger(appVersion.value))&&!uploading.value && !loadingDetail.value && !modelSaving.value && (!agentId.value||!agentLoading.value&&!agentError.value&&agentPreparation(currentAgent.value).ready) && (!webSearchOn.value||currentModel.value?.webSearchAvailable) && (!!input.value.trim() || readyFiles.value.length > 0));
+const uploading = attachmentQueue.uploading;
+const readyFiles = attachmentQueue.readyFiles;
+const preparingSend=ref(false);
+const canSend = computed(() => !entryPending.value&&!entryError.value&&!appLoading.value&&!appError.value&&(!appId.value||Number.isInteger(appVersion.value))&&!uploading.value&&!attachmentQueue.blocked.value&&!attachmentQueue.checking.value&&!preparingSend.value && !loadingDetail.value && !modelSaving.value && (!agentId.value||!agentLoading.value&&!agentError.value&&agentPreparation(currentAgent.value).ready) && (!webSearchOn.value||currentModel.value?.webSearchAvailable) && (!!input.value.trim() || readyFiles.value.length > 0));
 
 function extOf(name = '') {
   const m = /\.([a-z0-9]{1,5})$/i.exec(name);
@@ -528,37 +518,8 @@ function trackUrl(url) {
 
 async function addFiles(list) {
   if(entryPending.value||entryError.value||loadingDetail.value)return ElMessage.info(ct("请等待当前创作空间打开后再添加附件。"));
-  const files = [...list];
-  if (!files.length) return;
-  const room = 9 - pendingFiles.value.length;
-  if (room <= 0) return ElMessage.warning(ct("一条消息最多附带 9 个文件"));
-  if (files.length > room) ElMessage.warning(ct("最多还能添加 {p0} 个文件，多出的已忽略",{p0:(room)}));
-  for (const file of files.slice(0, room)) {
-    const isImage = IMAGE_TYPES.includes(file.type);
-    const item = reactive({
-      localId: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: file.name || (isImage ? '粘贴的图片.png' : '文件'),
-      size: file.size,
-      kind: isImage ? 'image' : 'document',
-      preview: isImage ? trackUrl(URL.createObjectURL(file)) : '',
-      status: 'uploading',
-      id: '',
-      error: '',
-    });
-    pendingFiles.value.push(item);
-    uploadFile(file)
-      .then((data) => {
-        item.id = data.id;
-        item.status = 'done';
-        // 以服务端嗅探的类型为准：扩展名伪装成图片的文本会被当作文档处理
-        item.kind = IMAGE_TYPES.includes(data.mime) ? 'image' : 'document';
-      })
-      .catch((e) => {
-        item.status = 'error';
-        item.error = e?.message || '上传失败';
-        ElMessage.error(ct('附件「{name}」：{error}',{name:item.name,error:ct(item.error)}));
-      });
-  }
+  if(!auth.isLoggedIn){saveGuestDraft(input.value);return router.push({path:'/login',query:{redirect:route.fullPath}});}
+  attachmentQueue.add([...list]);
 }
 
 function onPickFiles(e) {
@@ -579,7 +540,7 @@ function onDrop(e) {
 }
 
 function removePending(f) {
-  pendingFiles.value = pendingFiles.value.filter((x) => x !== f);
+  attachmentQueue.remove(f);
 }
 
 /** 历史消息里的图片：带鉴权取回后转 blob URL，按文件 id 缓存 */
@@ -1261,7 +1222,7 @@ function usePreset(preset) {
 /* ---------------- 流式 ---------------- */
 /** Each observer belongs to one view and one signed-in session. */
 async function streamInto(payload, target, resumeId) {
-  let admissionRejected=false;
+  let admissionRejected=false,admissionKind='',admissionNotice='';
   if(payload)target.webSearch=payload.webSearch?{requested:true,status:'requested',sources:[],citations:[]}:null;
   if(payload)target.agentActivity=payload.agentId?{kind:'agent',status:'waiting',context:'fresh',steps:[],suggestions:[],artifacts:[]}:null;
   const revision = ++streamRevision;
@@ -1351,13 +1312,14 @@ async function streamInto(payload, target, resumeId) {
   } catch (error) {
     if (isCurrent()) {
       markAppUnavailable(error);
-      if(payload?.agentId===agentId.value&&payload?.agentId&&!operation.messageId&&error.status===409&&error.code===1001){admissionRejected=true;agentRead?.abort();currentAgent.value=null;agentLoading.value=false;agentError.value='搭档资料或费用已变化，请重新核对后再发送。';target.status='FAILED';}
-      target.notice = admissionRejected?agentError.value:appId.value&&chatAppFailure(error)==='stale'?'应用设定已变化，请刷新资料后继续。':error.message || '请求失败'; target.noticeType = 'error';
+      if(payload?.agentId===agentId.value&&payload?.agentId&&!operation.messageId&&error.status===409&&error.code===1001){admissionRejected=true;admissionKind='agent';agentRead?.abort();currentAgent.value=null;agentLoading.value=false;agentError.value='搭档资料或费用已变化，请重新核对后再发送。';admissionNotice=agentError.value;target.status='FAILED';}
+      else if(payload?.messages?.some(row=>row.attachments?.length)&&!operation.messageId&&([400,404,409].includes(error.status)||[4011,4012,4013].includes(error.code))){admissionRejected=true;admissionKind='attachments';admissionNotice=error.message||'附件暂不可用，请核对文件后再发送。';target.status='FAILED';}
+      target.notice = admissionRejected?admissionNotice:appId.value&&chatAppFailure(error)==='stale'?'应用设定已变化，请刷新资料后继续。':error.message || '请求失败'; target.noticeType = 'error';
     }
   } finally {
     if (isCurrent()) { streaming.value = false; stopping.value = false; controller = null; activeRun = null; target.streaming = false; }
   }
-  return{admissionRejected,current:isCurrent()};
+  return{admissionRejected,admissionKind,current:isCurrent()};
 }
 
 async function cancelRun(operation) {
@@ -1372,11 +1334,19 @@ async function cancelRun(operation) {
   finally { clearTimeout(cancelTimer); operation.cancelInFlight = false; if (operation.isCurrent()) stopping.value = false; }
 }
 
+function currentSendIntent(){return JSON.stringify({model:model.value,billing:currentModel.value?.billing,app:appId.value,version:appVersion.value,agent:agentId.value,offer:currentAgent.value?.offerRevision,context:contextOn.value,search:webSearchOn.value,branch:branchChoice.value});}
+async function confirmHistoryAttachments(history,current){
+  const last=history.findLast(row=>row.role==='user'),ids=[...new Set((last?.attachments||[]).map(file=>file.id))];if(!ids.length)return true;
+  try{const result=await api.post('/upload/attachments/check',{ids});if(!current())return false;if(ids.every(id=>result.items?.some(row=>row.id===id&&row.status==='available')))return true;ElMessage.warning(ct('这轮提问中的附件暂不可用，请编辑问题后重新选择文件。'));}
+  catch{if(current())ElMessage.warning(ct('附件暂未核对，请稍后重试。'));}return false;
+}
 async function send() {
   const text = input.value.trim();
   if (!canSend.value || streaming.value) return;
   if (!agentId.value&&!model.value) return ElMessage.warning(ct("请先选择模型"));
   if (!agentId.value&&!currentModel.value?.ready) { panelOpen.value = true; return ElMessage.warning(ct("当前模型已停用或未接入，请选择可用模型")); }
+  const edit=composerEditRevision,view=conversationViewRevision,identity=auth.identityRevision,intent=currentSendIntent();
+  if(pendingFiles.value.length){preparingSend.value=true;let ready=false;try{ready=await attachmentQueue.checkBeforeSend();}finally{preparingSend.value=false;}if(!ready||!viewActive||!auth.isLoggedIn||identity!==auth.identityRevision||view!==conversationViewRevision)return;if(edit!==composerEditRevision||intent!==currentSendIntent())return ElMessage.info(ct('编辑区或创作设定已变化，请确认后再发送。'));if(!canSend.value||streaming.value)return;}
 
   const attachments = readyFiles.value.map((f) => ({
     id: f.id,
@@ -1390,6 +1360,7 @@ async function send() {
   }
 
   const originalDraft={text:input.value,files:[...pendingFiles.value]};
+  for(const file of readyFiles.value)if(file.preview)trackUrl(attachmentQueue.retainPreview(file));
   input.value = '';
   pendingFiles.value = [];
   const clearedRevision=composerEditRevision;
@@ -1419,7 +1390,7 @@ async function send() {
   if(outcome?.admissionRejected&&outcome.current){
     submittedUser.notAdmitted=true;target.notAdmitted=true;
     if(composerEditRevision===clearedRevision&&messages.value.at(-1)===target&&messages.value.at(-2)===submittedUser){
-      messages.value.splice(-2,2);input.value=originalDraft.text;pendingFiles.value=originalDraft.files;nextTick(autosize);ElMessage.info(pt('原问题与附件已带回，核对新资料后可明确发送。'));
+      messages.value.splice(-2,2);input.value=originalDraft.text;pendingFiles.value=originalDraft.files;nextTick(autosize);ElMessage.info(outcome.admissionKind==='attachments'?ct('原问题和附件已保留，请核对文件后再发送。'):pt('原问题与附件已带回，核对新资料后可明确发送。'));
     }else target.notice='原问题与附件已保留在本轮记录，可编辑带回。';
   }
 }
@@ -1427,7 +1398,7 @@ async function send() {
 /** 重新生成：复用同一条用户提问，服务端会挂在同一个父节点下形成分支 */
 async function regenerate(message) {
   const viewRevision = conversationViewRevision, sessionRevision = auth.sessionRevision;
-  if (streaming.value) return;
+  if (streaming.value||preparingSend.value) return;
   if(entryPending.value||entryError.value)return ElMessage.warning(ct("请先打开并核对当前创作空间"));
   if(appLoading.value||appError.value||appId.value&&!Number.isInteger(appVersion.value))return ElMessage.warning(ct("请先刷新并核对应用资料"));
   if(agentId.value&&(!agentPreparation(currentAgent.value).ready||agentError.value||agentLoading.value))return ElMessage.warning(ct("请先刷新并核对搭档资料与费用"));
@@ -1438,6 +1409,9 @@ async function regenerate(message) {
   if (index < 0) return;
 
   const history = (contextOn.value&&!webSearchOn.value ? visible.slice(0, index) : visible.slice(index - 1, index)).filter((m) => m.content&&!m.notAdmitted);
+  const identity=auth.identityRevision,intent=currentSendIntent(),current=()=>viewActive&&auth.isLoggedIn&&identity===auth.identityRevision&&viewRevision===conversationViewRevision&&intent===currentSendIntent()&&visibleMessages.value.includes(message);
+  preparingSend.value=true;let ready=false;try{ready=await confirmHistoryAttachments(history,current);}finally{preparingSend.value=false;}if(!ready||!current())return;
+  const original={...message};
 
   message.content = '';
   message.reasoning = '';
@@ -1454,7 +1428,8 @@ async function regenerate(message) {
     messages: history.map(toPayloadMessage),
   };
 
-  await streamInto(payload, message);
+  const outcome=await streamInto(payload,message);
+  if(outcome?.admissionRejected&&outcome.current){const notice=message.notice;Object.assign(message,original,{streaming:false,notice,noticeType:'error'});return;}
 
   // 服务端把新版本挂成同一父节点下的兄弟消息，本地这条已被复用成新版本；
   // 重载一次才能拿到完整分支列表和正确的服务器字段
@@ -2181,63 +2156,6 @@ onUnmounted(() => {
   border-style: dashed;
   background: var(--qg-brand-soft);
 }
-.cv-pending {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 10px 10px 0;
-}
-.cv-pending-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 220px;
-  height: 36px;
-  padding: 0 4px 0 4px;
-  border: 1px solid var(--qg-border);
-  border-radius: var(--qg-radius-sm);
-  background: var(--qg-panel-2);
-  font-size: 12px;
-}
-.cv-pending-item.error {
-  border-color: var(--qg-danger);
-  color: var(--qg-danger);
-}
-.cv-pending-item.uploading {
-  opacity: 0.7;
-}
-.cv-pending-thumb {
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  object-fit: cover;
-}
-.cv-pending-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cv-pending-state {
-  flex: none;
-  color: var(--qg-faint);
-}
-.cv-pending-x {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--qg-faint);
-  cursor: pointer;
-}
-.cv-pending-x:hover {
-  color: var(--qg-text);
-  background: var(--qg-border);
-}
 .cv-att-ext {
   flex: none;
   min-width: 28px;
@@ -2772,14 +2690,6 @@ html.dark .cv-hero-preset-tag {
   border: 0;
   background: var(--qg-brand-soft);
   box-shadow: 0 0 0 2px var(--qg-brand), var(--qg-shadow-float);
-}
-.cv-pending {
-  padding: 12px 14px 0;
-}
-.cv-pending-item {
-  border: 0;
-  border-radius: 12px;
-  background: var(--qg-panel-2);
 }
 .cv-inputrow {
   display: flex;
