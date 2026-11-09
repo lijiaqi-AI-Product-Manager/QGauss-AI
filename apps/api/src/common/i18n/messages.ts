@@ -29,6 +29,9 @@ const ERROR_MESSAGES: Record<number, { zh: string; en: string }> = {
   4011: {zh:'附件已不可用，请恢复文件或从编辑区移除后再发送',en:'An attachment is unavailable. Restore it or remove it from the composer before sending.'},
   4012: {zh:'附件内容暂不能读取，请更换文件或从编辑区移除',en:'An attachment could not be read. Replace it or remove it from the composer.'},
   4013: {zh:'文件暂未核对，请稍后重试。',en:'This file could not be checked. Please try again later.'},
+  4014: {zh:'这段对话已变化，请刷新后再操作。',en:'This conversation has changed. Refresh it before continuing.'},
+  4015: {zh:'当前记录已变化，请重新确认要整理的对话。',en:'These records have changed. Review the conversations again before continuing.'},
+  4016: {zh:'这个分组已变化，请刷新后再操作。',en:'This collection has changed. Refresh it before continuing.'},
 
   5000: { zh: '服务器异常', en: 'Internal server error' },
 

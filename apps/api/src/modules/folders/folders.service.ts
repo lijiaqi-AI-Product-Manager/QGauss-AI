@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { BusinessException, ErrorCode } from '../../common/exceptions/business.exception';
+import {assertConversationActor} from '../conversations/conversation-state';
 
 @Injectable()
 export class FoldersService {
@@ -9,7 +10,7 @@ export class FoldersService {
   async list(userId: string) {
     const folders = await this.prisma.conversationFolder.findMany({
       where: { userId },
-      orderBy: [{ sort: 'asc' }, { createdAt: 'asc' }],
+      orderBy: [{ sort: 'asc' }, { createdAt: 'asc' },{id:'asc'}],
     });
     if (folders.length === 0) return [];
 
@@ -23,6 +24,7 @@ export class FoldersService {
 
     return folders.map((f) => ({
       id: f.id,
+      version:f.version,
       name: f.name,
       sort: f.sort,
       createdAt: f.createdAt,
@@ -31,30 +33,23 @@ export class FoldersService {
   }
 
   create(userId: string, name: string, sort = 0) {
-    return this.prisma.conversationFolder.create({ data: { userId, name, sort } });
+    return this.prisma.$transaction(async tx=>{await assertConversationActor(tx,userId);return tx.conversationFolder.create({data:{userId,name:name.trim(),sort}});});
   }
 
-  async update(userId: string, id: string, data: { name?: string; sort?: number }) {
-    await this.assertOwner(userId, id);
-    return this.prisma.conversationFolder.update({ where: { id }, data });
+  async update(userId: string, id: string, data: { name?: string; sort?: number;expectedVersion?:number }) {
+    return this.prisma.$transaction(async tx=>{await assertConversationActor(tx,userId);await this.assertOwner(tx,userId,id,data.expectedVersion);return tx.conversationFolder.update({where:{id},data:{version:{increment:1},...(data.name!==undefined?{name:data.name.trim()}:{}),...(data.sort!==undefined?{sort:data.sort}:{})}});});
   }
 
-  async remove(userId: string, id: string) {
-    await this.assertOwner(userId, id);
-    // 分组删除后，会话回到"未分组"，不级联删除会话
-    await this.prisma.conversation.updateMany({
-      where: { folderId: id, userId },
-      data: { folderId: null },
-    });
-    await this.prisma.conversationFolder.delete({ where: { id } });
-    return { ok: true };
+  async remove(userId: string, id: string,expectedVersion?:number) {
+    return this.prisma.$transaction(async tx=>{await assertConversationActor(tx,userId);await this.assertOwner(tx,userId,id,expectedVersion);const moved=await tx.conversation.updateMany({where:{folderId:id,userId},data:{folderId:null,version:{increment:1}}});await tx.conversationFolder.delete({where:{id}});return{ok:true,moved:moved.count};});
   }
 
-  private async assertOwner(userId: string, id: string) {
-    const hit = await this.prisma.conversationFolder.findFirst({
+  private async assertOwner(tx:any,userId: string, id: string,expectedVersion?:number) {
+    const hit = await tx.conversationFolder.findFirst({
       where: { id, userId },
-      select: { id: true },
+      select: { id: true,version:true },
     });
     if (!hit) throw new BusinessException(ErrorCode.NOT_FOUND, '分组不存在', 404);
+    if(expectedVersion!==undefined&&hit.version!==expectedVersion)throw new BusinessException(ErrorCode.FOLDER_CHANGED,'这个分组已变化，请刷新后再操作。',409);return hit;
   }
 }

@@ -60,6 +60,29 @@ async function fixture(grant = { model3Count: 10 }) {
 afterEach(async () => { for (const f of fixtures) { f.service.onModuleDestroy(); for (const control of f.controls) control.release(); await Promise.allSettled(f.pending); } fixtures.clear(); });
 after(async () => { await prisma.$disconnect(); assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep + 'qgauss-chat-accounting-')); rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
 
+test('an older admission keeps a newer saved model choice while billing the submitted model exactly once', async () => {
+  const f=await fixture(),conv=await prisma.conversation.create({data:{userId:f.user.id,title:'原对话'}}),next=await prisma.aiModel.create({data:{name:'next-'+randomUUID(),displayName:'下一轮模型',channels:{create:{upstreamName:'qgauss-next',channel:{create:{name:randomUUID(),type:'MOCK',baseUrl:'mock://local'}}}}}}),entered=defer(),resume=defer();
+  let produced=0;f.service.streamMock=async (_prompt,_system,run,_signal,first)=>{produced++;first();run.emit('delta',{v:'原请求的回答'});return{text:run.content};};
+  f.settings.get=async key=>{if(key==='chat.runDetachedTimeoutMs'){entered.resolve();await resume.promise;}return f.config[key];};
+  const opening=f.start({conversationId:conv.id});await Promise.race([entered.promise,opening.then(()=>{throw Error('request passed the admission gate unexpectedly');}),new Promise((_,reject)=>{const timer=setTimeout(()=>{resume.resolve();reject(Error('admission gate was not reached'));},4000);timer.unref();})]);
+  await f.conversation.update(f.user.id,conv.id,{modelId:next.id,expectedVersion:1});resume.resolve();
+  const request=await opening,meta=request.meta;await request.done;
+  const saved=await prisma.conversation.findUnique({where:{id:conv.id}}),answer=await prisma.message.findUnique({where:{id:meta.messageId}});
+  assert.equal(saved.modelId,next.id);assert.equal(saved.version,3);assert.equal(answer.modelName,f.model.name);assert.equal((await f.view()).used.model3,2);assert.equal(produced,1);
+});
+
+test('admission preserves a renamed and pinned conversation and replay leaves its confirmed history version unchanged', async () => {
+  const f=await fixture(),conv=await prisma.conversation.create({data:{userId:f.user.id,modelId:f.model.id}}),entered=defer(),resume=defer();
+  let produced=0;f.service.streamMock=async (_prompt,_system,run,_signal,first)=>{produced++;first();run.emit('delta',{v:'原请求的回答'});return{text:run.content};};
+  f.settings.get=async key=>{if(key==='chat.runDetachedTimeoutMs'){entered.resolve();await resume.promise;}return f.config[key];};
+  const opening=f.start({conversationId:conv.id,clientMsgId:'same-original-question'});await Promise.race([entered.promise,opening.then(()=>{throw Error('request passed the admission gate unexpectedly');}),new Promise((_,reject)=>{const timer=setTimeout(()=>{resume.resolve();reject(Error('admission gate was not reached'));},4000);timer.unref();})]);
+  await f.conversation.update(f.user.id,conv.id,{title:'本人保存的标题 {count} $&',pinned:true,expectedVersion:1});resume.resolve();
+  const request=await opening;await request.done;
+  const before=await prisma.conversation.findUnique({where:{id:conv.id}});assert.equal(before.title,'本人保存的标题 {count} $&');assert.ok(before.pinnedAt);assert.equal(before.version,3);
+  const replay=await f.start({conversationId:conv.id,clientMsgId:'same-original-question'});await replay.done;const after=await prisma.conversation.findUnique({where:{id:conv.id}});
+  assert.equal(after.version,before.version);assert.equal(after.lastMessageAt.getTime(),before.lastMessageAt.getTime());assert.equal(after.title,before.title);assert.equal(produced,1);assert.equal((await f.view()).used.model3,2);
+});
+
 test('0022 upgrade preserves legacy reply content and status without charging historical answers', () => {
   const file = join(directory, 'legacy.db'), migrations = join(here, '../prisma/migrations'), db = new DatabaseSync(file);
   try {

@@ -336,6 +336,7 @@ model ModelChannel {
 
 model Conversation {
   id            String    @id @default(cuid())
+  version       Int       @default(1)
   userId        String
   modelId       String?
   folderId      String?
@@ -360,6 +361,7 @@ model Conversation {
   @@index([userId, lastMessageAt])
   @@index([userId, appId, lastMessageAt])
   @@index([userId, agentId, lastMessageAt])
+  @@index([userId, deletedAt, pinnedAt, lastMessageAt, id])
   @@map("conversations")
 }
 
@@ -598,6 +600,7 @@ model Menu {
 
 model ConversationFolder {
   id        String   @id @default(cuid())
+  version   Int      @default(1)
   userId    String
   name      String
   sort      Int      @default(0)

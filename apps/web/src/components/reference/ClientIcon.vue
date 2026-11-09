@@ -3,6 +3,8 @@
 import { computed } from 'vue';
 const props = defineProps({ name: String });
 const icons = {
+  check:['M5 12l4 4L19 6'],
+  close:['M6 6l12 12M6 18L18 6'],
   eye:['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z','M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z'],
   mindmap:['M3 8h6v8H3zM15 2h6v6h-6zM15 16h6v6h-6zM9 12h3V5h3M12 12v7h3'],
   folder:['M3 5h6l2 2h10v13H3V5Z'],

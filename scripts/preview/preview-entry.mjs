@@ -130,10 +130,15 @@ Object.assign(fixtures,emailVerificationFixtures(fixtures,installationState));
 if(installationState?.startsWith('creator-')||installationState?.startsWith('review-'))Object.assign(fixtures,appStudioFixtures(installationState));
 if(installationState?.startsWith('voice-library-'))Object.assign(fixtures,voiceLibraryFixtures(installationState));
 if(galleryMode)Object.assign(fixtures,galleryFixtures(installationState));
+import {conversationHistoryFixture} from './conversation-history-fixture.mjs';
 const nativeFetch = window.fetch.bind(window);
 if(imageEditorData){fixtures['/api/image/options'].defaultFeatures=imageEditorData.features;fixtures['/api/image/options'].models=[{id:'qg-editor-model',name:'qgauss-image-editor',displayName:'QGauss 图像搭档',ready:true,features:imageEditorData.features}];}
 window.fetch = async (input, init = {}) => {
   const url = new URL(typeof input?.url==='string'?input.url:String(input), location.href);
+  if(url.origin===location.origin&&['/api/conversations/history','/api/conversations/status'].includes(url.pathname)){
+    const method=init.method||'GET',data=conversationHistoryFixture(fixtures,url,method,typeof init.body==='string'?JSON.parse(init.body):{});
+    if(data!==undefined)return new Response(JSON.stringify({code:0,data}),{status:method==='POST'?201:200,headers:{'Content-Type':'application/json','X-QGauss-Reference-Fixture':'client-preview'}});
+  }
   if(url.origin===location.origin&&!url.pathname.startsWith('/api/'))return nativeFetch(input,init);
   if(installationState?.startsWith('status-')&&url.pathname==='/api/health')return new Response(JSON.stringify({status:installationState==='status-offline'?'unavailable':'ok'}),{status:installationState==='status-offline'?503:200,headers:{'Content-Type':'application/json'}});
   if(imageEditorData&&url.origin===location.origin){const result=await imageEditorData.reply(url,init);if(result)return result;}

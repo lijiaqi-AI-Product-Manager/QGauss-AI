@@ -1,111 +1,9 @@
 <template>
   <Teleport defer to="#qg-chat-history">
-    <!-- 左：会话列表 -->
-    <aside class="cv-convs qg-glass" :class="{ open: convOpen }" :aria-label="t('history.list')">
-      <div class="cv-convs-head">
-        <button type="button" class="cv-new" :title="t('history.newShortcut')" @click="newChat">
-          <el-icon><Plus /></el-icon>
-          <span>{{ t('history.start') }}</span>
-        </button>
-        <button
-          type="button"
-          class="qg-icon-btn"
-          :class="{ 'cv-on': searchOpen }"
-          :title="t('history.search')"
-          :aria-label="t('history.search')"
-          @click="searchOpen = !searchOpen"
-        >
-          <el-icon><Search /></el-icon>
-        </button>
-      </div>
-      <div v-if="searchOpen" class="cv-search">
-        <el-icon class="cv-search-icon"><Search /></el-icon>
-        <input v-model="convKeyword" :placeholder="t('history.search')" :aria-label="t('history.searchLabel')" />
-      </div>
-      <div class="qgc-history-tabs" role="tablist" :aria-label="t('history.kinds')"><button type="button" role="tab" :aria-selected="conversationKind === 'chat'" @click="conversationKind = 'chat'">{{ t('history.chat') }}</button><button type="button" role="tab" :aria-selected="conversationKind === 'app'" @click="conversationKind = 'app'">{{ t('history.app') }}</button><button type="button" role="tab" :aria-selected="conversationKind === 'agent'" @click="conversationKind = 'agent'">{{ t('history.agent') }}</button></div>
-      <div v-if="folders.length" class="cv-folders" role="tablist" :aria-label="t('history.folders')">
-        <button type="button" class="cv-folder" :class="{ active: folderFilter === '' }" @click="folderFilter = ''">{{ t('history.all') }}</button>
-        <button
-          v-for="f in folders"
-          :key="f.id"
-          type="button"
-          class="cv-folder"
-          :class="{ active: folderFilter === f.id }"
-          @click="folderFilter = f.id"
-          @dblclick="renameFolder(f)"
-        >{{ f.name }} <span class="cv-folder-n">{{ f.conversationCount }}</span></button>
-      </div>
-      <div v-if="activeFolder" class="cv-folder-bar">
-        <span>{{ t('history.folder', {name:activeFolder.name}) }}</span>
-        <button type="button" class="cv-link" @click="renameFolder(activeFolder)">{{ t('history.rename') }}</button>
-        <button type="button" class="cv-link danger" @click="removeFolder(activeFolder)">{{ t('history.deleteFolder') }}</button>
-      </div>
-      <div class="cv-convs-list">
-        <template v-if="loadingConvs">
-          <div v-for="n in 6" :key="n" class="qg-skeleton cv-conv-skel"></div>
-        </template>
-        <template v-for="group in convGroups" :key="group.key">
-          <div class="cv-group">{{ group.label }}</div>
-          <div
-            v-for="c in group.items"
-            :key="c.id"
-            class="cv-conv"
-            :class="{ active: !selecting && c.id === conversationId, picked: selecting && selected.includes(c.id) }"
-            role="button"
-            tabindex="0"
-            @click="onConvClick(c)"
-            @keydown.enter.prevent="onConvClick(c)"
-          >
-            <span v-if="selecting" class="cv-check" aria-hidden="true">
-              <el-icon v-if="selected.includes(c.id)"><Check /></el-icon>
-            </span>
-            <span class="cv-conv-title" :title="c.title">{{ c.title || t('chat.new') }}</span><span v-if="c.activeMessageId" class="qgd-run-badge" role="status">{{ t(c.activeMessageStatus === 'SETTLING' ? 'history.settling' : 'history.generating') }}</span>
-            <el-icon v-if="c.pinned && !selecting" class="cv-pin-mark" :title="t('history.pinned')"><StarFilled /></el-icon>
-            <span v-if="!selecting" class="cv-conv-ops" @click.stop>
-              <el-dropdown trigger="click" size="small" @command="(cmd) => onConvCommand(c, cmd)">
-                <button type="button" class="cv-op" :title="t('history.more')" :aria-label="t('history.actions')">
-                  <el-icon><MoreFilled /></el-icon>
-                </button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="pin">{{ t(c.pinned ? 'history.unpin' : 'history.pin') }}</el-dropdown-item>
-                    <el-dropdown-item command="rename">{{ t('history.rename') }}</el-dropdown-item>
-                    <el-dropdown-item
-                      v-for="f in folders"
-                      :key="f.id"
-                      :command="`move:${f.id}`"
-                      :disabled="c.folderId === f.id"
-                    >{{ t('history.moveTo', {name:f.name}) }}</el-dropdown-item>
-                    <el-dropdown-item v-if="c.folderId" command="unfolder">{{ t('history.unfolder') }}</el-dropdown-item>
-                    <el-dropdown-item command="newfolder">{{ t('history.newFolder') }}</el-dropdown-item>
-                    <el-dropdown-item command="delete" divided>{{ t('history.delete') }}</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </span>
-          </div>
-        </template>
-        <div v-if="!loadingConvs && conversations.length === 0" class="qgc-history-empty"><QBot mood="sleep" :size="45" /><b>{{ t('history.empty') }}</b><small>{{ t(auth.isLoggedIn ? 'history.emptySignedIn' : 'history.emptyGuest') }}</small></div>
-        <QEmpty v-else-if="!loadingConvs && convGroups.length === 0" compact mood="sleep" :title="t('history.noMatch')" :desc="t('history.trySearch')" />
-      </div>
-      <div v-if="selecting" class="cv-bulk">
-        <div class="cv-bulk-info">
-          <span>{{ t('history.selected', {count:selected.length}) }}</span>
-          <button type="button" class="cv-link" @click="toggleSelectAll">
-            {{ t(selected.length && selected.length === visibleConvIds.length ? 'history.deselectAll' : 'history.selectAll') }}
-          </button>
-        </div>
-        <div class="cv-bulk-actions">
-          <el-button size="small" type="danger" plain :disabled="!selected.length" @click="bulkDelete({ ids: selected })">
-            {{ t('history.deleteSelected') }}
-          </el-button>
-          <el-button size="small" plain @click="bulkDelete({ unpinnedOnly: true })">{{ t('history.clearUnpinned') }}</el-button>
-        </div>
-      </div>
-      <div class="qgc-history-operations"><button type="button" @click="toggleSelecting">{{ t(selecting ? 'history.exitManage' : 'history.manage') }}</button><button type="button" :disabled="!visibleUnpinnedIds.length" @click="bulkDelete({ unpinnedOnly: true })">{{ t('history.clearUnpinnedShort') }}</button><button type="button" @click="createFolder">{{ t('history.folders') }}</button><button type="button" @click="router.push('/apps')">{{ t('shell.apps') }}</button></div>
-    </aside>
+    <ConversationShelf :key="auth.identityRevision" :open="convOpen" :authenticated="auth.isLoggedIn" :trash="historyTrash" :groups="convGroups" :folders="folders" :folder-counts="history.folderCounts.value" :kind-counts="history.kindCounts.value" :folder="folderFilter" :query="convKeyword" :kind="conversationKind" :active-id="conversationId" :selected="selected" :selecting="selecting" :all-selected="allVisibleSelected" :loading="loadingConvs" :loading-more="history.loadingMore.value" :busy="history.busy.value" :error="history.notice.value" :total="history.total.value" :loaded="conversations.length" :unpinned-total="history.unpinnedTotal.value" :has-more="history.hasMore.value"
+      @start="newChat" @query="value=>convKeyword=value" @kind="value=>conversationKind=value" @folder="value=>folderFilter=value" @trash="value=>historyTrash=value" @folder-command="onFolderCommand" @refresh="refreshHistory" @more="history.more" @choose="onConvClick" @command="onConvCommand" @restore="restoreConversation" @manage="toggleSelecting" @select-all="toggleSelectAll" @remove-selected="bulkDelete({ids:selected})" @clear-unpinned="bulkDelete({unpinnedOnly:true})" @add-folder="createFolder" @apps="router.push('/apps')"/>
   </Teleport>
-  <EmptyChat v-if="!draftStarted && !conversationId" :models="models" :recent="conversations" @start="newChat" @open="openConversation" @voice="openHomeVoice" />
+  <EmptyChat v-if="!draftStarted && !conversationId" :models="models" :recent="historyTrash ? [] : conversations" @start="newChat" @open="openConversation" @voice="openHomeVoice" />
   <div v-else class="cv qgc-chat" :class="{ 'cv-immersive': immersive, 'is-new-chat': messages.length === 0 && !loadingDetail }">
     <!-- 中：对话主区 -->
     <section class="cv-main">
@@ -368,6 +266,9 @@ import AgentRunPanel from '../components/design/AgentRunPanel.vue';
 import PersonalFileLibrary from '../components/design/PersonalFileLibrary.vue';
 import {usePersonalFiles} from '../composables/usePersonalFiles.js';
 import {useChatAttachments} from '../composables/useChatAttachments.js';
+import {useConversationWorkspace} from '../composables/useConversationWorkspace.js';
+import {conversationGroups} from '../lib/conversation-history.js';
+import ConversationShelf from '../components/design/ConversationShelf.vue';
 import ComposerAttachmentTray from '../components/design/ComposerAttachmentTray.vue';
 import BrandLoader from '../components/design/BrandLoader.vue';
 import {agentQuote,agentRunReport} from '../lib/agent-presentation.js';
@@ -401,12 +302,15 @@ const router = useRouter();
 const { refresh: refreshBalance } = useBalance();
 const { immersive, clientNavigationOpen, clientChatTitle, chatActivity } = useUi();
 
-const conversations = ref([]);
+const auth = useAuth();
+const conversationKind = ref('chat'), convKeyword = ref(''), folderFilter = ref(''), historyTrash = ref(false);
+const history = useConversationWorkspace({auth,kind:conversationKind,query:convKeyword,folder:folderFilter,trash:historyTrash});
+const conversations = history.items, folders = history.folders, loadingConvs = history.loading;
+const currentConversationTitle = ref(''), currentConversationVersion = ref(null);
 const conversationId = ref(null);
 let conversationViewRevision = 0;
 const draftStarted = ref(!!route.query.agent);
-const searchOpen = ref(false);
-const conversationKind = ref('chat');
+
 const messages = ref([]);
 const models = ref([]);
 const presets = ref([]);
@@ -441,10 +345,10 @@ const appName = ref('');
 const appIcon=ref('');
 const appVersion=ref(null),appLoading=ref(false),appError=ref('');let appRead=null;
 const agentId=ref(String(route.query.agent||'')),currentAgent=ref(null),agentLoading=ref(!!route.query.agent),agentError=ref('');let agentRead=null;
-const activeTitle = computed(() => !draftStarted.value && !conversationId.value ? '' : conversations.value.find(c => c.id === conversationId.value)?.title || currentAgent.value?.name || appName.value || (currentLang.value === 'en' ? 'New chat' : currentLang.value === 'zh-TW' ? '新對話' : '新对话'));
+const activeTitle = computed(() => !draftStarted.value && !conversationId.value ? '' : conversations.value.find(c => c.id === conversationId.value)?.title || currentConversationTitle.value || currentAgent.value?.name || appName.value || (currentLang.value === 'en' ? 'New chat' : currentLang.value === 'zh-TW' ? '新對話' : '新对话'));
 watch(activeTitle, value => { clientChatTitle.value = value; }, { immediate: true });
 const convOpen = ref(false);
-const loadingConvs = ref(true);
+
 const loadingDetail = ref(false);
 const atBottom = ref(true);
 const composerFocus = ref(false);
@@ -454,7 +358,7 @@ const webSearchOn = ref(false);
 let controller = null;
 let streamRevision = 0;
 let activeRun = null;
-let conversationListRevision = 0;
+
 let finishNoticeTimer = null;
 let historyPoll = null;
 const stopping = ref(false);
@@ -579,7 +483,7 @@ const flatPresets = computed(() =>
   presets.value.flatMap((g) => (g.items || []).map((it) => ({ ...it, group: g.name }))),
 );
 
-const auth = useAuth();
+
 
 /* ---------------- 情绪化：极光随状态变色，角色随状态换表情 ---------------- */
 const finishedAt = ref(0);
@@ -618,219 +522,116 @@ function toggleContext() {
   }
 }
 
-/* ---------------- 会话列表：搜索 + 分组（置顶 / 今天 / 昨天 / 7 天内 / 更早） ---------------- */
-const convKeyword = ref('');
+/* ---------------- 会话档案与整理 ---------------- */
+const selecting = ref(false), selected = ref([]);
+const convGroups = computed(() => conversationGroups(conversations.value, {pinned:t('history.pin'),today:t('history.today'),yesterday:t('history.yesterday'),week:t('history.week'),earlier:t('history.earlier')}, history.clock.value, historyTrash.value));
+const visibleConvIds = computed(() => conversations.value.map(row=>row.id));
+const allVisibleSelected = computed(() => visibleConvIds.value.length>0 && visibleConvIds.value.every(id=>selected.value.includes(id)));
+watch(history.key,()=>{selected.value=[];selecting.value=false;ElMessageBox.close();});
+watch(visibleConvIds,ids=>{const visible=new Set(ids);selected.value=selected.value.filter(id=>visible.has(id));});
 
-/* 用户自建分组（folder）：作为筛选维度，与按日期分组正交 */
-const folders = ref([]);
-const folderFilter = ref('');
-const activeFolder = computed(() => folders.value.find((f) => f.id === folderFilter.value) || null);
-
-async function loadFolders() {
-  const identity=auth.identityRevision;
-  const rows = await api.get('/folders').catch(() => folders.value);
-  if(!viewActive||!auth.isLoggedIn||identity!==auth.identityRevision)return;
-  folders.value=rows;
-  if (folderFilter.value && !folders.value.some((f) => f.id === folderFilter.value)) folderFilter.value = '';
+async function refreshHistory(){
+  const reconcile=!!history.actionError.value,id=conversationId.value,identity=auth.identityRevision,view=conversationViewRevision;
+  const refreshed=await history.refresh({force:true});
+  if(!refreshed||!reconcile||!id||!viewActive||!auth.isLoggedIn||auth.identityRevision!==identity||conversationViewRevision!==view)return refreshed;
+  try{
+    const result=await api.post('/conversations/status',{ids:[id],scope:'trash'});
+    if(viewActive&&auth.isLoggedIn&&auth.identityRevision===identity&&conversationViewRevision===view&&conversationId.value===id&&result?.items?.some(row=>row.id===id&&row.deletedAt))leaveArchivedConversation();
+  }catch{if(viewActive&&auth.identityRevision===identity&&conversationViewRevision===view)history.actionError.value='操作结果暂未确认，请刷新查看。';}
+  return refreshed;
 }
-
-async function createFolder() {
-  if (!auth.isLoggedIn) return newChat();
-  const name = await askFolderName(ct("新建分组"));
-  if (!name) return;
-  try { await api.post('/folders', { name }); await loadFolders(); }
-  catch (error) { ElMessage.error(ct(error.message || ct("新建分组失败"))); }
-}
-
-async function askFolderName(title, initial = '') {
-  try {
-    const { value } = await ElMessageBox.prompt(ct("分组名称"), ct(title), {
-      inputValue: initial,
-      inputValidator: (v) => (v.trim().length > 0 && v.trim().length <= 32) || ct("名称 1–32 个字"),
-      confirmButtonText: ct("保存"),
-      cancelButtonText: ct("取消"),
-    });
-    return value.trim();
-  } catch {
-    return null;
-  }
-}
-
-async function renameFolder(f) {
-  const name = await askFolderName(ct("重命名分组"), f.name);
-  if (!name) return;
-  try {
-    await api.patch(`/folders/${f.id}`, { name });
-    await loadFolders();
-  } catch (e) {
-    ElMessage.error(ct(e?.message || ct("重命名失败")));
-  }
-}
-
-async function removeFolder(f) {
-  try {
-    await ElMessageBox.confirm(ct("删除分组「{p0}」？其中的会话会回到未分组，不会被删除。",{p0:(f.name)}), ct("删除分组"), {
-      type: 'warning',
-      confirmButtonText: ct("删除"),
-      cancelButtonText: ct("取消"),
-    });
-  } catch {
-    return;
-  }
-  try {
-    await api.del(`/folders/${f.id}`);
-    folderFilter.value = '';
-    await Promise.all([loadFolders(), loadConversations()]);
-  } catch (e) {
-    ElMessage.error(ct(e?.message || ct("删除失败")));
-  }
-}
-
-async function moveToFolder(c, folderId) {
-  try {
-    await api.patch(`/conversations/${c.id}`, { folderId });
-    c.folderId = folderId;
-    await loadFolders();
-  } catch (e) {
-    ElMessage.error(ct(e?.message || ct("移动失败")));
-  }
-}
-
-async function onConvCommand(c, cmd) {
-  if (cmd === 'pin') return togglePin(c);
-  if (cmd === 'rename') return renameConversation(c);
-  if (cmd === 'delete') return removeConversation(c);
-  if (cmd === 'unfolder') return moveToFolder(c, null);
-  if (cmd.startsWith('move:')) return moveToFolder(c, cmd.slice(5));
-  if (cmd === 'newfolder') {
-    const name = await askFolderName(ct("新建分组"));
-    if (!name) return;
-    try {
-      const folder = await api.post('/folders', { name });
-      await moveToFolder(c, folder.id);
-    } catch (e) {
-      ElMessage.error(ct(e?.message || ct("新建分组失败")));
+async function withHistoryAction(work){
+  if(!auth.isLoggedIn)return newChat();
+  const action=history.beginAction();if(!action)return;
+  try{return await work(action);}catch(error){
+    if(action.current()&&!['cancel','close'].includes(error)){
+      if(!history.actionError.value)history.actionError.value='操作结果暂未确认，请刷新查看。';
+      ElMessage.error(ct(history.actionError.value));
     }
-  }
+  }finally{history.finishAction(action);}
 }
-
-const convGroups = computed(() => {
-  const kw = convKeyword.value.trim().toLowerCase();
-  const list = conversations.value.filter(
-    (c) =>
-      (conversationKind.value === 'agent' ? !!c.agentId : conversationKind.value === 'app' ? !!c.appId&&!c.agentId : !c.appId&&!c.agentId) &&
-      (!folderFilter.value || c.folderId === folderFilter.value) &&
-      (!kw || (c.title || '').toLowerCase().includes(kw)),
-  );
-  const groups = [
-    { key: 'pinned', label: t('history.pin'), items: [] },
-    { key: 'today', label: t('history.today'), items: [] },
-    { key: 'yesterday', label: t('history.yesterday'), items: [] },
-    { key: 'week', label: t('history.week'), items: [] },
-    { key: 'earlier', label: t('history.earlier'), items: [] },
-  ];
-  const byKey = new Map(groups.map((g) => [g.key, g]));
-  // 按自然日分组，而不是「距今 24 小时」：昨晚 11 点的会话应当算昨天
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-  const today0 = startOfToday.getTime();
-  const DAY = 86_400_000;
-  for (const c of list) {
-    let key;
-    if (c.pinned) key = 'pinned';
-    else if (!c.lastMessageAt) key = 'today';
-    else {
-      const ts = new Date(c.lastMessageAt).getTime();
-      key = ts >= today0 ? 'today' : ts >= today0 - DAY ? 'yesterday' : ts >= today0 - 6 * DAY ? 'week' : 'earlier';
+async function askFolderName(title, initial=''){
+  const {value}=await ElMessageBox.prompt(ct('分组名称'),ct(title),{inputValue:initial,inputValidator:value=>(typeof value==='string'&&value.trim().length>0&&value.trim().length<=32)||ct('名称 1–32 个字'),confirmButtonText:ct('保存'),cancelButtonText:ct('取消')});
+  return value.trim();
+}
+async function createFolder(moveConversation){
+  return withHistoryAction(async action=>{
+    const name=await askFolderName('新建分组');if(!action.current())return;
+    const folder=await history.request(action,'post','/folders',{name});if(!folder||!action.current())return;
+    if(typeof folder.id!=='string'||!Number.isInteger(folder.version))throw Error('folder-response');
+    if(moveConversation){await history.request(action,'patch','/conversations/'+encodeURIComponent(moveConversation.id),{folderId:folder.id,expectedVersion:moveConversation.version});if(!action.current())return;}
+    await refreshHistory();
+  });
+}
+async function onFolderCommand(folder,command){
+  return withHistoryAction(async action=>{
+    if(command==='rename'){
+      const name=await askFolderName('重命名分组',folder.name);if(!action.current())return;
+      const result=await history.request(action,'patch','/folders/'+encodeURIComponent(folder.id),{name,expectedVersion:folder.version});if(!result||!action.current())return;
+    }else{
+      await ElMessageBox.confirm(ct('删除分组「{p0}」？其中的会话会回到未分组，不会被删除。',{p0:folder.name}),ct('删除分组'),{type:'warning',confirmButtonText:ct('删除'),cancelButtonText:ct('取消')});
+      if(!action.current())return;
+      const result=await history.request(action,'del','/folders/'+encodeURIComponent(folder.id),{expectedVersion:folder.version});if(!result||!action.current())return;
+      if(folderFilter.value===folder.id)folderFilter.value='';
     }
-    byKey.get(key).items.push(c);
-  }
-  return groups.filter((g) => g.items.length > 0);
-});
-
-async function togglePin(c) {
-  const pinned = !c.pinned;
-  c.pinned = pinned; // 乐观更新，失败再回滚
-  try {
-    await api.patch(`/conversations/${c.id}`, { pinned });
-    await loadConversations();
-  } catch (e) {
-    c.pinned = !pinned;
-    ElMessage.error(ct(e?.message || ct("置顶失败")));
-  }
+    await refreshHistory();
+  });
 }
-
-/* ---------------- 批量管理 ---------------- */
-const selecting = ref(false);
-const selected = ref([]);
-const visibleConvIds = computed(() => convGroups.value.flatMap((g) => g.items.map((c) => c.id)));
-const visibleUnpinnedIds = computed(() => convGroups.value.flatMap((g) => g.items.filter((c) => !c.pinned).map((c) => c.id)));
-
-function toggleSelecting() {
-  if (!auth.isLoggedIn) return newChat();
-  selecting.value = !selecting.value;
-  selected.value = [];
+async function updateConversation(row,changes,action){
+  const result=await history.request(action,'patch','/conversations/'+encodeURIComponent(row.id),{...changes,expectedVersion:row.version});if(!result||!action.current())return;
+  if(conversationId.value===row.id){if(changes.title)currentConversationTitle.value=changes.title;currentConversationVersion.value=result.version;}
+  await refreshHistory();
 }
-
-function onConvClick(c) {
-  if (!selecting.value) return openConversation(c.id);
-  selected.value = selected.value.includes(c.id)
-    ? selected.value.filter((id) => id !== c.id)
-    : [...selected.value, c.id];
+async function onConvCommand(row,command){
+  if(command==='delete')return removeConversation(row);
+  if(command==='newfolder')return createFolder(row);
+  return withHistoryAction(async action=>{
+    if(command==='rename'){
+      const {value}=await ElMessageBox.prompt(ct('新的会话标题'),ct('重命名'),{inputValue:row.title,inputValidator:value=>(typeof value==='string'&&value.trim().length>0&&value.trim().length<=60)||ct('标题 1–60 个字'),confirmButtonText:ct('保存'),cancelButtonText:ct('取消')});
+      if(action.current())await updateConversation(row,{title:value.trim()},action);
+    }else if(command==='pin')await updateConversation(row,{pinned:!row.pinned},action);
+    else if(command==='unfolder'||command.startsWith('move:'))await updateConversation(row,{folderId:command==='unfolder'?null:command.slice(5)},action);
+  });
 }
-
-function toggleSelectAll() {
-  const all = visibleConvIds.value;
-  selected.value = selected.value.length === all.length ? [] : [...all];
+function toggleSelecting(){if(!auth.isLoggedIn)return newChat();selecting.value=!selecting.value;selected.value=[];}
+function onConvClick(row){
+  if(historyTrash.value)return restoreConversation(row);
+  if(!selecting.value)return openConversation(row.id);
+  if(!selected.value.includes(row.id)&&selected.value.length>=500)return ElMessage.info(ct('一次最多选择 500 段对话，请分批整理。'));
+  selected.value=selected.value.includes(row.id)?selected.value.filter(id=>id!==row.id):[...selected.value,row.id];
 }
-
-async function bulkDelete(body) {
-  if (!auth.isLoggedIn) return newChat();
-  // 分类、搜索和分组后的清理只提交可见 ID，不能误删另一个历史标签页。
-  const request = { ids: body.unpinnedOnly ? [...visibleUnpinnedIds.value] : [...body.ids] };
-  if (!request.ids.length) return;
-  const text = body.unpinnedOnly ? ct("删除当前列表中 {p0} 个未置顶的会话？置顶会话会保留。",{p0:(request.ids.length)}) : ct("删除选中的 {p0} 个会话？",{p0:(request.ids.length)});
-  try {
-    await ElMessageBox.confirm(text, ct("批量删除"), { type: 'warning', confirmButtonText: ct("删除"), cancelButtonText: ct("取消") });
-  } catch {
-    return;
-  }
-  try {
-    const { count } = await api.post('/conversations/bulk-delete', request);
-    ElMessage.success(ct("已删除 {p0} 个会话",{p0:(count)}));
-    await loadConversations();
-    if (conversationId.value && !conversations.value.some((c) => c.id === conversationId.value)) newChat();
-    selected.value = [];
-    selecting.value = false;
-  } catch (e) {
-    ElMessage.error(ct(e?.message || ct("删除失败")));
-  }
+function toggleSelectAll(){const ids=visibleConvIds.value;if(ids.length>500)return ElMessage.info(ct('一次最多选择 500 段对话，请分批整理。'));selected.value=allVisibleSelected.value?[]:[...ids];}
+function leaveArchivedConversation(){
+  changeConversationView({keepDraft:true});conversationId.value=null;currentConversationTitle.value='';currentConversationVersion.value=null;messages.value=[];historicalModel.value=null;branchChoice.value={};draftStarted.value=true;loadingDetail.value=false;
+  nextTick(autosize);
 }
-
-async function renameConversation(c) {
-  let value;
-  try {
-    ({ value } = await ElMessageBox.prompt(ct("新的会话标题"), ct("重命名"), {
-      inputValue: c.title || '',
-      inputValidator: (v) => (v.trim().length > 0 && v.trim().length <= 60) || ct("标题 1–60 个字"),
-      confirmButtonText: ct("保存"),
-      cancelButtonText: ct("取消"),
-    }));
-  } catch {
-    return;
-  }
-  try {
-    await api.patch(`/conversations/${c.id}`, { title: value.trim() });
-    c.title = value.trim();
-  } catch (e) {
-    ElMessage.error(ct(e?.message || ct("重命名失败")));
-  }
+async function bulkDelete(body){
+  if(historyTrash.value)return;
+  return withHistoryAction(async action=>{
+    const input={...history.filter.value,mode:body.unpinnedOnly?'unpinned':'selected'};
+    if(!body.unpinnedOnly){input.targets=selected.value.map(id=>conversations.value.find(row=>row.id===id)).filter(Boolean).map(row=>({id:row.id,expectedVersion:row.version}));if(!input.targets.length)return;}
+    const preview=await history.request(action,'post','/conversations/bulk-preview',input);if(!preview||!action.current())return;
+    if(!Number.isInteger(preview.count)||preview.count<0||!Number.isInteger(preview.activeCount)||typeof preview.confirmation!=='string')throw Error('preview-response');
+    if(!preview.count)return ElMessage.info(ct('当前条件下没有可整理的对话。'));
+    const text=ct('将 {count} 段对话移到回收站？可以在回收站恢复，原消息和记录会保留。',{count:preview.count})+(body.unpinnedOnly?' '+ct('本次覆盖当前筛选的全部页数，置顶对话会保留。'):'')+(preview.pinnedCount?' '+ct('其中包含 {count} 段置顶对话。',{count:preview.pinnedCount}):'')+(preview.activeCount?' '+ct('其中 {count} 段仍在生成，移入后会停止。',{count:preview.activeCount}):'');
+    await ElMessageBox.confirm(text,ct('移到对话回收站'),{type:'warning',confirmButtonText:ct('移入回收站'),cancelButtonText:ct('取消')});if(!action.current())return;
+    const result=await history.request(action,'post','/conversations/bulk-delete',{preview:{...input,confirmation:preview.confirmation}});if(!result||!action.current())return;
+    if(!Array.isArray(result.removedIds)||result.count!==result.removedIds.length||new Set(result.removedIds).size!==result.count)throw Error('removal-response');
+    if(result.removedIds.includes(conversationId.value))leaveArchivedConversation();
+    selected.value=[];selecting.value=false;ElMessage.success(ct('已将 {count} 段对话移入回收站。',{count:result.count}));await refreshHistory();
+  });
+}
+async function restoreConversation(row){
+  return withHistoryAction(async action=>{
+    const result=await history.request(action,'post','/conversations/'+encodeURIComponent(row.id)+'/restore',{expectedVersion:row.version});if(!result||!action.current())return;
+    ElMessage.success(ct('对话已恢复，可在原分类继续阅读。'));await refreshHistory();
+  });
 }
 
 /** 导出当前可见分支为 Markdown 文件（纯前端，不经服务端） */
 function exportMarkdown() {
   const conv = conversations.value.find((c) => c.id === conversationId.value);
-  const title = conv?.title || ct('对话');
+  const title = conv?.title || currentConversationTitle.value || ct('对话');
   const lines = [`# ${title}`, '', ct('> 导出时间：{date} · 模型：{model}',{date:new Date().toLocaleString(chatLocale()),model:currentModel.value?.displayName||model.value}), ''];
   for (const m of visibleMessages.value) {
     if (!m.content) continue;
@@ -847,23 +648,14 @@ function exportMarkdown() {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function removeConversation(c) {
-  try {
-    await ElMessageBox.confirm(ct("删除会话「{p0}」？删除后不可恢复。",{p0:(c.title || ct("新对话"))}), ct("删除会话"), {
-      type: 'warning',
-      confirmButtonText: ct("删除"),
-      cancelButtonText: ct("取消"),
-    });
-  } catch {
-    return;
-  }
-  try {
-    await api.del(`/conversations/${c.id}`);
-    if (c.id === conversationId.value) newChat();
-    await loadConversations();
-  } catch (e) {
-    ElMessage.error(ct(e?.message || ct("删除失败")));
-  }
+async function removeConversation(row){
+  return withHistoryAction(async action=>{
+    const text=ct('把「{name}」移到回收站？原消息和记录会保留，可随时恢复。',{name:row.title||t('chat.new')})+(row.activeMessageId?' '+ct('这段对话仍在生成，移入后会停止。'):'');
+    await ElMessageBox.confirm(text,ct('移到对话回收站'),{type:'warning',confirmButtonText:ct('移入回收站'),cancelButtonText:ct('取消')});if(!action.current())return;
+    const result=await history.request(action,'post','/conversations/'+encodeURIComponent(row.id)+'/trash',{expectedVersion:row.version});if(!result||!action.current())return;
+    if(row.id===conversationId.value)leaveArchivedConversation();
+    ElMessage.success(ct('对话已移入回收站，未发送的草稿会保留。'));await refreshHistory();
+  });
 }
 
 /* ---------------- 模型面板 ---------------- */
@@ -884,7 +676,9 @@ async function selectModel(m) {
   modelSaving.value = true;
   try {
     if (selectedConversation && m.name !== model.value) {
-      await api.patch(`/conversations/${selectedConversation}`, { modelId: m.id });
+      const row=conversations.value.find(item=>item.id===selectedConversation),expectedVersion=Math.max(row?.version||0,currentConversationVersion.value||0)||undefined;
+      const result=await api.patch(`/conversations/${selectedConversation}`, { modelId: m.id,expectedVersion });
+      if(isCurrent()&&Number.isInteger(result?.version)){currentConversationVersion.value=result.version;if(row)row.version=result.version;}
     }
     if (!isCurrent()) return;
     model.value = m.name;
@@ -899,8 +693,8 @@ async function selectModel(m) {
   }
 }
 
-function changeConversationView() {
-  attachmentPreparationRevision++;preparingSend.value=false;historyAttachmentRead?.abort();historyAttachmentRead=null;attachmentQueue.clear();
+function changeConversationView({keepDraft=false}={}) {
+  attachmentPreparationRevision++;preparingSend.value=false;historyAttachmentRead?.abort();historyAttachmentRead=null;if(keepDraft)attachmentQueue.cancelCheck();else attachmentQueue.clear();
   entryRead?.abort();entryRead=null;entryPending.value=false;entryError.value='';
   appRead?.abort();appRead=null;appLoading.value=false;
   voice.reset();
@@ -952,13 +746,7 @@ function onEnter(e) {
 }
 
 /* ---------------- 数据加载 ---------------- */
-async function loadConversations() {
-  const listRevision = ++conversationListRevision;
-  const sessionRevision = auth.sessionRevision;
-  const current = () => viewActive && auth.isLoggedIn && auth.sessionRevision === sessionRevision && listRevision === conversationListRevision;
-  try { const rows = await api.get('/conversations'); if (current()) conversations.value = rows; }
-  finally { if (current()) loadingConvs.value = false; }
-}
+async function loadConversations(){return history.refresh({force:true});}
 
 async function loadMeta() {
   const identity=auth.identityRevision;
@@ -983,6 +771,8 @@ function newChat(seed) {
   draftStarted.value = true;
   clientNavigationOpen.value = false;
   conversationId.value = null;
+  currentConversationTitle.value = '';
+  currentConversationVersion.value = null;
   historicalModel.value = null;
   if (!models.value.some(item => item.name === model.value && item.ready)) model.value = models.value.find(item => item.ready)?.name || '';
   messages.value = [];
@@ -1039,7 +829,7 @@ async function initializeChat(){
  if(!auth.isLoggedIn){loadingConvs.value=false;if(entryKeys.some(key=>route.query[key]!==undefined))void router.replace({path:'/login',query:{redirect:route.fullPath}});return;}
  if(route.query.new==='1'){newChat(takeGuestDraft());const query={...route.query};delete query.new;void router.replace({path:route.path,query});}
  const identity=auth.identityRevision,opening=applyRouteEntry(),view=conversationViewRevision,choice=modelSelectionRevision;
- const results=await Promise.allSettled([loadConversations(),loadMeta(),loadFolders(),opening]);
+ const results=await Promise.allSettled([loadConversations(),loadMeta(),opening]);
  if(!viewActive||!auth.isLoggedIn||auth.identityRevision!==identity||view!==conversationViewRevision)return;
  if(route.path==='/agent/chat'&&!agentId.value){void router.replace('/agent');return;}
  if(route.query.model&&!route.query.conversation&&!agentId.value&&choice===modelSelectionRevision)applyModelParam(route.query.model);
@@ -1074,6 +864,8 @@ async function openConversation(id,{fromEntry=false}={}) {
     const detail = await api.get(`/conversations/${id}`);
     if (!isCurrent()) return;
     conversationId.value = detail.id;
+    currentConversationTitle.value = detail.title || '';
+    currentConversationVersion.value = detail.version || null;
     clearApp();appId.value = detail.appId || '';
     appName.value = detail.app?.name || '';
     appIcon.value=detail.app?.icon||'';
@@ -1454,9 +1246,9 @@ function stop() {
 /* ---------------- 生命周期 ---------------- */
 let viewActive = true;
 watch(()=>auth.identityRevision,()=>{
-  changeConversationView();conversationListRevision+=1;webSearchOn.value=false;
-  conversationId.value=null;messages.value=[];conversations.value=[];historicalModel.value=null;branchChoice.value={};
-  models.value=[];presets.value=[];folders.value=[];folderFilter.value='';selected.value=[];
+  ElMessageBox.close();history.clear();changeConversationView();webSearchOn.value=false;
+  conversationId.value=null;currentConversationTitle.value='';currentConversationVersion.value=null;messages.value=[];historicalModel.value=null;branchChoice.value={};
+  models.value=[];presets.value=[];selected.value=[];selecting.value=false;
   model.value='';input.value='';pendingFiles.value=[];clearApp();agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';agentLoading.value=false;draftStarted.value=false;
   loadingConvs.value=false;loadingDetail.value=false;quota.value={limit:0,used:0};
   for(const url of objectUrls)URL.revokeObjectURL(url);objectUrls.clear();for(const key of Object.keys(thumbs))delete thumbs[key];
@@ -1464,7 +1256,7 @@ watch(()=>auth.identityRevision,()=>{
 });
 async function refreshBackgroundState() {
   if (!viewActive || !auth.isLoggedIn || document.hidden) return;
-  await loadConversations().catch(() => {});
+  await history.refreshStatus();
   if (!viewActive || !auth.isLoggedIn || activeRun || loadingDetail.value || !conversationId.value) return;
   const pending = visibleMessages.value.findLast(item => item.role === 'assistant' && ['PENDING', 'STREAMING', 'SETTLING'].includes(item.status));
   if (pending) void streamInto(null, pending, pending.serverId);

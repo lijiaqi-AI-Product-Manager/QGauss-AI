@@ -6,6 +6,7 @@ import { ChatService } from '../chat/chat.service';
 import { messageBilling } from '../chat/chat-accounting.service';
 import { safeWebSearch } from '../../common/llm/web-search';
 import { publicAgentActivity } from '../../common/llm/agent-activity';
+import {assertConversationActor,ownedConversation,conversationSummary,conversationSummaryInclude} from './conversation-state';
 
 @Injectable()
 export class ConversationsService {
@@ -14,36 +15,21 @@ export class ConversationsService {
   async list(userId: string) {
     const rows = await this.prisma.conversation.findMany({
       where: { userId, deletedAt: null },
-      orderBy: [{ pinnedAt: 'desc' }, { lastMessageAt: 'desc' }],
+      orderBy: [{ pinnedAt: 'desc' }, { lastMessageAt: 'desc' },{id:'desc'}],
       take: 100,
-      include: { _count: { select: { messages: { where: { deletedAt: null } } } }, app: { select: conversationAppSelect },agent:{select:{id:true,name:true}}, messages: { where: { deletedAt: null, role: 'ASSISTANT', status: { in: ['PENDING', 'STREAMING', 'SETTLING'] } }, select: { id: true, status: true }, take: 1, orderBy: { createdAt: 'desc' } } },
+      include: conversationSummaryInclude,
     });
-    return rows.map((c) => ({
-      id: c.id,
-      title: c.title,
-      modelId: c.modelId,
-      folderId: c.folderId,
-      appId: c.appId,
-      app: conversationAppView(c.app,userId),
-      agentId:c.agentId,agent:c.agent,
-      pinned: !!c.pinnedAt,
-      messageCount: c._count.messages,
-      activeMessageId: c.messages[0]?.id ?? null,
-      activeMessageStatus: c.messages[0]?.status ?? null,
-      lastMessageAt: c.lastMessageAt,
-    }));
+    return rows.map(c=>conversationSummary(c,userId));
   }
 
-  async create(userId: string, modelId?: string, title?: string) {
+  async create(userId: string, modelId?: string, title?: string,folderId?:string) {
     if (modelId) {
       const model = await this.prisma.aiModel.findUnique({ where: { id: modelId } });
       if (!model || model.deletedAt) {
         throw new BusinessException(ErrorCode.MODEL_NOT_FOUND, '模型不存在', 404);
       }
     }
-    return this.prisma.conversation.create({
-      data: { userId, modelId: modelId ?? null, title: title?.trim() || '新对话' },
-    });
+    return this.prisma.$transaction(async tx=>{await assertConversationActor(tx,userId);if(folderId&&!await tx.conversationFolder.findFirst({where:{id:folderId,userId}}))throw new BusinessException(ErrorCode.NOT_FOUND,'分组不存在',404);return tx.conversation.create({data:{userId,modelId:modelId??null,title:title?.trim()||'新对话',folderId:folderId||null}});});
   }
 
   async detail(userId: string, id: string) {
@@ -113,12 +99,13 @@ export class ConversationsService {
   async update(
     userId: string,
     id: string,
-    data: { title?: string; pinned?: boolean; folderId?: string | null; modelId?: string },
+    data: { title?: string; pinned?: boolean; folderId?: string | null; modelId?: string;expectedVersion?:number },
   ) {
-    await this.assertOwner(userId, id);
+    return this.prisma.$transaction(async tx=>{
+    await assertConversationActor(tx,userId);const conv=await ownedConversation(tx,userId,id,data.expectedVersion);
     if (data.modelId !== undefined) {
-      const conv=await this.prisma.conversation.findUnique({where:{id},select:{agentId:true}});if(conv?.agentId)throw new BusinessException(ErrorCode.PARAM_INVALID,'搭档会话使用智能体自身配置，无法切换模型',400);
-      const model = await this.prisma.aiModel.findUnique({
+      if(conv.agentId)throw new BusinessException(ErrorCode.PARAM_INVALID,'搭档会话使用智能体自身配置，无法切换模型',400);
+      const model = await tx.aiModel.findUnique({
         where: { id: data.modelId },
         select: { status: true, deletedAt: true, channels: { where: { enabled: true }, select: { channel: { select: { status: true, deletedAt: true } } } } },
       });
@@ -129,31 +116,32 @@ export class ConversationsService {
       }
     }
     if (data.folderId) {
-      const folder = await this.prisma.conversationFolder.findFirst({
+      const folder = await tx.conversationFolder.findFirst({
         where: { id: data.folderId, userId },
         select: { id: true },
       });
       if (!folder) throw new BusinessException(ErrorCode.NOT_FOUND, '分组不存在', 404);
     }
-    return this.prisma.conversation.update({
+    return tx.conversation.update({
       where: { id },
       data: {
-        ...(data.title !== undefined ? { title: data.title } : {}),
+        version:{increment:1},
+        ...(data.title !== undefined ? { title: data.title.trim() } : {}),
         ...(data.pinned !== undefined ? { pinnedAt: data.pinned ? new Date() : null } : {}),
         ...(data.folderId !== undefined ? { folderId: data.folderId } : {}),
         ...(data.modelId !== undefined ? { modelId: data.modelId } : {}),
       },
     });
+    });
   }
 
-  async remove(userId: string, id: string) {
-    await this.assertOwner(userId, id);
-    this.chat.cancelConversationRuns(userId, id);
-    await this.prisma.conversation.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
-    return { ok: true };
+  async remove(userId: string, id: string,expectedVersion?:number) {
+    const result=await this.prisma.$transaction(async tx=>{await assertConversationActor(tx,userId);await ownedConversation(tx,userId,id,expectedVersion);return tx.conversation.update({where:{id},data:{deletedAt:new Date(),version:{increment:1}}});});
+    this.chat.cancelConversationRuns(userId,id);return{ok:true,id,version:result.version};
+  }
+
+  async restore(userId:string,id:string,expectedVersion:number){
+    return this.prisma.$transaction(async tx=>{await assertConversationActor(tx,userId);const row=await tx.conversation.findFirst({where:{id,userId}});if(!row)throw new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND,'会话不存在',404);if(!row.deletedAt)return{ok:true,id,version:row.version,alreadyActive:true};if(row.version!==expectedVersion)throw new BusinessException(ErrorCode.CONVERSATION_CHANGED,'这段对话已变化，请刷新后再操作。',409);const restored=await tx.conversation.update({where:{id},data:{deletedAt:null,version:{increment:1}}});return{ok:true,id,version:restored.version,alreadyActive:false};});
   }
 
   /**
@@ -167,20 +155,13 @@ export class ConversationsService {
       ...(ids.length ? [{ id: { in: ids } }] : []),
       ...(data.unpinnedOnly ? [{ pinnedAt: null }] : []),
     ];
-    const targets = await this.prisma.conversation.findMany({ where: { userId, deletedAt: null, OR: scopes }, select: { id: true } });
-    for (const target of targets) this.chat.cancelConversationRuns(userId, target.id);
-    const res = await this.prisma.conversation.updateMany({
-      where: { userId, deletedAt: null, OR: scopes },
-      data: { deletedAt: new Date() },
-    });
-    return { count: res.count };
+    const removedIds=await this.prisma.$transaction(async tx=>{await assertConversationActor(tx,userId);const targets=await tx.conversation.findMany({where:{userId,deletedAt:null,OR:scopes},select:{id:true}});await tx.conversation.updateMany({where:{userId,deletedAt:null,OR:scopes},data:{deletedAt:new Date(),version:{increment:1}}});return targets.map(row=>row.id);});
+    for(const id of removedIds)this.chat.cancelConversationRuns(userId,id);return{count:removedIds.length,removedIds};
   }
 
   async clearMessages(userId: string, id: string) {
-    await this.assertOwner(userId, id);
+    await this.prisma.$transaction(async tx=>{await assertConversationActor(tx,userId);await ownedConversation(tx,userId,id);await tx.message.updateMany({where:{conversationId:id,deletedAt:null},data:{deletedAt:new Date()}});await tx.conversation.update({where:{id},data:{version:{increment:1}}});});
     this.chat.cancelConversationRuns(userId, id);
-    // Preserve accepted authorizations until their canceled runs release; hide the entire history immediately.
-    await this.prisma.message.updateMany({ where: { conversationId: id, deletedAt: null }, data: { deletedAt: new Date() } });
     return { ok: true };
   }
 
