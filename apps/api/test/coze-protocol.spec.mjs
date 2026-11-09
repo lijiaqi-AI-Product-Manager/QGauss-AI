@@ -8,6 +8,47 @@ import {validatedAgentSecret,signCozeAssertion} from '../dist/modules/agents/coz
 const chat={id:'chat_1',conversation_id:'conv_1',bot_id:'123',status:'in_progress'},answer={id:'msg_1',chat_id:'chat_1',conversation_id:'conv_1',bot_id:'123',role:'assistant',type:'answer',content_type:'text'};
 function fixture(){const events=[],activities=[],remotes=[],decoder=new CozeStreamDecoder('123','fresh',{emit:(event,value)=>events.push({event,value}),activity:value=>activities.push(value),remote:value=>remotes.push(value)});const send=(event,data)=>decoder.consume(JSON.stringify(data),event);return{decoder,send,events,activities,remotes};}
 function finish(f,usage={input_count:7,output_count:5}){f.send('conversation.chat.completed',{...chat,status:'completed',usage});return f.decoder.result();}
+const stepMessage=(f,id,type,content,extra={})=>f.send('conversation.message.completed',{...answer,id,type,content:typeof content==='string'?content:JSON.stringify(content),...extra});
+function traceResult(f){f.send('conversation.message.completed',{...answer,id:'final_answer',content:'完成'});return finish(f).activity;}
+
+test('Parallel APIs in one plugin return to their own steps, without exposing private selectors',()=>{
+ const f=fixture();for(const key of ['a','b'])stepMessage(f,'call_'+key,'function_call',{plugin_id:'private_group',api_id:'private_api_'+key,api_name:'QGauss '+key});
+ stepMessage(f,'return_a','tool_response',{plugin_id:'private_group',api_id:'private_api_a',output:'private output'});assert.deepEqual(f.activities.at(-1).steps.map(s=>s.state),['returned','requested']);
+ stepMessage(f,'return_b','tool_response',{plugin_id:'private_group',api_id:'private_api_b'});const result=traceResult(f);assert.deepEqual(result.steps.map(s=>s.label),['QGauss a','QGauss b']);assert.ok(result.steps.every(s=>s.state==='returned'));assert.doesNotMatch(JSON.stringify(result),/private_/);
+});
+test('Nested metadata preserves large numeric API identities instead of rounding distinct IDs together',()=>{
+ const f=fixture();stepMessage(f,'a','function_call','{"name":"QGauss A","arguments":{"plugin_id":"shared","api_id":9007199254740992}}');stepMessage(f,'b','function_call','{"name":"QGauss B","arguments":{"plugin_id":"shared","api_id":9007199254740993}}');
+ stepMessage(f,'r_b','tool_output','{"plugin_id":"shared","api_id":9007199254740993}');assert.deepEqual(traceResult(f).steps.map(s=>s.state),['requested','returned']);
+});
+test('Repeated native completions and tool output aliases never duplicate the same message receipt',()=>{
+ const f=fixture();for(let n=0;n<2;n++)stepMessage(f,'call','function_call',{name:'QGauss 检索'});stepMessage(f,'result','tool_output',{name:'private result name',output:'private result'});const count=f.activities.length;stepMessage(f,'result','tool_response',{name:'private changed result'});assert.equal(f.activities.length,count);assert.deepEqual(traceResult(f).steps,[{kind:'tool',label:'QGauss 检索',state:'returned'}]);
+});
+test('A unique anonymous response keeps the declared call name and never publishes output properties',()=>{
+ const f=fixture();stepMessage(f,'call','function_call',{name:'QGauss 检索',arguments:{name:'private argument name'}});stepMessage(f,'result','tool_response',{name:'private output name',description:'private body',url:'https://private.qgauss.test'});const out=traceResult(f);assert.deepEqual(out.steps,[{kind:'tool',label:'QGauss 检索',state:'returned'}]);assert.doesNotMatch(JSON.stringify(out),/private/);
+});
+test('Ambiguous responses stay independent and cannot mark either parallel call returned',()=>{
+ const f=fixture();for(const key of ['a','b'])stepMessage(f,key,'function_call',{name:'QGauss 检索',plugin_id:'private_group'});stepMessage(f,'result','tool_response',{name:'private returned name',output:'private'});const out=traceResult(f);assert.deepEqual(out.steps.map(s=>s.state),['requested','requested','returned']);assert.equal(out.steps[2].labelCode,'toolReturn');assert.doesNotMatch(JSON.stringify(out),/private/);
+});
+test('An explicit unmatched operation cannot fall back to a different pending plugin operation',()=>{
+ const f=fixture();stepMessage(f,'a','function_call',{plugin_id:'group',api_id:'api_a',name:'QGauss A'});stepMessage(f,'r_b','tool_response',{plugin_id:'group',api_id:'api_b',api_name:'private other operation'});const out=traceResult(f);assert.equal(out.steps[0].state,'requested');assert.equal(out.steps[1].labelCode,'toolReturn');assert.doesNotMatch(JSON.stringify(out),/private/);
+});
+test('Explicit invocation receipts handle reverse order and deduplicate repeated invocation IDs',()=>{
+ const f=fixture();for(const key of ['a','b'])stepMessage(f,'call_'+key,'function_call',{name:'QGauss 检索'},{tool_call_id:'private_'+key+'=='});stepMessage(f,'repeat_call_b','function_call',{name:'private replacement'},{tool_call_id:'private_b=='});
+ stepMessage(f,'return_b','tool_response',{},{tool_call_id:'private_b=='});assert.deepEqual(f.activities.at(-1).steps.map(s=>s.state),['requested','returned']);stepMessage(f,'repeat_return_b','tool_output',{},{tool_call_id:'private_b=='});stepMessage(f,'return_a','tool_response',{},{tool_call_id:'private_a=='});const out=traceResult(f);assert.equal(out.steps.length,2);assert.ok(out.steps.every(s=>s.state==='returned'));assert.doesNotMatch(JSON.stringify(out),/private/);
+});
+test('An identified response arriving before its call can merge into that same declared workflow record',()=>{
+ const f=fixture();stepMessage(f,'return','tool_response',{workflow_id:'private_workflow',workflow_name:'private returned label'},{tool_call_id:'private_call'});assert.equal(f.activities.at(-1).steps[0].labelCode,'workflowReturn');stepMessage(f,'call','function_call',{workflow_id:'private_workflow',workflow_name:'QGauss 行动流程'},{tool_call_id:'private_call'});const out=traceResult(f);assert.deepEqual(out.steps,[{kind:'workflow',label:'QGauss 行动流程',state:'returned'}]);
+});
+test('An anonymous early response cannot be silently assigned to a later call',()=>{
+ const f=fixture();stepMessage(f,'early','tool_response',{name:'private result name'});stepMessage(f,'later','function_call',{name:'QGauss 后续检索'});const out=traceResult(f);assert.deepEqual(out.steps.map(s=>s.state),['returned','requested']);assert.equal(out.steps[0].labelCode,'toolReturn');assert.doesNotMatch(JSON.stringify(out),/private/);
+});
+test('Process overflow is explicit while identified receipts can still update retained steps',()=>{
+ const f=fixture();for(let n=0;n<25;n++)stepMessage(f,'call_'+n,'function_call',{name:'QGauss '+n},{tool_call_id:'private_'+n});stepMessage(f,'return_0','tool_response',{},{tool_call_id:'private_0'});const out=traceResult(f);assert.equal(out.steps.length,24);assert.equal(out.stepsTruncated,true);assert.equal(out.steps[0].state,'returned');assert.doesNotMatch(JSON.stringify(out),/private/);
+});
+test('Owned fallback labels are explicit and forged label codes cannot replace public provider names',()=>{
+ const f=fixture();stepMessage(f,'call','function_call',{arguments:{name:'private argument'}});stepMessage(f,'result','tool_output',{});const out=traceResult(f);assert.equal(out.steps[0].labelCode,'toolCall');assert.equal(out.steps[0].state,'returned');
+ const projected=safeAgentActivity({...out,steps:[{kind:'tool',label:'QGauss 原名',labelCode:'toolCall',state:'returned'},{kind:'workflow',label:'工具返回',labelCode:'toolReturn',state:'returned'},{kind:'tool',label:'工具返回',labelCode:'toolReturn',state:'returned'}]});assert.equal(projected.steps[0].labelCode,undefined);assert.equal(projected.steps[1].labelCode,undefined);assert.equal(projected.steps[2].labelCode,'toolReturn');
+});
 test('Coze request retains native stateful history, opaque user and file parts without client tools',()=>{const body=cozeChatBody('123','qg_opaque',[{role:'assistant',content:'前文'},{role:'user',content:'问题',files:[{id:'f1',kind:'file'},{id:'f2',kind:'image'}]}]);assert.equal(body.auto_save_history,true);assert.equal(body.enable_card,false);assert.equal(body.publish_status,'published_online');assert.equal(body.additional_messages[0].type,'answer');assert.deepEqual(JSON.parse(body.additional_messages[1].content),[{type:'text',text:'问题'},{type:'file',file_id:'f1'},{type:'image',file_id:'f2'}]);assert.equal('tools' in body,false);});
 test('Coze endpoints preserve gateway prefix and reject credentials, queries and invalid schemes',()=>{assert.equal(cozeEndpoint('https://api.qgauss.test/gateway/','/v3/chat',{conversation_id:'c1'}),'https://api.qgauss.test/gateway/v3/chat?conversation_id=c1');for(const base of ['file:///x','https://u:p@api.qgauss.test','https://api.qgauss.test?q=1','https://api.qgauss.test#x'])assert.throws(()=>cozeEndpoint(base,'/v3/chat'));});
 test('Native deltas and full answer completion accumulate exactly once; remote identity is reported once',()=>{const f=fixture();f.send('conversation.chat.created',chat);f.send('conversation.chat.in_progress',chat);f.send('conversation.message.delta',{...answer,content:'你好'});f.send('conversation.message.delta',{...answer,content:'，搭档'});f.send('conversation.message.completed',{...answer,content:'你好，搭档！'});f.send('conversation.message.completed',{...answer,type:'follow_up',id:'follow_1',content:'下一步？'});const out=finish(f);assert.equal(out.text,'你好，搭档！');assert.deepEqual(out.usage,{promptTokens:7,completionTokens:5});assert.deepEqual(out.activity.suggestions,['下一步？']);assert.equal(f.remotes.length,1);assert.equal(f.events.map(x=>x.value).join(''),out.text);assert.equal(out.activity.status,'completed');});

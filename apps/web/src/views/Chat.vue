@@ -1977,6 +1977,7 @@ onUnmounted(() => {
 }
 .cv-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 2px;
   margin-top: 6px;
@@ -2012,14 +2013,18 @@ onUnmounted(() => {
 }
 .cv-branch {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 2px;
   margin-right: 4px;
   font-size: 12px;
   color: var(--qg-sub);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
+.cv-branch > span { min-width: 3.2em; text-align: center; }
 .cv-branch button {
+  flex: none;
   width: 22px;
   height: 22px;
   display: grid;
@@ -2904,6 +2909,7 @@ html.dark .cv-hero-preset-tag {
 }
 
 @media (max-width: 640px) {
+  .cv-actions > .cv-meta { flex: 0 0 100%; margin-left: 0; }
   .cv-thread {
     padding: 16px 12px 8px;
   }
