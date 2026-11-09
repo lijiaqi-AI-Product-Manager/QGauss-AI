@@ -11,6 +11,7 @@ import { SettingsService } from '../settings/settings.service';
 import { chatBilling } from '../commerce/chat-pricing';
 import { CozeClientService, validatedAgentSecret } from './coze-client.service';
 import { AgentConnectionDto, AgentEditDto, AgentListDto } from './agent.dto';
+import {agentMetadata,publicAgentCapabilities} from './agent-capabilities';
 
 export type ResolvedAgent = {agent:Agent;connection:AgentConnection;model:{id:null;name:string;maxContext:number;maxOutput:number;countPool:string;countCost:number;priceInPerM:number;priceOutPerM:number};offerRevision:string;commerceEnabled:boolean};
 const clean=(v:unknown,n:number)=>typeof v==='string'?v.replace(/[\u0000-\u001f\u007f]/g,' ').trim().slice(0,n):'';
@@ -22,10 +23,6 @@ const invalid=(message:string)=>new BusinessException(ErrorCode.PARAM_INVALID,me
 export function agentOffer(agent:Pick<Agent,'id'|'countCost'|'published'|'updatedAt'>,connection:Pick<AgentConnection,'id'|'version'>,commerce:boolean){
   return createHash('sha256').update(JSON.stringify([agent.id,agent.countCost,agent.published,agent.updatedAt.toISOString(),connection.id,connection.version,commerce])).digest('hex');
 }
-function metadata(raw:any){
-  return {model:clean(raw?.model_info?.model_name,100),tools:(Array.isArray(raw?.plugin_info_list)?raw.plugin_info_list:[]).slice(0,20).map((x:any)=>({name:clean(x?.name,100),description:clean(x?.description,500)})).filter((x:any)=>x.name),workflows:(Array.isArray(raw?.workflow_info_list)?raw.workflow_info_list:[]).slice(0,20).map((x:any)=>({name:clean(x?.name,100),description:clean(x?.description,500)})).filter((x:any)=>x.name),knowledgeCount:Math.min(1000,Array.isArray(raw?.knowledge?.knowledge_infos)?raw.knowledge.knowledge_infos.length:0)};
-}
-function publicCapabilities(raw:any){return{model:clean(raw?.model,100),tools:(Array.isArray(raw?.tools)?raw.tools:[]).slice(0,20).map((x:any)=>({name:clean(x?.name,100),description:clean(x?.description,500)})).filter((x:any)=>x.name),workflows:(Array.isArray(raw?.workflows)?raw.workflows:[]).slice(0,20).map((x:any)=>({name:clean(x?.name,100),description:clean(x?.description,500)})).filter((x:any)=>x.name),knowledgeCount:Number.isSafeInteger(raw?.knowledgeCount)?Math.max(0,Math.min(1000,raw.knowledgeCount)):0};}
 
 /** Configuration saves are local. Only explicit probe, discovery, import or sync contact the provider. */
 @Injectable()
@@ -35,7 +32,7 @@ export class AgentsService {
   private availability(connection:AgentConnection,demo:boolean){return demo?'demo':connection.deletedAt||!connection.enabled?'disabled':!connection.secretEnc?'unconfigured':'ready';}
   private publicAgent(agent:Agent&{connection:AgentConnection;favorites?:Array<{userId:string}>},policy:{commerce:boolean;demo:boolean}){
     const availability=this.availability(agent.connection,policy.demo);
-    return {id:agent.id,name:agent.name,description:agent.description,greeting:agent.greeting,tags:strings(parsed(agent.tagsJson,[]),8,24),suggestedQuestions:strings(parsed(agent.questionsJson,[]),6,400),capabilities:publicCapabilities(parsed(agent.metadataJson,{})),ready:availability==='ready',availability,favorited:!!agent.favorites?.length,billing:chatBilling({countPool:'agent',countCost:agent.countCost},policy.commerce,false),offerRevision:agentOffer(agent,agent.connection,policy.commerce),lastSyncAt:agent.lastSyncAt};
+    return {id:agent.id,name:agent.name,description:agent.description,greeting:agent.greeting,tags:strings(parsed(agent.tagsJson,[]),8,24),suggestedQuestions:strings(parsed(agent.questionsJson,[]),6,400),capabilities:publicAgentCapabilities(parsed(agent.metadataJson,{})),ready:availability==='ready',availability,favorited:!!agent.favorites?.length,billing:chatBilling({countPool:'agent',countCost:agent.countCost},policy.commerce,false),offerRevision:agentOffer(agent,agent.connection,policy.commerce),lastSyncAt:agent.lastSyncAt};
   }
   async list(userId:string,query:AgentListDto){
     const policy=await this.policy(),base:Prisma.AgentWhereInput={published:true,deletedAt:null};
@@ -89,7 +86,7 @@ export class AgentsService {
   private async fetchMetadata(connection:AgentConnection,botId:string){
     const json=await this.remote(()=>this.coze.json(connection,'/v1/bots/'+botId,{}, {query:{is_published:'true'},timeoutMs:15000})),raw=json.data;
     if(!raw||String(raw.bot_id||raw.id)!==botId||!clean(raw.name,64))throw new BusinessException(ErrorCode.UPSTREAM_ERROR,'智能体服务返回的搭档资料不完整或身份不符',502);
-    return{name:clean(raw.name,64),description:clean(raw.description,2000),greeting:clean(raw.onboarding_info?.prologue,4000),questionsJson:JSON.stringify(strings(raw.onboarding_info?.suggested_questions,6,400)),metadataJson:JSON.stringify(metadata(raw)),lastSyncAt:new Date()};
+    return{name:clean(raw.name,64),description:clean(raw.description,2000),greeting:clean(raw.onboarding_info?.prologue,4000),questionsJson:JSON.stringify(strings(raw.onboarding_info?.suggested_questions,6,400)),metadataJson:JSON.stringify(agentMetadata(raw)),lastSyncAt:new Date()};
   }
   async importBots(id:string,botIds:string[],countCost:number){
     if(!botIds.length)throw invalid('请至少选择一位搭档');const connection=await this.connection(id),prepared:Array<{botId:string;data:Awaited<ReturnType<AgentsService['fetchMetadata']>>}>=[];

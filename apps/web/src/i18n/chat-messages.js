@@ -1,5 +1,9 @@
 /** Interface copy only. User content and technical identifiers stay verbatim. */
 export const CHAT_MESSAGES=Object.freeze({
+ "服务方已接受取消请求。服务方的计算或用量可能仍会继续；本轮结果与费用以当前回执为准。":["服務方已接受取消請求。服務方的計算或用量可能仍會繼續；本輪結果與費用以當前回執為準。","The provider accepted the cancellation request. Its processing or usage may continue. This round's result and charges follow the current receipt."],
+ "原问题与附件已保留在本轮记录，可编辑带回。":["原問題與附件已保留在本輪記錄，可編輯帶回。","Your original question and files remain in this round. Use Edit to bring them back."],
+ "原问题与附件已带回，核对新资料后可明确发送。":["原問題與附件已帶回，核對新資料後可明確傳送。","Your original question and files are back. Check the updated details, then send when ready."],
+ "搭档资料或费用已变化，请重新核对后再发送。":["搭檔資料或費用已變化，請重新核對後再發送。","Partner details or pricing changed. Check again before sending."],
   "文字对话":["文字對話","Chat"],
   "图片理解":["圖片理解","Image understanding"],
   "深度思考":["深度思考","Deep reasoning"],

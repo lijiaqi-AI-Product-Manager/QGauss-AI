@@ -1,3 +1,4 @@
+import {registerPartnerWorkflowTests} from './partner-workflow-ui.cases.mjs';
 import{registerVideoWaitingTests}from'./video-waiting-ui.cases.mjs';
 import{registerVideoLanguageTests}from'./video-language-ui.cases.mjs';
 import{registerPaintingLanguageTests}from'./painting-language-ui.cases.mjs';
@@ -2378,3 +2379,5 @@ registerPaintingLanguageTests({test,assert,mountPainting,paintingTask,paintOptio
 registerVideoLanguageTests({test,assert,mount,settle,relayJson,filmToolsData,filmSelect,filmAddFile,videoInterceptor,relayInput,setLang});
 
 registerVideoWaitingTests({test,assert,mount,settle,relayJson,filmToolsData,videoInterceptor,relayInput,setLang});
+
+registerPartnerWorkflowTests({test,assert,mountAgents,agentReply,settle,relayJson,setLang});
