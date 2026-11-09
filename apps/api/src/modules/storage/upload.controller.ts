@@ -15,10 +15,18 @@ import type { Response } from 'express';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { StorageService } from './storage.service';
 import {FileLibraryDto,FileVersionDto} from './file-library.dto';
+import {ChatUploadKeyDto,ChatUploadBodyDto,CheckAttachmentsDto} from './chat-upload.dto';
+import {ChatUploadsService} from './chat-uploads.service';
+import {AttachmentsService} from '../chat/attachments.service';
 
 @Controller('upload')
 export class UploadController {
-  constructor(private readonly storage: StorageService) {}
+  constructor(private readonly storage: StorageService,private readonly uploads:ChatUploadsService,private readonly attachments:AttachmentsService) {}
+  @Post('attachments/check') checkAttachments(@CurrentUser() user:AuthUser,@Body() dto:CheckAttachmentsDto){return this.attachments.preflight(user.id,dto.ids);}
+  @Get('requests/:key') uploadReceipt(@CurrentUser() user:AuthUser,@Param() params:ChatUploadKeyDto){return this.uploads.read(user.id,params.key);}
+  @Post('requests/:key')
+  @UseInterceptors(FileInterceptor('file',{limits:{fileSize:50*1024*1024}}))
+  uploadChat(@CurrentUser() user:AuthUser,@Param() params:ChatUploadKeyDto,@Body() dto:ChatUploadBodyDto,@UploadedFile() file:any){return this.uploads.save(user.id,params.key,dto.expectedVersion,file);}
 
   /**
    * 上传文件（multipart，字段名 file）。

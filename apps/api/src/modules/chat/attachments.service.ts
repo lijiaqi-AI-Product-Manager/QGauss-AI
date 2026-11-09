@@ -4,6 +4,7 @@ import { BusinessException, ErrorCode } from '../../common/exceptions/business.e
 import { extractText, isDocumentMime } from '../../common/storage/extract-text';
 import { StorageService } from '../storage/storage.service';
 import { SettingsService } from '../settings/settings.service';
+import {RateLimitService} from '../../common/ratelimit/rate-limit.service';
 
 export interface AttachmentMeta {
   id: string;
@@ -40,6 +41,7 @@ const IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif
 @Injectable()
 export class AttachmentsService {
   private readonly logger = new Logger(AttachmentsService.name);
+  private readonly preflightRate=new RateLimitService();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -49,6 +51,16 @@ export class AttachmentsService {
 
   hasAttachments(messages: InputMessage[]) {
     return messages.some((m) => (m.attachments?.length ?? 0) > 0);
+  }
+  async preflight(userId:string,ids:string[]){
+    if(!this.preflightRate.tryConsume('attachments:'+userId,30))throw new BusinessException(ErrorCode.RATE_LIMITED,'附件核对过于频繁，请稍后再试',429);
+    const result=await this.storage.checkAttachments(userId,ids);
+    return{items:await Promise.all(result.items.map(async item=>{
+      if(item.status!=='available'||!item.file||!isDocumentMime(item.file.mime))return item;
+      const row=await this.prisma.uploadFile.findFirst({where:{id:item.id,userId}});if(!row)return{id:item.id,status:'unavailable'};
+      try{const text=await this.documentText(row,userId);return text===null?{id:item.id,status:'unavailable',reason:'unreadable'}:item;}
+      catch(error){return{id:item.id,status:(error as any)?.getStatus?.()===400||(error as any)?.getStatus?.()===404?'unavailable':'unknown'};}
+    }))};
   }
 
   async resolve(
@@ -74,10 +86,7 @@ export class AttachmentsService {
         throw new BusinessException(ErrorCode.PARAM_INVALID, `单条消息最多附带 ${maxCount} 个文件`);
       }
 
-      const rows = await this.prisma.uploadFile.findMany({ where: { id: { in: ids }, userId, deletedAt: null } });
-      if (rows.length !== ids.length) {
-        throw new BusinessException(ErrorCode.PARAM_INVALID, '附件不存在或已删除', 400);
-      }
+      const rows = await this.prisma.uploadFile.findMany({ where: { id: { in: ids }, userId } });
       const byId = new Map(rows.map((r) => [r.id, r]));
       const isLast = i === lastUserIdx;
 
@@ -85,7 +94,11 @@ export class AttachmentsService {
       const images: string[] = [];
       const metas: AttachmentMeta[] = [];
       for (const id of ids) {
-        const row = byId.get(id)!;
+        const row = byId.get(id);
+        if(!row||row.deletedAt||row.purgedAt||row.expiresAt&&row.expiresAt<=new Date()||row.scope==='app-icon'){
+          if(isLast)throw new BusinessException(ErrorCode.ATTACHMENT_UNAVAILABLE,'附件已不可用，请恢复文件或从编辑区移除后再发送',400);
+          blocks.push('【较早的附件已不可用，本轮未重新发送】');continue;
+        }
         const isImage = IMAGE_MIMES.has(row.mime);
         if (!isImage && !isDocumentMime(row.mime)) {
           throw new BusinessException(ErrorCode.PARAM_INVALID, `「${row.filename}」不能作为对话附件`, 400);
@@ -109,8 +122,10 @@ export class AttachmentsService {
           continue;
         }
 
-        const text = await this.documentText(row, userId);
+        let text:string|null;
+        try{text=await this.documentText(row,userId);}catch(error){if(!isLast&&[400,404].includes((error as any)?.getStatus?.())){blocks.push('【较早的附件已不可用，本轮未重新发送】');continue;}throw error;}
         if (text === null) {
+          if(isLast)throw new BusinessException(ErrorCode.ATTACHMENT_READ_FAILED,'附件内容暂不能读取，请更换文件或从编辑区移除',400);
           blocks.push(`【附件：${row.filename}】（无法读取文件内容：${row.extractError ?? '解析失败'}）`);
           continue;
         }
@@ -138,18 +153,27 @@ export class AttachmentsService {
     row: { id: string; mime: string; filename: string; extractedText: string | null; extractError: string | null },
     userId: string,
   ): Promise<string | null> {
-    if (row.extractedText !== null) return row.extractedText;
+    const current=await this.prisma.uploadFile.findFirst({where:{id:row.id,userId,deletedAt:null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]},select:{id:true}});
+    if(!current)throw new BusinessException(ErrorCode.ATTACHMENT_UNAVAILABLE,'附件已不可用，请恢复文件或从编辑区移除后再发送',400);
+    if (row.extractedText !== null) {
+      const check=(await this.storage.checkAttachments(userId,[row.id])).items[0];
+      if(check?.status==='unavailable')throw new BusinessException(ErrorCode.ATTACHMENT_UNAVAILABLE,'附件已不可用，请恢复文件或从编辑区移除后再发送',400);
+      if(check?.status!=='available')throw new BusinessException(ErrorCode.ATTACHMENT_CHECK_FAILED,'文件暂未核对，请稍后重试。',503);
+      return row.extractedText;
+    }
     if (row.extractError) return null;
+    const file=await this.storage.read(row.id,userId,'USER');
     try {
-      const file = await this.storage.read(row.id, userId, 'USER');
       const text = await extractText(file.buffer, row.mime);
-      await this.prisma.uploadFile.update({ where: { id: row.id }, data: { extractedText: text } });
+      const updated=await this.prisma.uploadFile.updateMany({where:{id:row.id,userId,deletedAt:null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]},data:{extractedText:text}});
+      if(!updated.count)throw new BusinessException(ErrorCode.ATTACHMENT_UNAVAILABLE,'附件已不可用，请恢复文件或从编辑区移除后再发送',400);
       return text;
     } catch (err: any) {
+      if(err?.bizCode===ErrorCode.ATTACHMENT_UNAVAILABLE)throw err;
       const reason = String(err?.message ?? err).slice(0, 200);
       this.logger.warn(`附件解析失败 ${row.id}（${row.filename}）: ${reason}`);
       await this.prisma.uploadFile
-        .update({ where: { id: row.id }, data: { extractError: reason } })
+        .updateMany({ where: { id: row.id,userId,deletedAt:null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] }, data: { extractError: reason } })
         .catch(() => void 0);
       (row as any).extractError = reason;
       return null;
