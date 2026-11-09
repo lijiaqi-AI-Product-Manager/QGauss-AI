@@ -1,6 +1,7 @@
 import { ProtocolUsage,UpstreamError } from './chat-protocol';
 import { AgentActivity,safeAgentActivity } from './agent-activity';
 import { safeWebSource } from './web-search';
+import {AgentStepTracker} from './agent-steps';
 export type CozeInput = {role:'user'|'assistant';content:string;attachments?:string[]};
 export type CozeRemote = {conversationId:string;chatId:string};
 const identifier=(value:unknown)=>typeof value==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(value)?value:null;
@@ -19,8 +20,8 @@ export function cozeChatBody(botId:string,userId:string,messages:Array<{role:'us
 export class CozeStreamDecoder {
   private closed=false;private completed=false;private text='';private reasoning='';private usage:ProtocolUsage|null=null;
   private remote:Partial<CozeRemote>={};private answers=new Map<string,string>();
-  private report:AgentActivity;private toolKeys=new Map<string,number>();
-  constructor(private readonly botId:string,context:'fresh'|'continued',private readonly callbacks:{emit:(event:'delta'|'reasoning',value:string)=>void;activity:(value:AgentActivity)=>void;remote:(value:CozeRemote)=>void}) {this.report={kind:'agent',status:'waiting',context,steps:[],suggestions:[],artifacts:[]};}
+  private report:AgentActivity;private steps:AgentStepTracker;
+  constructor(private readonly botId:string,context:'fresh'|'continued',private readonly callbacks:{emit:(event:'delta'|'reasoning',value:string)=>void;activity:(value:AgentActivity)=>void;remote:(value:CozeRemote)=>void}) {this.report={kind:'agent',status:'waiting',context,steps:[],suggestions:[],artifacts:[]};this.steps=new AgentStepTracker(this.report.steps);}
   get ended(){return this.closed;}
   private changed(){this.callbacks.activity(safeAgentActivity(this.report)!);}
   private identities(json:any,isChat:boolean){
@@ -73,12 +74,9 @@ export class CozeStreamDecoder {
       if(typeof json.reasoning_content==='string'&&event==='conversation.message.delta'){this.reasoning+=json.reasoning_content;this.callbacks.emit('reasoning',json.reasoning_content);}
     }else if(json.type==='follow_up'&&event==='conversation.message.completed'&&typeof json.content==='string'){
       const question=json.content.trim().slice(0,400);if(question&&!this.report.suggestions.includes(question)&&this.report.suggestions.length<6)this.report.suggestions.push(question);
-    }else if(['function_call','tool_response'].includes(json.type)&&event==='conversation.message.completed'){
-      let content:any={};if(typeof json.content==='string'&&json.content.length<=65536){try{content=JSON.parse(json.content);}catch{}}
-      const workflow=!!(content.workflow_id||content.workflow_name),label=String(content.workflow_name||content.plugin_name||content.name||content.api_name||(workflow?'工作流协作':'工具协作')).replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,100),key=String(content.workflow_id||content.plugin_id||content.api_id||content.name||json.id||label);
-      const existing=this.toolKeys.get(key);
-      if(existing!==undefined&&json.type==='tool_response')this.report.steps[existing].state='returned';
-      else if(this.report.steps.length<24){this.toolKeys.set(key,this.report.steps.length);this.report.steps.push({kind:workflow?'workflow':'tool',label,state:json.type==='tool_response'?'returned':'requested'});}
+    }else if(['function_call','tool_response','tool_output'].includes(json.type)&&event==='conversation.message.completed'){
+      if(!this.steps.consume(json.type,json))return;
+      if(this.steps.truncated)this.report.stepsTruncated=true;
     }
     this.changed();
   }
