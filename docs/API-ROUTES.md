@@ -1,11 +1,11 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **298** 条路由，分布在 **32** 个控制器。
+> 共 **302** 条路由，分布在 **32** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
-| `/agents` | 16 | `src/modules/agents/agents.controller.ts` |
+| `/agents` | 18 | `src/modules/agents/agents.controller.ts` |
 | `/apps` | 33 | `src/modules/apps/apps.controller.ts` |
 | `/auth` | 12 | `src/modules/auth/auth.controller.ts` |
 | `/balance` | 7 | `src/modules/commerce/wallet.controller.ts` |
@@ -33,7 +33,7 @@
 | `/settings` | 3 | `src/modules/settings/settings.controller.ts` |
 | `/signin` | 2 | `src/modules/commerce/signin.controller.ts` |
 | `/statistic` | 6 | `src/modules/statistic/statistic.controller.ts` |
-| `/upload` | 5 | `src/modules/storage/upload.controller.ts` |
+| `/upload` | 7 | `src/modules/storage/upload.controller.ts` |
 | `/users` | 8 | `src/modules/users/users.controller.ts` |
 | `/video` | 24 | `src/modules/video/video.controller.ts` |
 | `/voice` | 17 | `src/modules/voice/voice.controller.ts` |
@@ -42,6 +42,8 @@
 
 | 方法 | 路径 | 权限 |
 |---|---|---|
+| GET | `/agents/messages/:messageId/artifacts` | 登录 |
+| POST | `/agents/messages/:messageId/artifacts/:key/save` | 登录 |
 | GET | `/agents/admin/connections` | ADMIN |
 | POST | `/agents/admin/connections` | ADMIN |
 | PATCH | `/agents/admin/connections/:id` | ADMIN |
@@ -431,6 +433,8 @@
 | GET | `/upload/:id` | 登录 |
 | GET | `/upload/:id/raw` | 登录 |
 | DELETE | `/upload/:id` | 登录 |
+| POST | `/upload/:id/trash` | 登录 |
+| POST | `/upload/:id/restore` | 登录 |
 
 ## /users
 

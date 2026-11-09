@@ -12,7 +12,7 @@
       </div>
     </section>
     <p v-if="report.cancellation" class="qag-cancel-note">{{ report.cancellation==='accepted' ? ct("服务方已接受取消请求。服务方的计算或用量可能仍会继续；本轮结果与费用以当前回执为准。") : report.cancellation==='unknown' ? ct("已停止本站接收，服务方取消结果暂未确认；不会自动重新发起对话。") : ct("正在向服务方提交取消请求…") }}</p>
-    <div v-if="report.artifacts.length" class="qag-artifacts qag-result-space" :aria-label="ct(&quot;智能体返回的附件&quot;)"><header><span>{{ ct('本轮成果') }}</span><small>{{ ct('{count} 项可打开的成果',{count:report.artifacts.length}) }}</small></header><div class="qag-result-grid"><a v-for="artifact in report.artifacts" :key="artifact.url" :href="artifact.url" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer"><span class="qag-result-art" :class="'is-'+artifact.kind" aria-hidden="true"><ClientIcon :name="artifact.kind==='image'?'image':'file'" /><i>Q</i></span><span class="qag-result-copy"><small>{{ ct(artifact.kind==='image'?'图片成果':'文件成果') }}</small><strong>{{ artifact.title }}</strong><span>{{ artifactHost(artifact.url) }}</span><em>{{ ct(artifact.kind==='image'?'打开图片':'打开文件') }}<ClientIcon name="arrowUpRight" /></em></span></a></div><small>{{ ct("由搭档服务提供，点击后打开；链接可能有有效期。") }}</small></div>
+    <div v-if="report.artifacts.length" class="qag-artifacts qag-result-space" :aria-label="ct(&quot;智能体返回的附件&quot;)"><header><span>{{ ct('本轮成果') }}</span><small>{{ ct('{count} 项可打开的成果',{count:report.artifacts.length}) }}</small></header><div class="qag-result-grid"><AgentArtifactCard v-for="artifact in report.artifacts" :key="artifact.url" :artifact="artifact" :message-id="messageId" :receipt="receipts[artifact.key]" :checking="checking" :checking-error="checkingError" :disabled="disabled||working" :downloading="files.busyId.value===receipts[artifact.key]?.file?.id" @save="save" @refresh="refresh" @download="files.download" @reuse="id=>emit('reuse',id)" @library="tab=>emit('library',tab)"/></div><small>{{ ct("由搭档服务提供，点击后打开；链接可能有有效期。") }}</small><p v-if="files.error.value" role="alert">{{ ct(files.error.value) }}</p></div>
     <p v-else-if="report.status==='completed'" class="qag-no-artifacts">{{ ct('本轮未提供可展示的独立成果链接。') }}</p>
     <div v-if="report.suggestions.length && report.status==='completed'" class="qag-followups" :aria-label="ct(&quot;智能体建议的后续问题&quot;)"><header><span class="qag-next-spark" aria-hidden="true">✦</span><strong>{{ ct("顺着灵感，继续一步") }}</strong></header><div><button v-for="(question,index) in report.suggestions" :key="question" type="button" :disabled="disabled" @click="emit('select',question)"><small>{{ String(index+1).padStart(2,'0') }}</small><span>{{ question }}</span><ClientIcon name="arrowUpRight" /></button></div><p>{{ ct("点击只会填入问题，由你决定是否发送。") }}</p></div>
   </section>
@@ -23,12 +23,15 @@ import {computed,ref} from 'vue';
 import {agentRunReport,agentRunTitle,agentStepLabel} from '../../lib/agent-presentation.js';
 import ClientIcon from '../reference/ClientIcon.vue';
 import BrandLoader from './BrandLoader.vue';
+import AgentArtifactCard from './AgentArtifactCard.vue';
+import {useArtifactSaves} from '../../composables/useArtifactSaves.js';
+import {usePersonalFiles} from '../../composables/usePersonalFiles.js';
 import './agent-space.css';
 import './agent-chat.css';
 import './agent-run.css';
-const props=defineProps({value:Object,disabled:Boolean}),emit=defineEmits(['select']);
+const props=defineProps({value:Object,messageId:String,disabled:Boolean}),emit=defineEmits(['select','reuse','library']);
 const report=computed(()=>agentRunReport(props.value));
 const processExpanded=ref(true),working=computed(()=>['waiting','running'].includes(report.value?.status));
+const {receipts,checking,checkingError,save,refresh}=useArtifactSaves(computed(()=>props.messageId),computed(()=>!!report.value?.artifacts.some(item=>item.key)&&!working.value)),files=usePersonalFiles();
 const overview=computed(()=>{const steps=report.value?.steps||[],returned=steps.filter(step=>step.state==='returned').length;return{tools:steps.filter(step=>step.kind==='tool').length,workflows:steps.filter(step=>step.kind==='workflow').length,returned,pending:steps.length-returned};});
-function artifactHost(url){try{return new URL(url).hostname;}catch{return '';}}
 </script>

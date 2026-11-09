@@ -14,6 +14,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { StorageService } from './storage.service';
+import {FileLibraryDto,FileVersionDto} from './file-library.dto';
 
 @Controller('upload')
 export class UploadController {
@@ -36,10 +37,9 @@ export class UploadController {
   @Get()
   list(
     @CurrentUser() user: AuthUser,
-    @Query('page') page = 1,
-    @Query('pageSize') pageSize = 20,
+    @Query() query:FileLibraryDto,
   ) {
-    return this.storage.listMine(user.id, Number(page), Number(pageSize));
+    return query.library==='1'?this.storage.listLibrary(user.id,query):this.storage.listMine(user.id,query.page,query.pageSize);
   }
 
   @Get(':id')
@@ -65,7 +65,7 @@ export class UploadController {
       res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
     }
     res.setHeader('Content-Length', buffer.length);
-    res.setHeader('Cache-Control', scope==='app-icon'?'private, no-store':'private, max-age=3600');
+    res.setHeader('Cache-Control', ['app-icon','chat','agent-result'].includes(scope)?'private, no-store':'private, max-age=3600');
     res.setHeader(
       'Content-Disposition',
       `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(filename)}`,
@@ -77,4 +77,6 @@ export class UploadController {
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.storage.remove(id, user.id, user.role);
   }
+  @Post(':id/trash') trash(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:FileVersionDto){return this.storage.trashFile(user.id,id,dto.expectedVersion);}
+  @Post(':id/restore') restore(@CurrentUser() user:AuthUser,@Param('id') id:string,@Body() dto:FileVersionDto){return this.storage.trashFile(user.id,id,dto.expectedVersion,true);}
 }

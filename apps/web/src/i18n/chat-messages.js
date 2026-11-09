@@ -1,5 +1,7 @@
 /** Interface copy only. User content and technical identifiers stay verbatim. */
+import {FILE_MESSAGES} from './file-messages.js';
 export const CHAT_MESSAGES=Object.freeze({
+ ...FILE_MESSAGES,
  "工具协作":["工具協作","Tool collaboration"],
  "工作流协作":["工作流協作","Workflow collaboration"],
  "工具返回":["工具返回","Tool response"],

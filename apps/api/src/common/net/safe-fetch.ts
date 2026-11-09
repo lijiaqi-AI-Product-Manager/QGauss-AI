@@ -156,6 +156,20 @@ async function assertSafeUrl(rawUrl: string, opts: SafeFetchOptions = {}): Promi
   return url;
 }
 
+/** Download sockets use this exact validated address set, including after redirects. */
+export async function safeDownloadTarget(rawUrl:string,opts:SafeFetchOptions={}){
+  const url=await assertSafeUrl(rawUrl,opts),host=url.hostname,port=Number(url.port|| (url.protocol==='https:'?443:80));
+  const addresses=isIP(host)?[{address:host,family:isIP(host)}]:await lookup(host,{all:true,verbatim:true});
+  const entries=opts.privateAllowlist??(process.env.UPSTREAM_PRIVATE_ALLOWLIST??'').split(',');
+  if(!addresses.length)throw new SsrfBlockedError('主机无解析结果');
+  if(!matchPrivateAllowlist(host,port,entries))for(const row of addresses){
+    const mapped=/^::ffff:([a-f0-9]{1,4}):([a-f0-9]{1,4})$/i.exec(row.address);
+    const v4=mapped?[parseInt(mapped[1],16)>>>8,parseInt(mapped[1],16)&255,parseInt(mapped[2],16)>>>8,parseInt(mapped[2],16)&255].join('.'):null;
+    if(row.family===4?isBlockedV4(row.address):isBlockedV6(row.address)||!!v4&&isBlockedV4(v4)||/^ff|^fe[89ab]/i.test(row.address))throw new SsrfBlockedError('主机解析到禁止访问的地址');
+  }
+  return{url,addresses};
+}
+
 /** 带超时与 SSRF 校验的 fetch */
 export async function safeFetch(
   rawUrl: string,
