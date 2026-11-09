@@ -1,16 +1,18 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { IsInt, IsOptional, IsString, Length } from 'class-validator';
+import { IsInt, IsString, Length,ValidateIf,Min,Max } from 'class-validator';
+import {Transform} from 'class-transformer';
+import {OptionalConversationVersionDto} from '../conversations/dto/history.dto';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { FoldersService } from './folders.service';
 
 class CreateFolderDto {
-  @IsString() @Length(1, 32) name: string;
-  @IsOptional() @IsInt() sort?: number;
+  @Transform(({obj,key})=>typeof obj[key]==='string'?obj[key].trim():obj[key]) @IsString() @Length(1, 32) name: string;
+  @Transform(({obj,key})=>obj[key]) @ValidateIf((_o,v)=>v!==undefined) @IsInt() @Min(-100000) @Max(100000) sort?: number;
 }
 
-class UpdateFolderDto {
-  @IsOptional() @IsString() @Length(1, 32) name?: string;
-  @IsOptional() @IsInt() sort?: number;
+class UpdateFolderDto extends OptionalConversationVersionDto {
+  @Transform(({obj,key})=>typeof obj[key]==='string'?obj[key].trim():obj[key]) @ValidateIf((_o,v)=>v!==undefined) @IsString() @Length(1, 32) name?: string;
+  @Transform(({obj,key})=>obj[key]) @ValidateIf((_o,v)=>v!==undefined) @IsInt() @Min(-100000) @Max(100000) sort?: number;
 }
 
 @Controller('folders')
@@ -37,7 +39,7 @@ export class FoldersController {
   }
 
   @Delete(':id')
-  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.folders.remove(user.id, id);
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string,@Body() body:OptionalConversationVersionDto) {
+    return this.folders.remove(user.id, id,body?.expectedVersion);
   }
 }

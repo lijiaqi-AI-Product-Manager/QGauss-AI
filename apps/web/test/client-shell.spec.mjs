@@ -11,6 +11,8 @@ import {registerLanguageTests} from './language-ui.cases.mjs';
 import {registerAppImageTests} from './app-image-ui.cases.mjs';
 import {registerVideoSpeakerTests} from './video-speaker-ui.cases.mjs';
 import {registerVoiceComposerTests} from './voice-composer-ui.cases.mjs';
+import {conversationArchive} from './conversation-workspace-fixtures.mjs';
+import {registerConversationWorkspaceTests} from './conversation-workspace-ui.cases.mjs';
 /** 用真实 Vue 组件验证跨路由挂载及鉴权动作；jsdom 不承担像素或原生焦点验收。 */
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -110,7 +112,8 @@ async function mount({ loggedIn = false, admin = false, pending = false, history
   if (guestDraft !== undefined) sessionStorage.setItem('qg:guest-draft', guestDraft);
   document.querySelector('#mount').innerHTML = '';
   const calls = [], errors = [];
-  const conversations = historyRows || [{ id: 'c1', title: '普通对话', appId: null, pinned: false }, { id: 'c2', title: '应用对话', appId: 'a1', pinned: false }];
+  const archive=conversationArchive(historyRows || [{ id: 'c1', title: '普通对话', appId: null, pinned: false }, { id: 'c2', title: '应用对话', appId: 'a1', pinned: false }]);
+  const conversations=archive.rows;
   const modelRows = [{ id: 'model-a', name: 'qa-model', displayName: '测试模型', vendor: 'QGauss', ready: true }, { id: 'model-b', name: 'qa-second', displayName: '第二模型', vendor: 'QGauss', ready: true }, { id: 'model-c', name: 'qa-offline', displayName: '离线模型', vendor: 'QGauss 研发', ready: false }];
   const selections = new Map([['c1', 'model-a'], ['c2', 'model-a']]);
   let profileRow={id:'test-user',username:'测试用户',displayName:'灵感观察员',email:'observer@qgauss.test',avatar:'qgauss:violet',role:admin?'ADMIN':'USER',createdAt:'2026-10-30T08:00:00Z'};
@@ -121,10 +124,11 @@ async function mount({ loggedIn = false, admin = false, pending = false, history
     if (intercepted) return intercepted;
     if(call.url==='/api/upload/attachments/check'&&call.method==='POST')return relayJson({items:call.body.ids.map(id=>({id,status:'available'}))});
     if(call.url === '/api/installation/status')return relayJson({required:false,canInitialize:false,needsSecureConnection:false});
-    if (pending && ['/api/conversations', '/api/models/available', '/api/folders'].includes(url)) { await new Promise((resolve) => setTimeout(resolve, 60)); return new Response(JSON.stringify({ message: '会话已退出' }), { status: 401 }); }
+    if (pending && (String(url).startsWith('/api/conversations/history?')||['/api/conversations', '/api/models/available', '/api/folders'].includes(url))) { await new Promise((resolve) => setTimeout(resolve, 60)); return new Response(JSON.stringify({ message: '会话已退出' }), { status: 401 }); }
     if (call.url === '/api/users/profile') {if(call.method==='PATCH')profileRow={...profileRow,...call.body};return relayJson(profileRow);}
     if(call.url.startsWith('/api/users/logins?'))return relayJson({items:[],total:0,page:1,pageSize:4});
     if(call.url==='/api/users/password' || call.url==='/api/auth/reset-password')return relayJson({ok:true});
+    const archiveResult=archive.respond(call);if(archiveResult!==undefined)return relayJson(archiveResult);
     const conversationKey = /^\/api\/conversations\/(c[12])$/.exec(url)?.[1];
     if (conversationKey && call.method === 'PATCH' && call.body.modelId) selections.set(conversationKey, call.body.modelId);
     const data = url === '/api/settings/public' ? { 'commerce.enabled': false } : url === '/api/conversations' ? conversations : url === '/api/conversations/bulk-delete' ? { count: 1 } : conversationKey ? { id: conversationKey, model: modelRows.find(m => m.id === selections.get(conversationKey)), messages: [{ id: 'm1', role: 'USER', content: '测试提问', parentId: null }, { id: 'm2', role: 'ASSISTANT', content: '测试回答', parentId: 'm1', status: 'COMPLETED' }] } : url === '/api/models/available' ? modelRows : url === '/api/chat/quota' ? { limit: 0, used: 0 } : [];
@@ -255,16 +259,19 @@ test('退出发生在首屏请求返回前：不会出现未处理拒绝或重�
   } finally { await fixture.close(); }
 });
 
-test('清空非置顶只作用于当前可见历史，不包含应用标签和置顶记录', async () => {
+test('清空非置顶先确认当前筛选全部页数，不包含应用标签和置顶记录', async () => {
   const fixture = await mount({ loggedIn: true, historyRows: [{ id: 'c1', title: '普通对话', appId: null, pinned: false }, { id: 'c2', title: '应用对话', appId: 'a1', pinned: false }, { id: 'c3', title: '置顶对话', appId: null, pinned: true }] });
   try {
     [...document.querySelectorAll('.qgc-history-operations button')].find((button) => button.textContent === '清空非置顶').click(); await settle();
-    assert.match(document.querySelector('.el-message-box').textContent, /当前列表中 1 个未置顶/);
-    [...document.querySelectorAll('.el-message-box__btns button')].find((button) => button.textContent.trim() === '删除').click(); await settle();
+    assert.match(document.querySelector('.el-message-box').textContent, /将 1 段对话移到回收站/);
+    assert.match(document.querySelector('.el-message-box').textContent, /当前筛选的全部页数/);
+    [...document.querySelectorAll('.el-message-box__btns button')].find((button) => button.textContent.trim() === '移入回收站').click(); await settle();
     // Element Plus 在关闭过渡结束后才兑现确认 Promise，等待业务请求而非固定动画时长。
     const deadline = Date.now() + 2000;
     while (!fixture.calls.some((call) => call.url === '/api/conversations/bulk-delete') && Date.now() < deadline) await settle();
-    assert.deepEqual(fixture.calls.find((call) => call.url === '/api/conversations/bulk-delete')?.body, { ids: ['c1'] });
+    const body=fixture.calls.find((call) => call.url === '/api/conversations/bulk-delete')?.body;
+    assert.deepEqual({...body.preview,confirmation:undefined},{kind:'chat',q:'',folder:'',scope:'active',mode:'unpinned',confirmation:undefined});
+    assert.match(body.preview.confirmation,/^[a-f0-9]{64}$/);
     assert.deepEqual(fixture.errors, []);
   } finally { await fixture.close(); }
 });
@@ -318,7 +325,7 @@ test('在历史会话切换模型会保存，重开后恢复选择', async () =>
     document.querySelector('.cv-tools .cv-chip').click(); await settle();
     document.querySelector('[data-model-id="model-b"] .qgc-picker-use').click(); await settle();
     const patch = fixture.calls.find(call => call.method === 'PATCH' && call.url === '/api/conversations/c1');
-    assert.deepEqual(patch?.body, { modelId: 'model-b' });
+    assert.deepEqual(patch?.body, { modelId: 'model-b', expectedVersion: 1 });
     assert.equal(patch?.authorization, 'Bearer test-access');
     assert.match(document.querySelector('.cv-tools .cv-chip').textContent, /第二模型/);
     document.querySelector('.cv-new').click(); await settle();
@@ -1908,8 +1915,8 @@ test('邮件中心：状态和列表失败分别展示重试，不把加载失�
 });
 
 function agentRelay(state='agents-library',extra){
-  const data=agentFixtures(state);
-  return async call=>{const response=await extra?.(call,data);if(response)return response;const url=new URL(call.url,'http://qgauss.test');if(call.method==='GET'&&Object.hasOwn(data,url.pathname))return relayJson(url.pathname==='/api/agents'?agentFixturePage(data[url.pathname],url):data[url.pathname]);};
+  const data=agentFixtures(state),archive=conversationArchive(data['/api/conversations']||[]);
+  return async call=>{const response=await extra?.(call,data);if(response)return response;const history=archive.respond(call);if(history!==undefined)return relayJson(history);const url=new URL(call.url,'http://qgauss.test');if(call.method==='GET'&&Object.hasOwn(data,url.pathname))return relayJson(url.pathname==='/api/agents'?agentFixturePage(data[url.pathname],url):data[url.pathname]);};
 }
 async function mountAgents({state='agents-library',path='/agent',admin=false,extra}={}){return mount({loggedIn:true,admin,initialPath:path,intercept:agentRelay(state,extra)});}
 const agentButton=(text,root=document)=>[...root.querySelectorAll('button')].find(x=>x.textContent.trim()===text);
@@ -2230,7 +2237,7 @@ test('声音历史入口：打开录音或声音偏好只显示面板，不申�
  const data=voiceFixtures();for(const tab of ['record','voices']){const f=await mount({loggedIn:true,initialPath:'/chat?voice='+tab,intercept:voiceLibraryInterceptor(call=>call.url==='/api/voice/options'?relayJson(data[call.url]):null)});try{await settle();assert.ok(document.querySelector('.qvoice-dialog'));assert.equal(voiceWrites(f).length,0);assert.equal(document.body.textContent.includes('等待麦克风许可'),false);assert.deepEqual(f.errors,[]);}finally{await f.close();}}
 });
 test('声音历史入口：初始资料迟到不能覆盖用户已经选中的历史对话',async()=>{
- let release;const held=new Promise(resolve=>release=resolve),data=creatorChatData();data['/api/apps/qg-role-1'].defaultModel='qa-model';const f=await mount({loggedIn:true,initialPath:'/chat?app=qg-role-1',intercept:creatorInterceptor(async call=>{if(call.url==='/api/apps/qg-role-1'){await held;return relayJson(data[call.url]);}},data)});try{assert.equal(document.querySelector('.cv-input').disabled,false);const ordinary=[...document.querySelectorAll('.qgc-history-tabs button')].find(button=>button.textContent==='AI对话');ordinary.click();await settle();document.querySelector('.cv-conv').click();await settle();release();await settle();assert.match(document.querySelector('.cv-thread').textContent,/测试回答/);assert.equal(document.querySelector('.cv-app'),null);assert.equal(f.calls.some(call=>call.url==='/api/chat/completions'),false);assert.deepEqual(f.errors,[]);}finally{release();await f.close();}
+ let release;const held=new Promise(resolve=>release=resolve),data=creatorChatData();data['/api/apps/qg-role-1'].defaultModel='qa-model';const f=await mount({loggedIn:true,initialPath:'/chat?app=qg-role-1',intercept:creatorInterceptor(async call=>{if(call.url==='/api/apps/qg-role-1'){await held;return relayJson(data[call.url]);}},data)});try{assert.equal(document.querySelector('.cv-input').disabled,false);const ordinary=[...document.querySelectorAll('.qgc-history-tabs button')].find(button=>button.getAttribute('aria-label')==='AI对话');ordinary.click();await settle();document.querySelector('.cv-conv').click();await settle();release();await settle();assert.match(document.querySelector('.cv-thread').textContent,/测试回答/);assert.equal(document.querySelector('.cv-app'),null);assert.equal(f.calls.some(call=>call.url==='/api/chat/completions'),false);assert.deepEqual(f.errors,[]);}finally{release();await f.close();}
 });
 
 function galleryInterceptor(custom,data=galleryFixtures()){
@@ -2387,3 +2394,4 @@ registerPartnerResultsTests({test,assert,mountAgents,settle,relayJson,setLang});
 
 import {registerChatAttachmentTests} from './chat-attachment-ui.cases.mjs';
 registerChatAttachmentTests({test,assert,mount,settle,relayJson,setLang});
+registerConversationWorkspaceTests({test,assert,mount,settle,relayJson,setLang});

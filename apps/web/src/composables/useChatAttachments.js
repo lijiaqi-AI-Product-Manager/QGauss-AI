@@ -48,10 +48,11 @@ export function useChatAttachments({client=api,transfer=uploadChatFile,auth=useA
  }
  async function checkOne(file){if(file.id&&files.value.includes(file))await verify([file]);}
  async function checkBeforeSend(){if(!files.value.length)return true;if(blocked.value)return false;return verify([...files.value]);}
- function clear(){preflight?.abort();sequence++;checking.value=false;for(const file of files.value)clearWork(file.localId);for(const url of previews)environment.URL.revokeObjectURL(url);previews.clear();previewById.clear();sources.clear();files.value=[];}
+ function cancelCheck(){preflight?.abort();preflight=undefined;sequence++;checking.value=false;}
+ function clear(){cancelCheck();for(const file of files.value)clearWork(file.localId);for(const url of previews)environment.URL.revokeObjectURL(url);previews.clear();previewById.clear();sources.clear();files.value=[];}
  watch(()=>files.value.map(file=>file.localId),(ids,old=[])=>{const kept=new Set(ids);for(const id of old)if(!kept.has(id)){clearWork(id);sources.delete(id);const url=previewById.get(id);if(previews.delete(url))environment.URL.revokeObjectURL(url);previewById.delete(id);}pump();},{flush:'sync'});
  watch(()=>auth.identityRevision,clear,{flush:'sync'});
  watch(personalFilesRevision,()=>{const items=files.value.filter(file=>file.id&&!WAITING.has(file.status));if(items.length)void verify(items);for(const file of files.value)if(!file.id&&file.requestKey&&file.status==='unavailable')void inspect(file);});
  onScopeDispose(()=>{alive=false;clear();});
- return{files,readyFiles,uploading,blocked,checking,add,remove,inspect,retry,checkOne,checkBeforeSend,retainPreview,clear};
+ return{files,readyFiles,uploading,blocked,checking,add,remove,inspect,retry,checkOne,checkBeforeSend,retainPreview,cancelCheck,clear};
 }

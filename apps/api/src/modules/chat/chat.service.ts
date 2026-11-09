@@ -328,7 +328,6 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
     let title = conversation.title;
     if (!title || title === '新对话') {
       title = agent?.agent.name || app?.name || lastUser.content.replace(/\s+/g, ' ').slice(0, 24) || '新对话';
-      if (!newConversation) await this.prisma.conversation.update({ where: { id: conversationId }, data: { title } });
     }
 
     // ---- 用户消息（clientMsgId 幂等；重新生成时复用原消息，不新增）----
@@ -345,10 +344,13 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
       const extensionMessageId=extensionAdmission?await this.extensions!.assertChatTx(tx,extensionAdmission):null;
       if(agent)await this.agents!.assertOfferTx(tx,agent);
       if(app){const eligibleApp=await tx.app.findFirst({where:{AND:[accessibleAppWhere(userId,app.id),{version:app.version}]},select:{id:true}});if(!eligibleApp)throw new BusinessException(ErrorCode.PARAM_INVALID,'应用内容或公开状态已变化，请重新打开',409);if(app.origin==='USER'){const restricted=await this.moderation.checkTx(tx,[app.name,app.description,app.systemPrompt,app.greeting].filter(Boolean).join('\n'));if(restricted)throw new BusinessException(restricted.action==='block'?ErrorCode.CONTENT_BLOCKED:ErrorCode.CONTENT_REVIEW,'应用设定命中当前内容限制，请联系创作者调整',400);}}
+      let canUpdateStoredModel=newConversation;
       if (newConversation) await tx.conversation.create({ data: { id: conversationId, userId, modelId: demoMode ? null : model.id, appId: app?.id ?? null, agentId:agent?.agent.id??null,title } });
       else {
-        const locked = await tx.conversation.updateMany({ where: { id: conversationId, userId, deletedAt: null }, data: { lastMessageAt: new Date() } });
-        if (!locked.count) throw new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND, '会话不存在', 404);
+        const locked = await tx.conversation.findFirst({where:{id:conversationId,userId,deletedAt:null},select:{id:true,title:true,modelId:true,version:true}});
+        if (!locked) throw new BusinessException(ErrorCode.CONVERSATION_NOT_FOUND, '会话不存在', 404);
+        canUpdateStoredModel=locked.version===conversation.version&&locked.modelId===conversation.modelId;
+        if(locked.title&&locked.title!=='新对话')title=locked.title;
       }
 
       if (dto.regenerateOf) {
@@ -426,7 +428,8 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
         }));
       if(!replayOf&&extensionAdmission)await this.extensions!.bindChatTx(tx,extensionAdmission,createdAssistant.id);
       if(!replayOf&&agent)preparedAgent=await this.agentExecution!.prepareTx(tx,agent,userId,conversationId,createdAssistant.id,dto.agentParentId,nativeInput!.input);
-      if (!replayOf && !agent && !demoMode && conversation.modelId !== model.id) {
+      if(!replayOf&&!newConversation)await tx.conversation.update({where:{id:conversationId},data:{lastMessageAt:new Date(),version:{increment:1},title}});
+      if (!replayOf && !agent && !demoMode && canUpdateStoredModel && conversation.modelId !== model.id) {
         await tx.conversation.update({ where: { id: conversationId }, data: { modelId: model.id } });
       }
       return replayOf ?? this.accounting.acceptTx(tx, userId, createdAssistant, charge);
