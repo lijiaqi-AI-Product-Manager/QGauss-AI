@@ -1,10 +1,12 @@
 import {CREATIVE_MESSAGES} from './creative-messages.js';
 
 export const ROUTE_LANGUAGE_KEYS=Object.freeze({
+ '/agent/app':'shell.agentProfile',
  '/chat':'shell.chat','/apps':'shell.apps','/agent':'shell.agent','/painting':'shell.painting','/inpaint':'shell.editor','/market':'shell.market','/mindmap':'shell.mindmap','/extend':'shell.extensions','/voice/create':'shell.voice','/voice':'shell.voiceHistory','/voice/manage':'shell.voiceControls','/video':'shell.video','/plaza':'shell.models','/recharge':'shell.membership','/sales':'shell.referral','/statistic':'shell.admin','/wallet':'shell.wallet','/account':'shell.account','/image':'nav.image','/role':'shell.creator','/apps/manage':'shell.review',
 });
 export const INTERFACE_MESSAGES={
  zh:{
+  'shell.agentProfile':'搭档档案',
   "shell.voiceControls":"声音控制台",
   "balance.counts":"低价模型 {basic} · 高价模型 {advanced} · 绘图 {images} · 智能体 {agents}",
   "balance.amount":"｜余额 ¥{amount}",
@@ -20,6 +22,7 @@ export const INTERFACE_MESSAGES={
   'entry.passwordChanged':'密码已更新，请使用新密码重新登录。','entry.passwordUnknown':'密码修改结果尚未确认。请先尝试使用新密码登录；如果无法登录，再试原密码或重新申请重置。',
  },
  'zh-TW':{
+  'shell.agentProfile':'搭檔檔案',
   "shell.voiceControls":"聲音控制台",
   "balance.counts":"低價模型 {basic} · 高價模型 {advanced} · 繪圖 {images} · 智慧體 {agents}",
   "balance.amount":"｜餘額 ¥{amount}",
@@ -36,6 +39,7 @@ export const INTERFACE_MESSAGES={
   'nav.chat':'對話','nav.apps':'應用','nav.image':'圖像','nav.statistic':'概覽',logout:'登出','login.subtitle':'自架 AI 對話平台 · 多模型接入','login.tab.login':'登入','login.tab.register':'註冊','login.account':'信箱或使用者名稱','login.password':'密碼','login.email':'信箱','login.username':'使用者名稱（3–20 字元）','login.password.rule':'密碼（8–32 字元）','login.captcha':'驗證碼','login.submit':'登入','login.register':'建立帳戶','login.forgot':'忘記密碼？','login.forgot.title':'找回密碼','login.forgot.desc':'我們會寄送重設連結至該信箱（30 分鐘內有效）。','login.send':'寄送','common.cancel':'取消','chat.new':'新對話','chat.empty':'開始一段新對話','chat.empty.hint':'從下方的預設挑選一個，或直接輸入問題','chat.input':'輸入訊息，Enter 傳送，Shift+Enter 換行','chat.send':'傳送','chat.stop':'停止','chat.model':'選擇模型','chat.preset':'預設','chat.quota':'今日',
  },
  en:{
+  'shell.agentProfile':'Partner profile',
   "shell.voiceControls":"Voice controls",
   "balance.counts":"Basic models {basic} · Advanced models {advanced} · Images {images} · Agents {agents}",
   "balance.amount":" | Balance ¥{amount}",

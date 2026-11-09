@@ -320,7 +320,7 @@
             @change="onPickFiles"
           />
         <p v-if="entryPending||entryError" class="qgc-model-cost-note qag-composer-quote" :role="entryError?'alert':'status'"><ClientIcon name="sound"/><span>{{ entryPending?ct("正在打开指定的创作空间…"):ct(entryError) }}</span><button v-if="entryError" type="button" @click="applyRouteEntry">{{ ct("重新打开") }}</button><button v-if="entryError" type="button" @click="leaveEntry">{{ ct("开始普通对话") }}</button></p>
-        <p v-if="agentId" class="qgc-model-cost-note qag-composer-quote"><ClientIcon name="agent" /><span>{{ agentQuote(currentAgent,ct).label }}</span><small>{{ agentLoading?ct("正在核对搭档资料…"):ct(agentError)||ct("问题与所选附件将交给搭档服务处理") }}</small><button type="button" :disabled="agentLoading||streaming" @click="loadCurrentAgent">{{ ct("刷新资料") }}</button></p>
+        <p v-if="agentId" class="qgc-model-cost-note qag-composer-quote"><ClientIcon name="agent" /><span>{{ agentQuote(currentAgent,ct).label }}</span><small>{{ agentLoading?ct("正在核对搭档资料…"):pt(agentError)||ct("问题与所选附件将交给搭档服务处理") }}</small><button type="button" :disabled="agentLoading||streaming" @click="loadCurrentAgent">{{ ct("刷新资料") }}</button></p>
         <p v-if="appId||appError||appLoading" class="qgc-model-cost-note qag-composer-quote" :role="appError?'alert':'status'"><AppAvatar v-if="appIcon" :icon="appIcon" :app-id="appId"/><ClientIcon v-else name="apps"/><span>{{ appName||ct("应用资料") }}</span><small>{{ appLoading?ct("正在核对应用设定…"):ct(appError)||ct("已核对第 {p0} 版设定，发送时再开始生成",{p0:(appVersion)}) }}</small><button v-if="appId" type="button" :disabled="appLoading||streaming||loadingDetail" @click="loadCurrentApp()">{{ ct("刷新应用资料") }}</button><button v-else type="button" @click="leaveApp">{{ ct("返回普通对话") }}</button></p>
         <p v-else-if="auth.isLoggedIn && currentModel" class="qgc-model-cost-note"><ClientIcon name="wallet" /><span>{{ modelBilling(currentModel,ct).title }}</span><small>{{ ct("发送时按站点设置") }}</small></p>
         <p v-if="webSearchOn" class="cv-web-search-note" role="status"><ClientIcon name="globe" />{{ currentModel?.webSearchAvailable ? ct("本轮允许模型按需要联网，仅发送当前问题和附件；仍按当前模型设置结算。") : ct("当前模型尚未接入联网，请关闭联网或选择支持的模型后发送。") }}</p>
@@ -381,6 +381,8 @@ import { citationMarkdown,webSearchReport } from '../lib/web-search.js';
 import WebSearchSources from '../components/design/WebSearchSources.vue';
 import AgentRunPanel from '../components/design/AgentRunPanel.vue';
 import {agentQuote,agentRunReport} from '../lib/agent-presentation.js';
+import {agentPreparation} from '../lib/agent-capabilities.js';
+import {partnerText as pt} from '../i18n/partner.js';
 import VoiceStudio from '../components/design/VoiceStudio.vue';
 import { useVoiceSession } from '../composables/useVoiceSession.js';
 import { currentLang, t } from '../i18n/index.js';
@@ -480,6 +482,8 @@ const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,.pdf,.doc,.docx,.xlsx,
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const fileInput = ref(null);
 const pendingFiles = ref([]);
+let composerEditRevision=0;
+watch([input,pendingFiles],()=>{composerEditRevision++;},{deep:true,flush:'sync'});
 const welcomeHeadingHidden = computed(() => compactComposer.value && (pendingFiles.value.length > 0 || composerFocus.value && composerLines.value > 2));
 const welcomeHintHidden = computed(() => pendingFiles.value.length > 0 || compactComposer.value && composerFocus.value);
 const dragging = ref(false);
@@ -488,7 +492,7 @@ const objectUrls = new Set();
 
 const uploading = computed(() => pendingFiles.value.some((f) => f.status === 'uploading'));
 const readyFiles = computed(() => pendingFiles.value.filter((f) => f.status === 'done'));
-const canSend = computed(() => !entryPending.value&&!entryError.value&&!appLoading.value&&!appError.value&&(!appId.value||Number.isInteger(appVersion.value))&&!uploading.value && !loadingDetail.value && !modelSaving.value && (!agentId.value||!agentLoading.value&&currentAgent.value?.ready&&!!currentAgent.value.offerRevision) && (!webSearchOn.value||currentModel.value?.webSearchAvailable) && (!!input.value.trim() || readyFiles.value.length > 0));
+const canSend = computed(() => !entryPending.value&&!entryError.value&&!appLoading.value&&!appError.value&&(!appId.value||Number.isInteger(appVersion.value))&&!uploading.value && !loadingDetail.value && !modelSaving.value && (!agentId.value||!agentLoading.value&&!agentError.value&&agentPreparation(currentAgent.value).ready) && (!webSearchOn.value||currentModel.value?.webSearchAvailable) && (!!input.value.trim() || readyFiles.value.length > 0));
 
 function extOf(name = '') {
   const m = /\.([a-z0-9]{1,5})$/i.exec(name);
@@ -1067,7 +1071,7 @@ function markAppUnavailable(error){if(!appId.value)return;const failure=chatAppF
 async function loadCurrentAgent(){
   agentRead?.abort();const request=new AbortController(),id=agentId.value,identity=auth.identityRevision,view=conversationViewRevision;agentRead=request;if(!id||!auth.isLoggedIn)return;agentLoading.value=true;agentError.value='';
   const current=()=>viewActive&&!request.signal.aborted&&auth.isLoggedIn&&auth.identityRevision===identity&&agentId.value===id&&view===conversationViewRevision;
-  try{const row=await api.get('/agents/'+encodeURIComponent(id),{signal:request.signal,retry:false});if(current()){currentAgent.value=row;if(!row.ready)agentError.value='这位搭档暂未就绪，请稍后刷新。';}}
+  try{const row=await api.get('/agents/'+encodeURIComponent(id),{signal:request.signal,retry:false});if(current()){if(row?.id!==id)throw new Error('搭档资料身份未能确认，请重新核对。');currentAgent.value=row;if(!agentPreparation(row).ready)agentError.value=row.ready?agentPreparation(row).reason:'这位搭档暂未就绪，请稍后刷新。';}}
   catch(error){if(current()){currentAgent.value=null;agentError.value=error.message||'搭档资料暂未确认，请刷新。';}}
   finally{if(agentRead===request){agentLoading.value=false;agentRead=null;}}
 }
@@ -1241,6 +1245,7 @@ function usePreset(preset) {
 /* ---------------- 流式 ---------------- */
 /** Each observer belongs to one view and one signed-in session. */
 async function streamInto(payload, target, resumeId) {
+  let admissionRejected=false;
   if(payload)target.webSearch=payload.webSearch?{requested:true,status:'requested',sources:[],citations:[]}:null;
   if(payload)target.agentActivity=payload.agentId?{kind:'agent',status:'waiting',context:'fresh',steps:[],suggestions:[],artifacts:[]}:null;
   const revision = ++streamRevision;
@@ -1328,10 +1333,15 @@ async function streamInto(payload, target, resumeId) {
       } else { target.notice = '暂时无法续接，稍后重新打开此会话即可查看'; target.noticeType = 'warn'; }
     }
   } catch (error) {
-    if (isCurrent()) { markAppUnavailable(error);target.notice = appId.value&&chatAppFailure(error)==='stale'?'应用设定已变化，请刷新资料后继续。':error.message || '请求失败'; target.noticeType = 'error'; }
+    if (isCurrent()) {
+      markAppUnavailable(error);
+      if(payload?.agentId===agentId.value&&payload?.agentId&&!operation.messageId&&error.status===409&&error.code===1001){admissionRejected=true;agentRead?.abort();currentAgent.value=null;agentLoading.value=false;agentError.value='搭档资料或费用已变化，请重新核对后再发送。';target.status='FAILED';}
+      target.notice = admissionRejected?agentError.value:appId.value&&chatAppFailure(error)==='stale'?'应用设定已变化，请刷新资料后继续。':error.message || '请求失败'; target.noticeType = 'error';
+    }
   } finally {
     if (isCurrent()) { streaming.value = false; stopping.value = false; controller = null; activeRun = null; target.streaming = false; }
   }
+  return{admissionRejected,current:isCurrent()};
 }
 
 async function cancelRun(operation) {
@@ -1363,17 +1373,20 @@ async function send() {
     return ElMessage.warning(ct("当前模型不支持识图，请先在模型列表里换一个支持图片理解的模型"));
   }
 
+  const originalDraft={text:input.value,files:[...pendingFiles.value]};
   input.value = '';
   pendingFiles.value = [];
+  const clearedRevision=composerEditRevision;
   nextTick(autosize);
   messages.value.push({ role: 'user', content: text || '请阅读附件', attachments });
   messages.value.push({ role: 'assistant', content: '', streaming: true, notice: '', noticeType: '' });
   const target = messages.value[messages.value.length - 1];
+  const submittedUser=messages.value[messages.value.length-2];
   scrollToBottom(true);
 
   // 关闭上下文时只发本条，服务端以客户端给的消息为准
   const history = contextOn.value&&!webSearchOn.value
-    ? visibleMessages.value.filter((m) => m !== target && m.content)
+    ? visibleMessages.value.filter((m) => m !== target && m.content&&!m.notAdmitted)
     : [messages.value[messages.value.length - 2]];
 
   const payload = {
@@ -1386,7 +1399,13 @@ async function send() {
     messages: history.map(toPayloadMessage),
   };
 
-  await streamInto(payload, target);
+  const outcome=await streamInto(payload, target);
+  if(outcome?.admissionRejected&&outcome.current){
+    submittedUser.notAdmitted=true;target.notAdmitted=true;
+    if(composerEditRevision===clearedRevision&&messages.value.at(-1)===target&&messages.value.at(-2)===submittedUser){
+      messages.value.splice(-2,2);input.value=originalDraft.text;pendingFiles.value=originalDraft.files;nextTick(autosize);ElMessage.info(pt('原问题与附件已带回，核对新资料后可明确发送。'));
+    }else target.notice='原问题与附件已保留在本轮记录，可编辑带回。';
+  }
 }
 
 /** 重新生成：复用同一条用户提问，服务端会挂在同一个父节点下形成分支 */
@@ -1395,14 +1414,14 @@ async function regenerate(message) {
   if (streaming.value) return;
   if(entryPending.value||entryError.value)return ElMessage.warning(ct("请先打开并核对当前创作空间"));
   if(appLoading.value||appError.value||appId.value&&!Number.isInteger(appVersion.value))return ElMessage.warning(ct("请先刷新并核对应用资料"));
-  if(agentId.value&&(!currentAgent.value?.ready||!currentAgent.value.offerRevision||agentLoading.value))return ElMessage.warning(ct("请先刷新并核对搭档资料与费用"));
+  if(agentId.value&&(!agentPreparation(currentAgent.value).ready||agentError.value||agentLoading.value))return ElMessage.warning(ct("请先刷新并核对搭档资料与费用"));
   if(webSearchOn.value&&!currentModel.value?.webSearchAvailable)return ElMessage.warning(ct("请关闭联网或先选择支持联网的模型"));
   if (!message.serverId) return ElMessage.warning(ct("这条消息还不能重新生成"));
   const visible = visibleMessages.value;
   const index = visible.indexOf(message);
   if (index < 0) return;
 
-  const history = (contextOn.value&&!webSearchOn.value ? visible.slice(0, index) : visible.slice(index - 1, index)).filter((m) => m.content);
+  const history = (contextOn.value&&!webSearchOn.value ? visible.slice(0, index) : visible.slice(index - 1, index)).filter((m) => m.content&&!m.notAdmitted);
 
   message.content = '';
   message.reasoning = '';
