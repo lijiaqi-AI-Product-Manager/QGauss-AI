@@ -16,6 +16,7 @@ export interface IncomingFile {
   mimetype: string;
   size: number;
 }
+export interface ArtifactStage {id:string;storedKey:string;filename:string;mime:string;size:number;sha256:string;backend:string;}
 
 /**
  * multer（busboy）按 latin1 解 multipart 里的文件名，中文名会变成「è¯´æ」这样的乱码。
@@ -157,6 +158,7 @@ export class StorageService {
     size: number;
     scope: string;
     createdAt: Date;
+    version?:number;
   }) {
     return {
       id: row.id,
@@ -166,6 +168,7 @@ export class StorageService {
       scope: row.scope,
       url: `/${this.prefix}/upload/${row.id}/raw`,
       createdAt: row.createdAt,
+      version:row.version,
     };
   }
 
@@ -174,7 +177,7 @@ export class StorageService {
     if (!row || row.deletedAt || row.purgedAt || row.expiresAt && row.expiresAt <= new Date()) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '文件不存在', 404);
     }
-    if (row.userId !== userId && (role !== 'ADMIN'||['voice-recording','voice-result','app-icon'].includes(row.scope))) {
+    if (row.userId !== userId && (role !== 'ADMIN'||['voice-recording','voice-result','app-icon','agent-result'].includes(row.scope))) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '文件不存在', 404);
     }
     return row;
@@ -200,7 +203,7 @@ export class StorageService {
   async remove(id: string, userId: string, role: string) {
     const row = await this.findOwned(id, userId, role);
     if(row.scope==='app-icon') throw new BusinessException(ErrorCode.PARAM_INVALID,'应用图片随应用内容管理，请在编辑页更换',409);
-    await this.prisma.uploadFile.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.prisma.uploadFile.update({ where: { id }, data: { deletedAt: new Date(),trashedAt:null,version:{increment:1} } });
     await this.driver.remove(row.storedKey).catch((e) => this.logger.warn(`删除文件失败: ${e.message}`));
     return { ok: true };
   }
@@ -256,6 +259,48 @@ export class StorageService {
       this.prisma.uploadFile.count({ where: { userId, scope:{not:'app-icon'}, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] } }),
     ]);
     return { items: items.map((r) => this.view(r)), total, page: safePage, pageSize: safeSize };
+  }
+
+  async artifactLimit(){return Math.min(20,await this.settings.get<number>('upload.maxSizeMb'))*1024*1024;}
+  async prepareArtifact(buffer:Buffer,title:string):Promise<ArtifactStage>{
+    if(!buffer.length||buffer.length>await this.artifactLimit())throw new Error('TOO_LARGE');
+    const type=detectType(buffer),allowed=(await this.settings.get<string>('upload.allowedMime')).split(',').map(value=>value.trim()).filter(Boolean);
+    if(!type||allowed.length&&!allowed.includes(type.mime)||type.mime==='text/plain'&&/^\s*(?:<\?xml[^>]*>\s*)?<svg[\s>]/i.test(buffer.toString('utf8',0,1024)))throw new Error('FORMAT');
+    const original=title.replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g,' ').trim().slice(0,170),extension=/\.([a-z0-9]+)$/i.exec(original)?.[1]?.toLowerCase();
+    const ext=type.mime==='text/plain'&&['txt','md','csv','json'].includes(extension||'')?extension!:type.ext;
+    const now=new Date(),id=randomUUID();
+    return{id,storedKey:`${now.getUTCFullYear()}/${String(now.getUTCMonth()+1).padStart(2,'0')}/${id}.${ext}`,filename:(original.replace(/\.[a-z0-9]{1,8}$/i,'')||'QGauss-result')+'.'+ext,mime:type.mime,size:buffer.length,sha256:createHash('sha256').update(buffer).digest('hex'),backend:this.driver.name};
+  }
+  private checkStage(stage:ArtifactStage){
+    if(!stage||!/^[a-z0-9-]{8,64}$/.test(stage.id)||!/^\d{4}\/\d{2}\/[a-z0-9-]{8,64}\.[a-z0-9]{1,8}$/.test(stage.storedKey)||!Number.isSafeInteger(stage.size)||stage.size<=0||stage.size>200*1024*1024||!/^[a-f0-9]{64}$/.test(stage.sha256)||stage.backend!==this.driver.name)throw new Error('STORAGE');
+  }
+  async putArtifact(stage:ArtifactStage,buffer:Buffer){this.checkStage(stage);if(buffer.length!==stage.size||createHash('sha256').update(buffer).digest('hex')!==stage.sha256)throw new Error('STORAGE');await this.driver.put(stage.storedKey,buffer);}
+  async verifyArtifact(stage:ArtifactStage){this.checkStage(stage);if(!await this.driver.exists(stage.storedKey))return false;const buffer=await this.driver.get(stage.storedKey);if(buffer.length!==stage.size||createHash('sha256').update(buffer).digest('hex')!==stage.sha256)throw new Error('INTEGRITY');return true;}
+  async discardArtifact(stage:ArtifactStage){this.checkStage(stage);await this.driver.remove(stage.storedKey);}
+  async artifactFile(userId:string,id:string){
+    const row=await this.prisma.uploadFile.findFirst({where:{id,userId,scope:'agent-result'}});
+    if(!row||row.purgedAt||row.expiresAt&&row.expiresAt<=new Date())return{status:'removed'};
+    if(row.deletedAt)return{status:row.trashedAt?'trashed':'removed'};
+    try{if(!await this.driver.exists(row.storedKey))return{status:'removed'};}catch{return{status:'unknown'};}
+    return{status:'saved',file:this.view(row)};
+  }
+  async listLibrary(userId:string,query:{page?:number;pageSize?:number;trash?:string;kind?:string;q?:string}){
+    const page=query.page||1,pageSize=Math.min(query.pageSize||20,50),where:any={userId,scope:{in:['chat','agent-result']},purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}],...(query.trash==='1'?{trashedAt:{not:null},deletedAt:{not:null}}:{deletedAt:null})};
+    if(query.q)where.filename={contains:query.q};if(query.kind==='image')where.mime={startsWith:'image/'};if(query.kind==='file')where.NOT={mime:{startsWith:'image/'}};
+    const [rows,total]=await Promise.all([this.prisma.uploadFile.findMany({where,orderBy:[{createdAt:'desc'},{id:'desc'}],skip:(page-1)*pageSize,take:pageSize}),this.prisma.uploadFile.count({where})]);
+    return{items:rows.map(row=>({...this.view(row),...(query.trash==='1'?{restorable:true}:{} )})),total,page,pageSize};
+  }
+  async trashFile(userId:string,id:string,expectedVersion:number,restore=false){
+    const fail=()=>new BusinessException(ErrorCode.PARAM_INVALID,'文件状态已变化，请重新核对',409);
+    const previous=await this.prisma.uploadFile.findFirst({where:{id,userId,scope:{in:['chat','agent-result']},purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}});
+    if(!previous)throw new BusinessException(ErrorCode.NOT_FOUND,'文件不存在',404);
+    if(previous.version!==expectedVersion|| (restore?!previous.trashedAt||!previous.deletedAt:!!previous.deletedAt))throw fail();
+    if(restore&&!await this.verifyArtifact({...previous,id:previous.id}))throw new BusinessException(ErrorCode.NOT_FOUND,'原文件暂不可恢复',404);
+    await this.prisma.$transaction(async tx=>{
+      await tx.$executeRaw`UPDATE "users" SET "id"="id" WHERE "id"=${userId}`;
+      if(!await tx.user.findFirst({where:{id:userId,status:'ACTIVE',deletedAt:null}}))throw new BusinessException(ErrorCode.FORBIDDEN,'当前身份不能修改文件',403);
+      const updated=await tx.uploadFile.updateMany({where:{id,userId,version:expectedVersion,purgedAt:null,...(restore?{trashedAt:{not:null},deletedAt:{not:null}}:{deletedAt:null}),OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]},data:{deletedAt:restore?null:new Date(),trashedAt:restore?null:new Date(),version:{increment:1}}});if(!updated.count)throw fail();
+    });return{ok:true};
   }
 
   /**

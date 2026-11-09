@@ -11,6 +11,9 @@ export class AgentListDto {
 export class AgentFavoriteDto {
   @Transform(({obj,key})=>obj[key]) @IsBoolean() favorited:boolean;
 }
+export class ArtifactSaveDto{
+ @Transform(({obj,key})=>obj[key]) @IsInt() @Min(0) @Max(2147483646) expectedVersion:number;
+}
 export class AgentConnectionDto {
   @Transform(({obj,key})=>obj[key]) @ValidateIf((_,v)=>v!==undefined) @IsInt() @Min(1) @Max(2147483646) version?:number;
   @ValidateIf((_,v)=>v!==undefined) @IsString() @Length(1,64) name?:string;

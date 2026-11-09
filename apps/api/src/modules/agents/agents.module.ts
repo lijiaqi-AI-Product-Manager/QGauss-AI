@@ -5,6 +5,7 @@ import { CozeClientService } from './coze-client.service';
 import { AgentsService } from './agents.service';
 import { AgentExecutionService } from './agent-execution.service';
 import { AgentsController } from './agents.controller';
+import {ArtifactSavesService} from './artifact-saves.service';
 
-@Module({imports:[SettingsModule,StorageModule],controllers:[AgentsController],providers:[CozeClientService,AgentsService,AgentExecutionService],exports:[AgentsService,AgentExecutionService]})
+@Module({imports:[SettingsModule,StorageModule],controllers:[AgentsController],providers:[CozeClientService,AgentsService,AgentExecutionService,ArtifactSavesService],exports:[AgentsService,AgentExecutionService]})
 export class AgentsModule {}

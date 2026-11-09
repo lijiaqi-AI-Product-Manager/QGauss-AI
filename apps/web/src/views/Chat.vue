@@ -217,7 +217,7 @@
                 </div>
                 <MarkdownMessage v-else-if="m.content" :content="m.streaming?m.content:citationMarkdown(m.content,m.webSearch)" :streaming="!!m.streaming" @rendered="scrollToBottom()" />
                 <WebSearchSources :value="m.webSearch" :streaming="!!m.streaming" />
-                <AgentRunPanel :value="m.agentActivity" :disabled="streaming||loadingDetail" @select="fillAgentQuestion" />
+                <AgentRunPanel :value="m.agentActivity" :message-id="m.serverId" :disabled="streaming||loadingDetail" @select="fillAgentQuestion" @reuse="reusePersonalFile" @library="personalFiles.show" />
                 <div v-if="m.notice" class="cv-notice" :class="m.noticeType">{{ ct(m.notice) }}</div>
                 <div v-if="m.billing" class="cv-billing" :aria-label="ct(&quot;本次对话次数&quot;)"><QStar :size="12" /><span>{{ billingLabel(m.billing) }}</span></div>
                 <div v-if="!m.streaming" class="cv-actions">
@@ -354,6 +354,7 @@
               <el-icon><Connection /></el-icon><span class="cv-chip-text">{{ contextOn&&!webSearchOn ? ct("上下文开") : ct("上下文关") }}</span>
             </button>
             <button type="button" class="cv-plus" :title="t('conversation.attachHint')" :aria-label="t('conversation.attach')" @click="fileInput?.click()"><el-icon><Plus /></el-icon></button>
+            <button type="button" class="cv-plus" :title="ct('我的创作文件')" :aria-label="ct('我的创作文件')" @click="personalFiles.show()"><ClientIcon name="folder"/></button>
             <button type="button" class="cv-mic" :class="{ on: voice.recording }" :title="t('conversation.voice')" :aria-label="t('conversation.voice')" :aria-pressed="voice.open" @click="openVoice"><el-icon><Microphone /></el-icon></button>
             <button v-if="streaming" type="button" class="cv-stop" :aria-label="t('conversation.stop')" :disabled="stopping || activeRun?.target.status === 'SETTLING'" @click="stop"><span class="cv-stop-square"></span></button>
             <button v-else type="button" class="cv-send" :disabled="!canSend" :aria-label="t('chat.send')" @click="send"><el-icon><Top /></el-icon></button>
@@ -364,6 +365,7 @@
     </section>
 
     <ModelPicker :open="panelOpen" :models="models" :selected="model" :busy="modelSaving" @close="panelOpen = false" @select="selectModel" />
+    <PersonalFileLibrary :open="personalFiles.open.value" :items="personalFiles.items.value" :loading="personalFiles.loading.value" :error="personalFiles.error.value" :tab="personalFiles.tab.value" :kind="personalFiles.kind.value" :page="personalFiles.page.value" :total="personalFiles.total.value" :busy-id="personalFiles.busyId.value" :disabled="streaming||loadingDetail||entryPending" @close="personalFiles.close" @tab="value=>personalFiles.filter('tab',value)" @kind="value=>personalFiles.filter('kind',value)" @search="value=>personalFiles.filter('search',value)" @page="value=>personalFiles.filter('page',value)" @refresh="personalFiles.refresh" @download="personalFiles.download" @select="reusePersonalFile" @trash="file=>personalFiles.change(file,'trash')" @restore="file=>personalFiles.change(file,'restore')"/>
   </div>
 </template>
 
@@ -380,6 +382,8 @@ import { imageOnly, modelBilling } from '../lib/model-presentation.js';
 import { citationMarkdown,webSearchReport } from '../lib/web-search.js';
 import WebSearchSources from '../components/design/WebSearchSources.vue';
 import AgentRunPanel from '../components/design/AgentRunPanel.vue';
+import PersonalFileLibrary from '../components/design/PersonalFileLibrary.vue';
+import {usePersonalFiles} from '../composables/usePersonalFiles.js';
 import {agentQuote,agentRunReport} from '../lib/agent-presentation.js';
 import {agentPreparation} from '../lib/agent-capabilities.js';
 import {partnerText as pt} from '../i18n/partner.js';
@@ -482,6 +486,18 @@ const ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,.pdf,.doc,.docx,.xlsx,
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const fileInput = ref(null);
 const pendingFiles = ref([]);
+const personalFiles=usePersonalFiles();
+async function reusePersonalFile(id){
+ if(streaming.value||loadingDetail.value||entryPending.value||entryError.value)return;
+ if(pendingFiles.value.some(file=>file.id===id))return ElMessage.info(ct('这个文件已在编辑区。'));
+ if(pendingFiles.value.length>=9)return ElMessage.warning(ct('一条消息最多附带 9 个文件'));
+ const identity=auth.identityRevision,view=conversationViewRevision;
+ try{const file=await api.get(`/upload/${encodeURIComponent(id)}`);if(!viewActive||!auth.isLoggedIn||identity!==auth.identityRevision||view!==conversationViewRevision||streaming.value||loadingDetail.value)return;
+  if(!['chat','agent-result'].includes(file.scope)||!['image/png','image/jpeg','image/webp','image/gif','application/pdf','text/plain','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].includes(file.mime))return ElMessage.info(ct('这个格式可下载查看，暂不能作为对话附件。'));
+  if(pendingFiles.value.length>=9||pendingFiles.value.some(item=>item.id===file.id))return;
+  const item=reactive({localId:'saved-'+file.id,id:file.id,name:file.filename,size:file.size,kind:IMAGE_TYPES.includes(file.mime)?'image':'document',preview:'',status:'done',error:''});pendingFiles.value.push(item);personalFiles.close();ElMessage.success(ct('已放入编辑区，确认后再发送。'));
+ }catch{if(viewActive&&identity===auth.identityRevision)ElMessage.error(ct('文件暂不可用，请刷新个人文件。'));}
+}
 let composerEditRevision=0;
 watch([input,pendingFiles],()=>{composerEditRevision++;},{deep:true,flush:'sync'});
 const welcomeHeadingHidden = computed(() => compactComposer.value && (pendingFiles.value.length > 0 || composerFocus.value && composerLines.value > 2));

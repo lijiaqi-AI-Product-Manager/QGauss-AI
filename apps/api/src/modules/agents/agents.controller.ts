@@ -1,12 +1,15 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { AgentConnectionDto, AgentEditDto, AgentFavoriteDto, AgentImportDto, AgentListDto } from './agent.dto';
+import { AgentConnectionDto, AgentEditDto, AgentFavoriteDto, AgentImportDto, AgentListDto,ArtifactSaveDto } from './agent.dto';
 import { AgentsService } from './agents.service';
+import {ArtifactSavesService} from './artifact-saves.service';
 
 @Controller('agents')
 export class AgentsController {
-  constructor(private readonly agents:AgentsService){}
+  constructor(private readonly agents:AgentsService,private readonly saves:ArtifactSavesService){}
+  @Get('messages/:messageId/artifacts') artifactReceipts(@CurrentUser() user:AuthUser,@Param('messageId') id:string){return this.saves.list(user.id,id);}
+  @Post('messages/:messageId/artifacts/:key/save') saveArtifact(@CurrentUser() user:AuthUser,@Param('messageId') id:string,@Param('key') key:string,@Body() dto:ArtifactSaveDto){return this.saves.save(user.id,id,key,dto.expectedVersion);}
   @Roles('ADMIN') @Get('admin/connections') connections(){return this.agents.connections();}
   @Roles('ADMIN') @Post('admin/connections') createConnection(@Body() dto:AgentConnectionDto){return this.agents.saveConnection(dto);}
   @Roles('ADMIN') @Patch('admin/connections/:id') updateConnection(@Param('id') id:string,@Body() dto:AgentConnectionDto){return this.agents.saveConnection(dto,id);}
