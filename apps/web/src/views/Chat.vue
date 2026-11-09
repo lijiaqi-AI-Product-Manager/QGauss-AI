@@ -498,6 +498,7 @@ const objectUrls = new Set();
 const uploading = attachmentQueue.uploading;
 const readyFiles = attachmentQueue.readyFiles;
 const preparingSend=ref(false);
+let attachmentPreparationRevision=0,historyAttachmentRead;
 const canSend = computed(() => !entryPending.value&&!entryError.value&&!appLoading.value&&!appError.value&&(!appId.value||Number.isInteger(appVersion.value))&&!uploading.value&&!attachmentQueue.blocked.value&&!attachmentQueue.checking.value&&!preparingSend.value && !loadingDetail.value && !modelSaving.value && (!agentId.value||!agentLoading.value&&!agentError.value&&agentPreparation(currentAgent.value).ready) && (!webSearchOn.value||currentModel.value?.webSearchAvailable) && (!!input.value.trim() || readyFiles.value.length > 0));
 
 function extOf(name = '') {
@@ -899,6 +900,7 @@ async function selectModel(m) {
 }
 
 function changeConversationView() {
+  attachmentPreparationRevision++;preparingSend.value=false;historyAttachmentRead?.abort();historyAttachmentRead=null;attachmentQueue.clear();
   entryRead?.abort();entryRead=null;entryPending.value=false;entryError.value='';
   appRead?.abort();appRead=null;appLoading.value=false;
   voice.reset();
@@ -1337,8 +1339,9 @@ async function cancelRun(operation) {
 function currentSendIntent(){return JSON.stringify({model:model.value,billing:currentModel.value?.billing,app:appId.value,version:appVersion.value,agent:agentId.value,offer:currentAgent.value?.offerRevision,context:contextOn.value,search:webSearchOn.value,branch:branchChoice.value});}
 async function confirmHistoryAttachments(history,current){
   const last=history.findLast(row=>row.role==='user'),ids=[...new Set((last?.attachments||[]).map(file=>file.id))];if(!ids.length)return true;
-  try{const result=await api.post('/upload/attachments/check',{ids});if(!current())return false;if(ids.every(id=>result.items?.some(row=>row.id===id&&row.status==='available')))return true;ElMessage.warning(ct('这轮提问中的附件暂不可用，请编辑问题后重新选择文件。'));}
-  catch{if(current())ElMessage.warning(ct('附件暂未核对，请稍后重试。'));}return false;
+  historyAttachmentRead?.abort();const request=new AbortController();historyAttachmentRead=request;
+  try{const result=await api.post('/upload/attachments/check',{ids},{signal:request.signal});if(!current()||request.signal.aborted)return false;if(ids.every(id=>result.items?.some(row=>row.id===id&&row.status==='available')))return true;ElMessage.warning(ct('这轮提问中的附件暂不可用，请编辑问题后重新选择文件。'));}
+  catch{if(current()&&!request.signal.aborted)ElMessage.warning(ct('附件暂未核对，请稍后重试。'));}finally{if(historyAttachmentRead===request)historyAttachmentRead=null;}return false;
 }
 async function send() {
   const text = input.value.trim();
@@ -1346,7 +1349,7 @@ async function send() {
   if (!agentId.value&&!model.value) return ElMessage.warning(ct("请先选择模型"));
   if (!agentId.value&&!currentModel.value?.ready) { panelOpen.value = true; return ElMessage.warning(ct("当前模型已停用或未接入，请选择可用模型")); }
   const edit=composerEditRevision,view=conversationViewRevision,identity=auth.identityRevision,intent=currentSendIntent();
-  if(pendingFiles.value.length){preparingSend.value=true;let ready=false;try{ready=await attachmentQueue.checkBeforeSend();}finally{preparingSend.value=false;}if(!ready||!viewActive||!auth.isLoggedIn||identity!==auth.identityRevision||view!==conversationViewRevision)return;if(edit!==composerEditRevision||intent!==currentSendIntent())return ElMessage.info(ct('编辑区或创作设定已变化，请确认后再发送。'));if(!canSend.value||streaming.value)return;}
+  if(pendingFiles.value.length){const preparation=++attachmentPreparationRevision;preparingSend.value=true;let ready=false;try{ready=await attachmentQueue.checkBeforeSend();}finally{if(preparation===attachmentPreparationRevision)preparingSend.value=false;}if(!ready||!viewActive||!auth.isLoggedIn||identity!==auth.identityRevision||view!==conversationViewRevision)return;if(edit!==composerEditRevision||intent!==currentSendIntent())return ElMessage.info(ct('编辑区或创作设定已变化，请确认后再发送。'));if(!canSend.value||streaming.value)return;}
 
   const attachments = readyFiles.value.map((f) => ({
     id: f.id,
@@ -1410,7 +1413,7 @@ async function regenerate(message) {
 
   const history = (contextOn.value&&!webSearchOn.value ? visible.slice(0, index) : visible.slice(index - 1, index)).filter((m) => m.content&&!m.notAdmitted);
   const identity=auth.identityRevision,intent=currentSendIntent(),current=()=>viewActive&&auth.isLoggedIn&&identity===auth.identityRevision&&viewRevision===conversationViewRevision&&intent===currentSendIntent()&&visibleMessages.value.includes(message);
-  preparingSend.value=true;let ready=false;try{ready=await confirmHistoryAttachments(history,current);}finally{preparingSend.value=false;}if(!ready||!current())return;
+  const preparation=++attachmentPreparationRevision;preparingSend.value=true;let ready=false;try{ready=await confirmHistoryAttachments(history,current);}finally{if(preparation===attachmentPreparationRevision)preparingSend.value=false;}if(!ready||!current())return;
   const original={...message};
 
   message.content = '';
@@ -1508,7 +1511,7 @@ function onKeydown(e) {
 }
 
 onUnmounted(() => {
-  entryRead?.abort();appRead?.abort();agentRead?.abort();
+  entryRead?.abort();appRead?.abort();agentRead?.abort();historyAttachmentRead?.abort();
   inputResizeObserver?.disconnect();
   if (historyPoll) clearInterval(historyPoll);
   document.removeEventListener('visibilitychange', refreshBackgroundState);
