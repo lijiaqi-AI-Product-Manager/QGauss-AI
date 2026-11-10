@@ -8,16 +8,27 @@ import { Prisma } from '@prisma/client';
 import { userQuery, userConditions, userId, activityQuery } from './users.query';
 import { shanghaiDate } from '../commerce/ledger.service';
 
-const publicUser = { id:true,email:true,username:true,displayName:true,role:true,status:true,isDistribution:true,emailVerifiedAt:true,createdAt:true,updatedAt:true } satisfies Prisma.UserSelect;
+const publicUser = { id:true,email:true,username:true,displayName:true,role:true,status:true,isDistribution:true,adminNote:true,emailVerifiedAt:true,createdAt:true,updatedAt:true } satisfies Prisma.UserSelect;
 const orderBy = [{ createdAt:'desc' as const },{ id:'desc' as const }];
+const explicitBoundary=(input:Record<string,unknown>)=>typeof input.asOf==='string'&&!!input.asOf.trim();
+const boundary=(now:Date,dates:(Date|null)[])=>new Date(Math.max(now.getTime(),...dates.filter((date):date is Date=>!!date&&date.getTime()<=now.getTime()+1000).map(date=>date.getTime()))).toISOString();
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService, private readonly rateLimit: RateLimitService) {}
 
+  private async activityReadAt(tx:Prisma.TransactionClient,id:string,kind?:string){
+    const now=new Date(),where={userId:id,createdAt:{lte:new Date(now.getTime()+1000)}},pending:Promise<Date|null>[]=[];
+    if(!kind||kind==='grants')pending.push(tx.accountLog.aggregate({where,_max:{createdAt:true}}).then(row=>row._max.createdAt));
+    if(!kind||kind==='logins')pending.push(tx.userLoginLog.aggregate({where,_max:{createdAt:true}}).then(row=>row._max.createdAt));
+    if(!kind||kind==='conversations')pending.push(tx.conversation.aggregate({where,_max:{createdAt:true}}).then(row=>row._max.createdAt));
+    if(!kind||kind==='management')pending.push(tx.userAccountOperation.aggregate({where,_max:{createdAt:true}}).then(row=>row._max.createdAt));
+    return boundary(now,await Promise.all(pending));
+  }
+
   private strip(user: any) {
     if (!user) return null;
-    const { passwordHash, tokenVersion, ...rest } = user;
+    const { passwordHash, tokenVersion, adminNote, ...rest } = user;
     return rest;
   }
 
@@ -67,8 +78,10 @@ export class UsersService {
   }
 
   async list(input: Record<string, unknown> = {}) {
-    const q=userQuery(input),where=userConditions(q);
+    const q=userQuery(input);
     return this.prisma.$transaction(async tx=>{
+      if(!explicitBoundary(input)){const now=new Date(),latest=await tx.user.aggregate({where:{deletedAt:null,createdAt:{lte:new Date(now.getTime()+1000)}},_max:{createdAt:true}});q.asOf=boundary(now,[latest._max.createdAt]);}
+      const where=userConditions(q);
       const ids=await tx.$queryRaw<{id:string}[]>(Prisma.sql`SELECT u."id" FROM "users" u WHERE ${where} ORDER BY u."createdAt" DESC,u."id" DESC LIMIT ${q.pageSize} OFFSET ${(q.page-1)*q.pageSize}`);
       const counts=await tx.$queryRaw<{total:bigint;active:bigint;admins:bigint}[]>(Prisma.sql`SELECT count(*) total,coalesce(sum(CASE WHEN u."status"='ACTIVE' THEN 1 ELSE 0 END),0) active,coalesce(sum(CASE WHEN u."role"='ADMIN' THEN 1 ELSE 0 END),0) admins FROM "users" u WHERE ${where}`);
       const items=ids.length?await tx.user.findMany({where:{id:{in:ids.map(row=>row.id)}},select:publicUser,orderBy}):[];
@@ -81,22 +94,27 @@ export class UsersService {
     return this.prisma.$transaction(async tx=>{
       const user=await tx.user.findFirst({where:{id,deletedAt:null},select:publicUser});
       if(!user)throw new BusinessException(ErrorCode.NOT_FOUND,'用户不存在',404);
-      const [ub,money,reserved,conversations,grants,logins]=await Promise.all([
+      const readAt=await this.activityReadAt(tx,id),activityWhere={userId:id,createdAt:{lte:new Date(readAt)}};
+      const [ub,money,reserved,conversations,grants,logins,management,sales]=await Promise.all([
         tx.userBalance.findUnique({where:{userId:id}}),tx.balance.findUnique({where:{userId:id},select:{balanceCents:true}}),
         tx.countReservation.groupBy({by:['pool'],where:{userId:id,status:'HELD'},_sum:{amount:true}}),
-        tx.conversation.count({where:{userId:id}}),tx.accountLog.count({where:{userId:id}}),tx.userLoginLog.count({where:{userId:id}}),
+        tx.conversation.count({where:activityWhere}),tx.accountLog.count({where:activityWhere}),tx.userLoginLog.count({where:activityWhere}),
+        tx.userAccountOperation.count({where:activityWhere}),
+        tx.salesUser.findUnique({where:{userId:id},select:{id:true}}),
       ]);
       const now=new Date(),isMember=!!ub?.expirationTime&&ub.expirationTime>now,reset=ub?.memberResetOn!==shanghaiDate(now);
       const pools=[['model3','model3Count','memberModel3Count','dailyModel3Count'],['model4','model4Count','memberModel4Count','dailyModel4Count'],['drawMj','drawMjCount','memberDrawMjCount','dailyDrawMjCount'],['agent','agentCount','memberAgentCount','dailyAgentCount']] as const;
       const counts=Object.fromEntries(pools.map(([key,paid,member,daily])=>[key,{paid:ub?.[paid]??0,member:isMember?(ub?.[reset?daily:member]??0):0,reserved:reserved.find(row=>row.pool===key)?._sum.amount??0}]));
-      return {...user,balanceCents:money?.balanceCents??0,counts,isMember,expirationTime:ub?.expirationTime??null,activity:{conversations,grants,logins},readAt:now.toISOString()};
+      return {...user,distributionAccountReady:!!sales,balanceCents:money?.balanceCents??0,counts,isMember,expirationTime:ub?.expirationTime??null,activity:{conversations,grants,logins,management},readAt};
     });
   }
 
   async activity(id: string,input: Record<string,unknown> = {}) {
-    userId(id);const {kind,page,pageSize,asOf}=activityQuery(input),where={userId:id,createdAt:{lte:new Date(asOf)}},skip=(page-1)*pageSize;
+    userId(id);const q=activityQuery(input),{kind,page,pageSize}=q,skip=(page-1)*pageSize;
     return this.prisma.$transaction(async tx=>{
       if(!await tx.user.findFirst({where:{id,deletedAt:null},select:{id:true}}))throw new BusinessException(ErrorCode.NOT_FOUND,'用户不存在',404);
+      const asOf=explicitBoundary(input)?q.asOf:await this.activityReadAt(tx,id,kind),where={userId:id,createdAt:{lte:new Date(asOf)}};
+      if(kind==='management'){const [rows,total]=await Promise.all([tx.userAccountOperation.findMany({where,orderBy,skip,take:pageSize,select:{id:true,kind:true,resultJson:true,createdAt:true}}),tx.userAccountOperation.count({where})]);return{items:rows.map(({resultJson,...row})=>({...row,receipt:JSON.parse(resultJson)})),total,page,pageSize,kind,userId:id,asOf};}
       const [items,total]=kind==='logins'?await Promise.all([
         tx.userLoginLog.findMany({where,orderBy,skip,take:pageSize,select:{id:true,success:true,ip:true,userAgent:true,createdAt:true}}),tx.userLoginLog.count({where}),
       ]):kind==='grants'?await Promise.all([
@@ -150,22 +168,4 @@ export class UsersService {
     return {...result,items:result.items.map(({id,success,ip,userAgent,createdAt})=>({id,success,ip,userAgent,createdAt}))};
   }
 
-  /**
-   * 踢下线：不改账号状态，只让凭证立即失效。
-   * tokenVersion +1 让已签发的 access token 失效；同时吊销全部 refresh。
-   */
-  async kickOffline(id: string) {
-    const user = await this.prisma.user.findUnique({ where: { id } });
-    if (!user) throw new BusinessException(ErrorCode.NOT_FOUND, '用户不存在', 404);
-
-    await this.prisma.user.update({
-      where: { id },
-      data: { tokenVersion: { increment: 1 } },
-    });
-    await this.prisma.refreshToken.updateMany({
-      where: { userId: id, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    return { ok: true };
-  }
 }

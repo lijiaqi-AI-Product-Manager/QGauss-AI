@@ -1,7 +1,7 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **313** 条路由，分布在 **32** 个控制器。
+> 共 **320** 条路由，分布在 **32** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
@@ -34,7 +34,7 @@
 | `/signin` | 2 | `src/modules/commerce/signin.controller.ts` |
 | `/statistic` | 6 | `src/modules/statistic/statistic.controller.ts` |
 | `/upload` | 10 | `src/modules/storage/upload.controller.ts` |
-| `/users` | 10 | `src/modules/users/users.controller.ts` |
+| `/users` | 17 | `src/modules/users/users.controller.ts` |
 | `/video` | 24 | `src/modules/video/video.controller.ts` |
 | `/voice` | 17 | `src/modules/voice/voice.controller.ts` |
 
@@ -453,9 +453,16 @@
 | PATCH | `/users/profile` | 登录 |
 | POST | `/users/password` | 登录 |
 | GET | `/users/logins` | 登录 |
+| GET | `/users/sessions` | 登录 |
+| POST | `/users/session-actions` | 登录 |
+| POST | `/users/account-actions/resolve` | 登录 |
 | GET | `/users` | ADMIN |
 | GET | `/users/:id` | ADMIN |
 | GET | `/users/:id/activity` | ADMIN |
+| GET | `/users/:id/sessions` | ADMIN |
+| PATCH | `/users/:id/management` | ADMIN |
+| POST | `/users/:id/session-actions` | ADMIN |
+| POST | `/users/:id/account-actions/resolve` | ADMIN |
 | PATCH | `/users/:id/status` | ADMIN |
 | GET | `/users/:id/logins` | ADMIN |
 | POST | `/users/:id/kick` | ADMIN |

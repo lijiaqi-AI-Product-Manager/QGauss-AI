@@ -61,7 +61,7 @@ export class AuthService implements OnModuleInit {
 
   private strip(user: any) {
     if (!user) return null;
-    const { passwordHash, tokenVersion, ...rest } = user;
+    const { passwordHash, tokenVersion, adminNote, ...rest } = user;
     return rest;
   }
 

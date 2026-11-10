@@ -3,10 +3,12 @@ import { AuthUser, CurrentUser } from '../../common/decorators/current-user.deco
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ChangePasswordDto, SetStatusDto, UpdateProfileDto } from './dto/user.dto';
 import { UsersService } from './users.service';
+import {UserAccountControlsService} from './account-controls.service';
+import {ManagementDetailsDto,SessionActionDto,ResolveAccountActionDto} from './dto/account-controls.dto';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly users: UsersService) {}
+  constructor(private readonly users: UsersService,private readonly controls:UserAccountControlsService) {}
 
   @Get('profile')
   profile(@CurrentUser() user: AuthUser) {
@@ -28,6 +30,15 @@ export class UsersController {
     return this.users.ownLoginLogs(user.id, Number(page), Number(pageSize));
   }
 
+  @Get('sessions')
+  ownSessions(@CurrentUser() user:AuthUser,@Query() query:Record<string,unknown>){return this.controls.sessions(user.id,query,user,true);}
+
+  @Post('session-actions')
+  ownSessionAction(@CurrentUser() user:AuthUser,@Body() dto:SessionActionDto){return this.controls.endSessions(user.id,dto,user,true);}
+
+  @Post('account-actions/resolve')
+  ownResolveAction(@CurrentUser() user:AuthUser,@Body() dto:ResolveAccountActionDto){return this.controls.resolveAction(user.id,dto,user,true);}
+
   @Roles('ADMIN')
   @Get()
   list(@Query() query: Record<string,unknown>) {
@@ -41,6 +52,22 @@ export class UsersController {
   @Roles('ADMIN')
   @Get(':id/activity')
   activity(@Param('id') id: string,@Query() query: Record<string,unknown>) { return this.users.activity(id,query); }
+
+  @Roles('ADMIN')
+  @Get(':id/sessions')
+  sessions(@Param('id') id:string,@Query() query:Record<string,unknown>,@CurrentUser() user:AuthUser){return this.controls.sessions(id,query,user);}
+
+  @Roles('ADMIN')
+  @Patch(':id/management')
+  updateManagement(@Param('id') id:string,@Body() dto:ManagementDetailsDto,@CurrentUser() user:AuthUser){return this.controls.updateManagement(id,dto,user);}
+
+  @Roles('ADMIN')
+  @Post(':id/session-actions')
+  sessionAction(@Param('id') id:string,@Body() dto:SessionActionDto,@CurrentUser() user:AuthUser){return this.controls.endSessions(id,dto,user);}
+
+  @Roles('ADMIN')
+  @Post(':id/account-actions/resolve')
+  resolveAction(@Param('id') id:string,@Body() dto:ResolveAccountActionDto,@CurrentUser() user:AuthUser){return this.controls.resolveAction(id,dto,user);}
 
   @Roles('ADMIN')
   @Patch(':id/status')
@@ -60,7 +87,7 @@ export class UsersController {
 
   @Roles('ADMIN')
   @Post(':id/kick')
-  kick(@Param('id') id: string) {
-    return this.users.kickOffline(id);
+  kick(@Param('id') id: string,@CurrentUser() user:AuthUser) {
+    return this.controls.kickOffline(id,user);
   }
 }

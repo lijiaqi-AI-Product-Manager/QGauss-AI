@@ -31,7 +31,7 @@ export function useUserManagement({client=api,auth=useAuth(),storage,key=()=>glo
   const refresh=()=>applied.value?load({...applied.value},page.value):search();
   const goPage=target=>!loading.value&&applied.value&&Number.isSafeInteger(target)&&target>0&&target<=Math.max(1,Math.ceil(total.value/pageSize))?load({...applied.value},target):false;
   async function loadActivity(kind=activityKind.value,targetPage=1){
-    if(!allowed()||!selectedId.value||!['grants','logins','conversations'].includes(kind))return false;
+    if(!allowed()||!selectedId.value||!['grants','logins','conversations','management'].includes(kind))return false;
     const read=new AbortController(),identity=auth.identityRevision,id=selectedId.value;activityRead?.abort();activityRead=read;activityAttempt={id,kind,page:targetPage};activityLoading.value=true;activityError.value='';
     const changed=kind!==activityKind.value;activityKind.value=kind;if(changed){activity.value=[];activityTotal.value=0;activityPage.value=1;}
     try{const params=new URLSearchParams({kind,page:String(targetPage),pageSize:'10'});if(detail.value?.readAt)params.set('asOf',detail.value.readAt);const data=await client.get('/users/'+encodeURIComponent(id)+'/activity?'+params,{signal:read.signal});
@@ -43,13 +43,13 @@ export function useUserManagement({client=api,auth=useAuth(),storage,key=()=>glo
     finally{if(activityRead===read){activityRead=undefined;activityLoading.value=false;}}
   }
   const retryActivity=()=>activityAttempt?.id===selectedId.value?loadActivity(activityAttempt.kind,activityAttempt.page):loadActivity();
-  async function openDetail(id,{preserve=false}={}){
+  async function openDetail(id,{preserve=false,quiet=false}={}){
     if(!allowed()||!/^[A-Za-z0-9_-]{1,128}$/.test(id))return false;
-    detailRead?.abort();activityRead?.abort();const read=new AbortController(),identity=auth.identityRevision;detailRead=read;selectedId.value=id;detail.value=null;detailLoading.value=true;detailError.value='';
+    const keep=quiet&&preserve&&detail.value?.id===id&&selectedId.value===id;detailRead?.abort();activityRead?.abort();const read=new AbortController(),identity=auth.identityRevision;detailRead=read;selectedId.value=id;if(!keep)detail.value=null;detailLoading.value=!keep;detailError.value='';
     if(!preserve){activity.value=[];activityTotal.value=0;activityPage.value=1;activityKind.value='grants';grantStage.value='closed';grantReview.value=null;statusReview.value=null;mutationError.value='';receipt.value=null;}
     try{const data=await client.get('/users/'+encodeURIComponent(id),{signal:read.signal});if(!current(read,identity)||detailRead!==read||selectedId.value!==id)return false;
       detail.value=userDetail(data,id);await loadActivity(activityKind.value,activityPage.value);return current(read,identity)&&detailRead===read&&selectedId.value===id&&detail.value?.id===id;
-    }catch(cause){if(current(read,identity)&&detailRead===read)detailError.value=cause.status===404?'用户不存在或已移除':'用户资料暂未打开，请重试';return false;}
+    }catch(cause){if(current(read,identity)&&detailRead===read){if(keep)mutationError.value=cause.status===404?'用户不存在或已移除':'用户资料暂未打开，请重试';else detailError.value=cause.status===404?'用户不存在或已移除':'用户资料暂未打开，请重试';}return false;}
     finally{if(detailRead===read){detailRead=undefined;detailLoading.value=false;}}
   }
   function editGrant(){if(!detail.value||mutationBusy.value||pending.value||detail.value.status!=='ACTIVE')return false;Object.assign(grantForm,emptyGrant());grantStage.value='edit';grantReview.value=null;statusReview.value=null;mutationError.value='';receipt.value=null;return true;}
