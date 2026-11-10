@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, Length, MaxLength, ValidateIf } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsISO8601, Length, MaxLength, ValidateIf } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UpdateProfileDto {
@@ -30,4 +30,11 @@ export class ChangePasswordDto {
 export class SetStatusDto {
   @IsIn(['ACTIVE', 'DISABLED'])
   status: 'ACTIVE' | 'DISABLED';
+
+  @ValidateIf((_object,value)=>value!==undefined)
+  @Transform(({obj,key})=>obj[key])
+  @IsString()
+  @IsISO8601({strict:true})
+  @MaxLength(40)
+  expectedUpdatedAt?: string;
 }

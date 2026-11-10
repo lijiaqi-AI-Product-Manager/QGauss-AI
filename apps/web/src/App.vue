@@ -139,7 +139,7 @@
           <button
             class="qg-icon-btn qg-only-mobile"
             type="button"
-            aria-label="打开导航"
+            :aria-label="t('shell.openNavigation')"
             @click="sidebarOpen = true"
           >
             <el-icon><Menu /></el-icon>
@@ -153,13 +153,13 @@
             to="/wallet"
             class="qg-credit"
             :title="balanceTooltip"
-            aria-label="查看账户额度与余额"
+            :aria-label="t('shell.walletSummary')"
           >
             <QStar :size="15" />
-            <span>我的额度</span>
+            <span>{{ t('shell.credits') }}</span>
           </router-link>
           <el-tag v-if="auth.user" class="qg-hide-mobile" size="small" type="info">{{ auth.user.role }}</el-tag>
-          <el-button text @click="router.push('/account')">个人空间</el-button>
+          <el-button text @click="router.push('/account')">{{ t('shell.account') }}</el-button>
           <LanguagePicker compact/>
           <el-button class="qg-hide-mobile" text @click="onLogout">{{ t('logout') }}</el-button>
         </div>
@@ -180,14 +180,14 @@
     </main>
 
     <!-- 移动端：底部悬浮玻璃胶囊 Tab（对话页底部是输入框，不叠 Tab） -->
-    <nav v-if="route.name !== 'chat'" class="qg-tabbar qg-glass" aria-label="底部导航">
+    <nav v-if="route.name !== 'chat'" class="qg-tabbar qg-glass" :aria-label="t('shell.mobileNavigation')">
       <router-link v-for="tab in tabs" :key="tab.path" class="qg-tab" :class="{ active: route.path === tab.path }" :to="tab.path">
         <el-icon><component :is="tab.icon" /></el-icon>
         <span>{{ tab.title }}</span>
       </router-link>
       <button type="button" class="qg-tab" style="border: 0; background: none" @click="sidebarOpen = true">
         <el-icon><Menu /></el-icon>
-        <span>更多</span>
+        <span>{{ t('shell.more') }}</span>
       </button>
     </nav>
   </div>
@@ -221,7 +221,7 @@ import { useAuth } from './stores/auth.js';
 import { useBalance } from './stores/balance.js';
 import { useTheme } from './stores/theme.js';
 import { useUi } from './stores/ui.js';
-import { currentLang,t } from './i18n/index.js';
+import { currentLang,t,routeTitle } from './i18n/index.js';
 import LanguagePicker from './components/design/LanguagePicker.vue';
 
 const auth = useAuth();
@@ -280,13 +280,13 @@ const TITLES = {
   salesAdmin: '分销与提现',
 };
 
-const title = computed(() => ({agents:'行动搭档',agentDetail:'搭档档案',agentStudio:'搭档控制室',voiceStudio:'声音控制台',midjourney:'MJ 进阶创作',mjStudio:'MJ 控制台',video:'视频创作',videoStudio:'视频控制台'})[route.name] ?? TITLES[route.name] ?? '概览');
+const title = computed(() => routeTitle(route.path) || (({agents:'行动搭档',agentDetail:'搭档档案',agentStudio:'搭档控制室',voiceStudio:'声音控制台',midjourney:'MJ 进阶创作',mjStudio:'MJ 控制台',video:'视频创作',videoStudio:'视频控制台'})[route.name] ?? TITLES[route.name] ?? '概览'));
 
 const tabs = computed(() => [
-  { path: '/chat', title: '对话', icon: 'ChatDotRound' },
-  { path: '/plaza', title: '广场', icon: 'Shop' },
-  { path: '/painting', title: '绘画', icon: 'Picture' },
-  commerceEnabled.value ? { path: '/wallet', title: '钱包', icon: 'Wallet' } : { path: '/apps', title: '应用', icon: 'Grid' },
+  { path: '/chat', title: t('shell.tabChat'), icon: 'ChatDotRound' },
+  { path: '/plaza', title: t('shell.tabGallery'), icon: 'Shop' },
+  { path: '/painting', title: t('shell.tabPainting'), icon: 'Picture' },
+  commerceEnabled.value ? { path: '/wallet', title: t('shell.tabWallet'), icon: 'Wallet' } : { path: '/apps', title: t('shell.tabApps'), icon: 'Grid' },
 ]);
 
 const primaryNav = computed(() => [

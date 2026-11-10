@@ -68,6 +68,7 @@
 </template>
 <script setup>
 import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import ClientIcon from '../../components/reference/ClientIcon.vue';
 import BrandLoader from '../../components/design/BrandLoader.vue';
 import { currentLang } from '../../i18n/index.js';
@@ -75,7 +76,7 @@ import { recordText } from '../../i18n/record-messages.js';
 import { recordStatus, recordRole, billingStatus, recordUsage } from '../../lib/conversation-records.js';
 import { useConversationRecords } from '../../composables/useConversationRecords.js';
 import '../../components/design/conversation-records.css';
-const { filters, rows, total, page, pageSize, loading, error, applied, dirty, exporting, exportError, exportNotice, canExport, selectedId, detail, detailLoading, detailError, search, reset, retry, goPage, openDetail, closeDetail, exportExcel, cancelExport } = useConversationRecords();
+const { filters, rows, total, page, pageSize, loading, error, applied, dirty, exporting, exportError, exportNotice, canExport, selectedId, detail, detailLoading, detailError, search, reset, retry, goPage, openDetail, closeDetail, exportExcel, cancelExport, clearRecords } = useConversationRecords();
 const ct = (text, values) => recordText(currentLang.value, text, values), dialog = ref(null);
 const statuses = ['PENDING','STREAMING','SETTLING','COMPLETED','FAILED','ABORTED'];
 const completed = computed(() => rows.value.filter(row => row.status === 'COMPLETED').length), processing = computed(() => rows.value.filter(row => ['PENDING','STREAMING','SETTLING'].includes(row.status)).length), pages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
@@ -83,5 +84,12 @@ const format = value => value ? new Date(value).toLocaleString(currentLang.value
 const metadata = computed(() => detail.value ? [['用户', `${detail.value.user || '—'} · ${detail.value.email || '—'}`],['模型名称',detail.value.modelName],['创建时间',format(detail.value.createdAt)],['更新时间',format(detail.value.updatedAt)],['记录编号',detail.value.id],['会话编号',detail.value.conversationId],['输入 / 输出',`${recordUsage(detail.value.promptTokens)} / ${recordUsage(detail.value.completionTokens)}${detail.value.usageEstimated ? ' · '+ct('估算用量') : ''}`],['结束原因',detail.value.finishReason],['错误代码',detail.value.errorCode]] : []);
 watch(selectedId, async value => { await nextTick(); if (value && selectedId.value && !dialog.value?.open) dialog.value?.showModal(); else if (!selectedId.value && dialog.value?.open) dialog.value.close(); });
 function closeBackdrop(event) { if (event.target === event.currentTarget) { const bounds = event.currentTarget.getBoundingClientRect(); if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeDetail(); } }
-onMounted(search);
+const route=useRoute();
+function routeSearch(){
+  const user=route.query.user,conversationId=route.query.conversationId;
+  if((user!==undefined&&(typeof user!=='string'||user.length>160))||(conversationId!==undefined&&(typeof conversationId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(conversationId)))){clearRecords();error.value='用户或会话查询条件不正确';return;}
+  filters.user=user||'';filters.conversationId=conversationId||'';return search();
+}
+watch(()=>[route.query.user,route.query.conversationId],routeSearch);
+onMounted(routeSearch);
 </script>

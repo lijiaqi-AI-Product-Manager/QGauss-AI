@@ -501,7 +501,7 @@ export class LedgerService {
     const activeUntil = ub.expirationTime && ub.expirationTime.getTime() > now.getTime() ? ub.expirationTime : now;
     let expirationTime = ub.expirationTime;
     if (days < 0) expirationTime = PERPETUAL;
-    else if (days > 0) expirationTime = addDays(activeUntil, days);
+    else if (days > 0) expirationTime = activeUntil >= PERPETUAL ? PERPETUAL : addDays(activeUntil, days);
 
     const data: Prisma.UserBalanceUpdateInput = {};
     if (counts.model3) data.model3Count = { increment: counts.model3 };

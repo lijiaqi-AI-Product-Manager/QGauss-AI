@@ -30,18 +30,22 @@ export class UsersController {
 
   @Roles('ADMIN')
   @Get()
-  list(
-    @Query('page') page = 1,
-    @Query('pageSize') pageSize = 20,
-    @Query('keyword') keyword?: string,
-  ) {
-    return this.users.list(Number(page), Number(pageSize), keyword);
+  list(@Query() query: Record<string,unknown>) {
+    return this.users.list(query);
   }
+
+  @Roles('ADMIN')
+  @Get(':id')
+  detail(@Param('id') id: string) { return this.users.detail(id); }
+
+  @Roles('ADMIN')
+  @Get(':id/activity')
+  activity(@Param('id') id: string,@Query() query: Record<string,unknown>) { return this.users.activity(id,query); }
 
   @Roles('ADMIN')
   @Patch(':id/status')
   setStatus(@CurrentUser() me: AuthUser, @Param('id') id: string, @Body() dto: SetStatusDto) {
-    return this.users.setStatus(id, dto.status, me.id);
+    return this.users.setStatus(id, dto.status, me.id, dto.expectedUpdatedAt);
   }
 
   @Roles('ADMIN')

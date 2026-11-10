@@ -1,195 +1,65 @@
 <template>
-  <div style="padding: 20px; height: 100%; overflow: auto">
-    <el-card shadow="never">
-      <template #header>
-        <div style="display: flex; gap: 8px; align-items: center">
-          <span>用户</span>
-          <span style="flex: 1"></span>
-          <el-input v-model="keyword" placeholder="搜索邮箱/用户名" size="small" style="width: 220px" clearable @keyup.enter="search" />
-          <el-button size="small" @click="search">搜索</el-button>
-        </div>
+  <section class="qgu-page">
+    <header class="qgu-hero"><div class="qgu-hero-copy"><span class="qgu-eyebrow">QGauss AI · PEOPLE</span><h1>{{ ut('每个用户，都被认真看见') }}</h1><p>{{ ut('把账号、使用记录与权益放在一起，让每一次服务都有清晰的来处。') }}</p></div><div class="qgu-sculpture" aria-hidden="true"><i></i><span><ClientIcon name="user" /></span><span><ClientIcon name="check" /></span><b></b></div></header>
+    <div class="qgu-metrics"><article v-for="metric in metrics" :key="metric.label"><span><ClientIcon :name="metric.icon" /></span><div><small>{{ ut(metric.label) }}</small><strong>{{ applied ? metric.value.toLocaleString() : '—' }}</strong></div></article></div>
+    <div v-if="pending" class="qgu-feedback qgu-pending" role="status"><div><b>{{ ut('有一笔发放结果待确认') }}</b><p>{{ pending.target.username }} · {{ pending.target.email }}</p></div><button type="button" class="qgu-button" :disabled="mutationBusy" @click="resumeGrant">{{ ut('继续核对原请求') }}</button><button v-if="pending.state==='rejected'" type="button" class="qgu-button" :disabled="mutationBusy" @click="dismissRejected">{{ ut('结束本次核对') }}</button></div>
+    <p v-if="notice" class="qgu-feedback" role="status">{{ ut(notice) }}</p>
+    <form class="qgu-panel qgu-filters" @submit.prevent="search">
+      <h2><ClientIcon name="search" />{{ ut('查找用户') }}</h2><p v-if="dirty" class="qgu-dirty">{{ ut('筛选已修改，查询后生效') }}</p>
+      <div class="qgu-filter-grid"><label>{{ ut('用户名、昵称、邮箱或用户编号') }}<input v-model="filters.keyword" name="keyword" maxlength="160" :placeholder="ut('用户名、昵称、邮箱或用户编号')" /></label><label>{{ ut('账号状态') }}<select v-model="filters.status" name="status"><option value="">{{ ut('全部状态') }}</option><option value="ACTIVE">{{ ut('正常') }}</option><option value="DISABLED">{{ ut('禁用') }}</option></select></label><label>{{ ut('账号角色') }}<select v-model="filters.role" name="role"><option value="">{{ ut('全部角色') }}</option><option value="USER">{{ ut('普通用户') }}</option><option value="ADMIN">{{ ut('管理员') }}</option></select></label><div class="qgu-filter-actions"><button type="submit" class="qgu-button qgu-primary" :disabled="loading"><ClientIcon name="search" />{{ ut('查询') }}</button><button type="button" class="qgu-button" :disabled="loading" @click="reset">{{ ut('重置') }}</button></div></div>
+      <details class="qgu-more"><summary>{{ ut('更多筛选') }}</summary><div class="qgu-extra"><label>{{ ut('用户名') }}<input v-model="filters.username" name="username" maxlength="160" /></label><label>{{ ut('邮箱') }}<input v-model="filters.email" name="email" maxlength="160" /></label><label>{{ ut('分销资格') }}<select v-model="filters.distribution" name="distribution"><option value="">{{ ut('不限') }}</option><option value="true">{{ ut('已开通') }}</option><option value="false">{{ ut('未开通') }}</option></select></label><label>{{ ut('注册开始日期') }}<input v-model="filters.from" name="from" type="date" /></label><label>{{ ut('注册结束日期') }}<input v-model="filters.to" name="to" type="date" /></label></div></details>
+    </form>
+    <section :aria-busy="loading"><div class="qgu-results-heading"><h2>{{ ut('用户管理') }}<span>{{ applied ? total.toLocaleString() : '—' }}</span></h2><small v-if="applied">{{ ut('读取于 {date}',{date:format(applied.asOf)}) }}</small></div>
+      <div v-if="error" class="qgu-feedback qgu-error" role="alert"><span>{{ ut(error) }}</span><button type="button" class="qgu-button" @click="retry">{{ ut('重试') }}</button></div>
+      <div v-if="loading" class="qgu-loading"><BrandLoader :size="48" :text="ut('正在查找用户')" /><div class="qgu-skeleton" aria-hidden="true"><i></i><i></i></div></div>
+      <div v-else-if="!rows.length && !error" class="qgu-panel qgu-empty"><span><ClientIcon name="user" /></span><h3>{{ ut('没有匹配的用户') }}</h3><p>{{ ut('试试其他姓名、邮箱或账号状态。') }}</p></div>
+      <div v-else class="qgu-grid"><article v-for="(row,index) in rows" :key="row.id" class="qgu-panel qgu-person" :style="{'--u-index':Math.min(index,8)}" :data-user-id="row.id"><div class="qgu-person-head"><span class="qgu-avatar">{{ initial(row) }}</span><div class="qgu-person-name"><div><h3>{{ row.displayName || row.username }}</h3><span class="qgu-role">{{ ut(row.role==='ADMIN'?'管理员':'普通用户') }}</span></div><p>{{ row.email }}</p><small v-if="row.displayName">{{ row.username }}</small></div><span class="qgu-state" :data-state="row.status">{{ ut(row.status==='ACTIVE'?'正常':'禁用') }}</span></div><div class="qgu-person-meta"><small>{{ ut('注册于 {date}',{date:format(row.createdAt,true)}) }}</small><small><ClientIcon :name="row.emailVerifiedAt?'check':'mail'" />{{ ut(row.emailVerifiedAt?'邮箱已验证':'邮箱未验证') }}</small></div><div class="qgu-person-footer"><button type="button" class="qgu-button" :disabled="mutationBusy || !!pending || row.status!=='ACTIVE'" :title="row.status!=='ACTIVE'?ut('请先恢复用户账号再发放'):undefined" @click="openGrant(row.id)">{{ ut('发放权益') }}</button><button type="button" class="qgu-button qgu-primary" @click="openDetail(row.id)">{{ ut('查看用户') }}<ClientIcon name="arrow" /></button></div></article></div>
+      <nav v-if="applied" class="qgu-pagination" :aria-label="ut('用户管理')"><span>{{ ut('第 {page} / {pages} 页',{page,pages}) }}</span><div><button type="button" class="qgu-button" :disabled="loading || page<=1" @click="goPage(page-1)">{{ ut('上一页') }}</button><button type="button" class="qgu-button" :disabled="loading || page>=pages" @click="goPage(page+1)">{{ ut('下一页') }}</button></div></nav>
+    </section>
+    <dialog ref="dialog" class="qgu-dialog" aria-labelledby="qgu-heading" @close="closeDetail" @cancel.prevent="closeDetail" @click="closeBackdrop"><header><div><small>QGauss AI · PEOPLE</small><h2 id="qgu-heading">{{ ut('用户资料') }}</h2></div><button type="button" class="qgu-close" :aria-label="ut('关闭明细')" @click="closeDetail"><ClientIcon name="close" /></button></header><div class="qgu-dialog-content">
+      <div v-if="detailLoading" class="qgu-loading"><BrandLoader :text="ut('正在读取用户资料')" /></div>
+      <div v-else-if="detailError" class="qgu-feedback qgu-error" role="alert"><span>{{ ut(detailError) }}</span><button type="button" class="qgu-button" @click="openDetail(selectedId)">{{ ut('重试') }}</button></div>
+      <template v-else-if="detail"><div class="qgu-detail-layout"><section class="qgu-profile"><div class="qgu-person-head"><span class="qgu-avatar">{{ initial(detail) }}</span><div class="qgu-person-name"><h3>{{ detail.displayName || detail.username }}</h3><p>{{ detail.email }}</p><span class="qgu-state" :data-state="detail.status">{{ ut(detail.status==='ACTIVE'?'正常':'禁用') }}</span></div></div><div class="qgu-detail-actions"><button type="button" class="qgu-button qgu-primary" :disabled="mutationBusy || !!pending || detail.status!=='ACTIVE'" @click="editGrant">{{ ut('发放权益') }}</button><button type="button" class="qgu-button" :disabled="mutationBusy || !!pending || (detail.id===ownId && detail.status==='ACTIVE')" :title="detail.id===ownId?ut('不能禁用当前账号'):undefined" @click="reviewStatus">{{ ut(detail.status==='ACTIVE'?'禁用账号':'恢复账号') }}</button></div><dl><div><dt>{{ ut('用户名') }}</dt><dd>{{ detail.username }}</dd></div><div><dt>{{ ut('用户编号') }}</dt><dd>{{ detail.id }}</dd></div><div><dt>{{ ut('账号角色') }}</dt><dd>{{ ut(detail.role==='ADMIN'?'管理员':'普通用户') }} · {{ ut(detail.emailVerifiedAt?'邮箱已验证':'邮箱未验证') }}</dd></div></dl><div class="qgu-wallet"><small>{{ ut('账户余额') }}</small><strong>¥ {{ money(detail.balanceCents) }}</strong><p>{{ ut('会员有效期') }}<br /><b>{{ detail.isMember ? perpetual(detail.expirationTime) ? ut('永久会员') : format(detail.expirationTime,true) : ut('暂无有效会员') }}</b></p></div><div class="qgu-counts"><article v-for="pool in pools" :key="pool.key"><b>{{ ut(pool.label) }}</b><p>{{ ut('购买余量') }}<strong>{{ detail.counts[pool.key]?.paid ?? '—' }}</strong></p><p>{{ ut('会员今日余量') }}<strong>{{ detail.counts[pool.key]?.member ?? '—' }}</strong></p><p>{{ ut('处理中预留') }}<strong>{{ detail.counts[pool.key]?.reserved ?? '—' }}</strong></p></article></div><p style="margin-top:15px"><small>{{ ut('读取于 {date}',{date:format(detail.readAt)}) }}</small></p></section>
+      <section><nav class="qgu-tabs" :aria-label="ut('用户资料')"><button v-for="tab in tabs" :key="tab.key" type="button" :aria-pressed="activityKind===tab.key" @click="loadActivity(tab.key)">{{ ut(tab.label) }}<br /><small>{{ detail.activity[tab.key] }}</small></button></nav><div v-if="activityError" class="qgu-feedback qgu-error" role="alert"><span>{{ ut(activityError) }}</span><button type="button" class="qgu-button" @click="retryActivity">{{ ut('重试') }}</button></div><div v-if="activityLoading" class="qgu-loading"><BrandLoader :size="38" :text="ut('正在读取明细')" /></div><div v-else-if="!activity.length && !activityError" class="qgu-empty"><ClientIcon name="file" /><p>{{ ut('暂无记录') }}</p></div><div v-else class="qgu-activity"><article v-for="item in activity" :key="item.id">
+        <template v-if="activityKind==='grants'"><div><b>{{ ut(source(item.rechargeType)) }}</b><small>{{ format(item.createdAt) }}</small></div><div class="qgu-grant-tags"><span v-for="field in grantEntries(item)" :key="field.label">{{ ut(field.label) }} +{{ field.value }}</span><span v-if="item.days">{{ item.days<0?ut('永久会员'):ut('{days} 天',{days:item.days}) }}</span><span v-if="item.amountCents">+ ¥ {{ money(item.amountCents) }}</span></div><p v-if="item.pkgName">{{ item.pkgName }}</p><p>{{ item.remark || ut('无备注') }}</p><p class="qgu-receipt-id">{{ ut('凭据编号') }} · {{ item.uid }}</p></template>
+        <template v-else-if="activityKind==='logins'"><div><span class="qgu-state" :data-state="item.success?'ACTIVE':'DISABLED'">{{ ut(item.success?'登录成功':'登录失败') }}</span><small>{{ format(item.createdAt) }}</small></div><p>{{ item.ip || ut('网络地址未知') }}</p><p>{{ item.userAgent || ut('设备信息未知') }}</p></template>
+        <template v-else><div><b>{{ item.title }}</b><span v-if="item.deletedAt" class="qgu-role">{{ ut('回收站') }}</span></div><p>{{ format(item.createdAt) }}</p><RouterLink :to="{path:'/chat-logs',query:{user:detail.id,conversationId:item.id}}">{{ ut('查看会话消息') }}<ClientIcon name="arrow" /></RouterLink></template>
+      </article></div><nav v-if="activityTotal" class="qgu-pagination qgu-activity-page" :aria-label="ut('用户资料')"><span>{{ ut('第 {page} / {pages} 页',{page:activityPage,pages:activityPages}) }}</span><div><button type="button" class="qgu-button" :disabled="activityLoading || activityPage<=1" @click="loadActivity(activityKind,activityPage-1)">{{ ut('上一页') }}</button><button type="button" class="qgu-button" :disabled="activityLoading || activityPage>=activityPages" @click="loadActivity(activityKind,activityPage+1)">{{ ut('下一页') }}</button></div></nav></section></div>
+      <section v-if="statusReview" class="qgu-status-review"><h3>{{ ut(statusReview.next==='DISABLED'?'禁用账号':'恢复账号') }}</h3><div class="qgu-recipient"><b>{{ statusReview.username }}</b><small>{{ statusReview.email }}</small><small>{{ statusReview.id }}</small></div><p>{{ ut(statusReview.next==='DISABLED'?'禁用后，现有登录凭证立即失效。':'恢复后，用户可以重新登录。') }}</p><div class="qgu-grant-footer"><button type="button" class="qgu-button" :disabled="mutationBusy" @click="statusReview=null">{{ ut('取消') }}</button><button type="button" class="qgu-button qgu-primary" :disabled="mutationBusy" @click="confirmStatus">{{ ut(mutationBusy?'正在确认':'确认更新') }}</button><button type="button" class="qgu-button" :disabled="mutationBusy" @click="statusReview=null;openDetail(selectedId)">{{ ut('重新读取') }}</button></div></section>
+      <section v-if="grantStage!=='closed'" class="qgu-grant-box" aria-live="polite"><template v-if="grantStage==='edit'"><h3>{{ ut('填写发放内容') }}</h3><form @submit.prevent="reviewGrant"><div class="qgu-grant-grid"><label v-for="field in grantInputs" :key="field.key">{{ ut(field.label) }}<input v-model.number="grantForm[field.key]" :name="field.key" type="number" step="1" :min="field.key==='days'?-1:0" :max="field.key==='days'?36500:1000000" required /></label><label>{{ ut('余额（元）') }}<input v-model="grantForm.amountYuan" name="amountYuan" inputmode="decimal" maxlength="10" :placeholder="ut('如 10.00；留空则不充')" /></label><small class="qgu-wide">{{ ut('-1 表示永久；0 表示不改变会员期限。') }}</small><label class="qgu-wide">{{ ut('备注') }}<textarea v-model="grantForm.remark" name="remark" rows="2" maxlength="500" :placeholder="ut('备注将写入发放记录。')"></textarea></label></div><div class="qgu-grant-footer"><button type="button" class="qgu-button" @click="grantStage='closed'">{{ ut('取消') }}</button><button type="submit" class="qgu-button qgu-primary">{{ ut('下一步：核对') }}<ClientIcon name="arrow" /></button></div></form></template>
+      <template v-else-if="grantStage==='review' && grantReview"><h3>{{ ut('核对发放') }}</h3><p class="qgu-review-copy">{{ ut('请核对收取用户和以下内容，确认后将直接加入该账号。') }}</p><div class="qgu-recipient"><b>{{ grantReview.target.username }}</b><small>{{ grantReview.target.email }}</small><small>{{ grantReview.target.id }}</small></div><dl class="qgu-review-list"><div v-for="field in grantEntries(grantReview.payload)" :key="field.label"><dt>{{ ut(field.label) }}</dt><dd>+ {{ field.value }}</dd></div><div v-if="grantReview.payload.days"><dt>{{ ut('会员天数') }}</dt><dd>{{ grantReview.payload.days<0?ut('永久会员'):ut('{days} 天',{days:grantReview.payload.days}) }}</dd></div><div v-if="grantCents(grantReview.payload)"><dt>{{ ut('账户余额') }}</dt><dd>+ ¥ {{ money(grantCents(grantReview.payload)) }}</dd></div></dl><p v-if="grantReview.payload.remark" class="qgu-review-note">{{ grantReview.payload.remark }}</p><div class="qgu-grant-footer"><button v-if="!pending || pending.state==='rejected'" type="button" class="qgu-button" :disabled="mutationBusy" @click="backToEdit">{{ ut('返回调整') }}</button><button type="button" class="qgu-button qgu-primary" :disabled="mutationBusy || pending?.state==='rejected'" data-confirm-grant @click="confirmGrant">{{ ut(mutationBusy?'正在确认':pending?'继续核对原请求':'确认发放') }}</button></div></template>
+      <template v-else-if="grantStage==='done' && receipt"><h3 class="qgu-success"><ClientIcon name="check" />{{ ut('已发放') }}</h3><p class="qgu-review-copy">{{ ut('已保存到权益记录，可按凭据编号核对。') }}</p><p class="qgu-receipt-id">{{ ut('凭据编号') }} · {{ receipt.uid }}</p></template></section>
+      <div v-if="mutationError" class="qgu-feedback qgu-error" role="alert" style="margin-top:18px">{{ ut(mutationError) }}</div>
       </template>
-
-      <el-table :data="rows" size="small">
-        <el-table-column prop="username" label="用户名" min-width="130" />
-        <el-table-column prop="email" label="邮箱" min-width="200" />
-        <el-table-column prop="displayName" label="昵称" min-width="120" />
-        <el-table-column label="角色" width="100">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.role === 'ADMIN' ? 'warning' : 'info'">{{ row.role }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.status === 'ACTIVE' ? 'success' : 'danger'">
-              {{ row.status === 'ACTIVE' ? '正常' : '禁用' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="190">
-          <template #default="{ row }">
-            <el-button link size="small" @click="toggle(row)">
-              {{ row.status === 'ACTIVE' ? '禁用' : '恢复' }}
-            </el-button>
-            <el-button link size="small" type="primary" @click="openGrant(row)">发放</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <div style="margin-top: 12px; text-align: right">
-        <el-pagination
-          layout="prev, pager, next"
-          :total="total"
-          :page-size="pageSize"
-          :current-page="page"
-          @current-change="onPage"
-        />
-      </div>
-    </el-card>
-
-    <el-dialog v-model="grantVisible" title="发放次数 / 余额 / 会员" width="480">
-      <el-form label-width="110">
-        <el-form-item label="用户">
-          <el-input :model-value="grantUser?.username ?? ''" disabled />
-        </el-form-item>
-        <el-form-item label="低价次数">
-          <el-input-number v-model="grantForm.model3Count" :min="0" />
-        </el-form-item>
-        <el-form-item label="高价次数">
-          <el-input-number v-model="grantForm.model4Count" :min="0" />
-        </el-form-item>
-        <el-form-item label="绘图次数">
-          <el-input-number v-model="grantForm.drawMjCount" :min="0" />
-        </el-form-item>
-        <el-form-item label="智能体次数">
-          <el-input-number v-model="grantForm.agentCount" :min="0" />
-        </el-form-item>
-        <el-form-item label="会员天数">
-          <el-input-number v-model="grantForm.days" :min="-1" />
-          <span style="margin-left: 8px; font-size: 12px; color: var(--el-text-color-secondary)">
-            -1 表示永久
-          </span>
-        </el-form-item>
-        <el-form-item label="余额（元）">
-          <el-input v-model="grantForm.amountYuan" placeholder="如 10.00；留空则不充" />
-        </el-form-item>
-        <el-form-item label="备注">
-          <el-input v-model="grantForm.remark" placeholder="选填，会写进发放流水" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="grantVisible = false">取消</el-button>
-        <el-button type="primary" :loading="granting" @click="doGrant">确认发放</el-button>
-      </template>
-    </el-dialog>
-  </div>
+    </div></dialog>
+  </section>
 </template>
-
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
-import { ElButton, ElCard, ElDialog, ElForm, ElFormItem, ElInput, ElInputNumber, ElMessage, ElMessageBox, ElPagination, ElTable, ElTableColumn, ElTag } from 'element-plus';
-import { api } from '../../api/client.js';
-
-const rows = ref([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = 20;
-const keyword = ref('');
-const grantVisible = ref(false);
-const granting = ref(false);
-const grantUser = ref(null);
-const grantForm = reactive({
-  model3Count: 0,
-  model4Count: 0,
-  drawMjCount: 0,
-  agentCount: 0,
-  days: 0,
-  amountYuan: '',
-  remark: '',
-});
-
-async function load() {
-  const query = new URLSearchParams({ page: String(page.value), pageSize: String(pageSize) });
-  if (keyword.value) query.set('keyword', keyword.value);
-  const data = await api.get(`/users?${query}`);
-  rows.value = data.items;
-  total.value = data.total;
-}
-
-function onPage(p) {
-  page.value = p;
-  load();
-}
-
-/** 换关键词后回到第一页，否则会在新结果里停在旧页码上 */
-function search() {
-  page.value = 1;
-  load();
-}
-
-async function toggle(row) {
-  const next = row.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE';
-  await ElMessageBox.confirm(
-    next === 'DISABLED' ? `禁用「${row.username}」后其登录状态会立即失效，继续？` : `恢复「${row.username}」？`,
-    '提示',
-    { type: 'warning' },
-  );
-  await api.patch(`/users/${row.id}/status`, { status: next });
-  ElMessage.success('已更新');
-  await load();
-}
-
-function openGrant(row) {
-  grantUser.value = row;
-  Object.assign(grantForm, {
-    model3Count: 0,
-    model4Count: 0,
-    drawMjCount: 0,
-    agentCount: 0,
-    days: 0,
-    amountYuan: '',
-    remark: '',
-  });
-  grantVisible.value = true;
-}
-
-async function doGrant() {
-  const user = grantUser.value;
-  if (!user) return;
-  const amount = String(grantForm.amountYuan || '').trim();
-  if (amount && !/^\d{1,7}(\.\d{1,2})?$/.test(amount)) {
-    ElMessage.warning('余额格式不正确（最多两位小数）');
-    return;
-  }
-  const payload = {
-    userId: user.id,
-    model3Count: grantForm.model3Count,
-    model4Count: grantForm.model4Count,
-    drawMjCount: grantForm.drawMjCount,
-    agentCount: grantForm.agentCount,
-    days: grantForm.days,
-    ...(amount ? { amountYuan: amount } : {}),
-    ...(grantForm.remark ? { remark: grantForm.remark } : {}),
-  };
-  const empty =
-    !payload.model3Count && !payload.model4Count && !payload.drawMjCount &&
-    !payload.agentCount && !payload.days && !amount;
-  if (empty) {
-    ElMessage.warning('至少填写一项发放内容');
-    return;
-  }
-  granting.value = true;
-  try {
-    await api.post('/balance/upgradeBalance', payload);
-    ElMessage.success('已发放');
-    grantVisible.value = false;
-  } catch (e) {
-    if (e?.status === 404) ElMessage.warning('商业化未开启，无法发放额度');
-    else ElMessage.error(e?.message || '发放失败');
-  } finally {
-    granting.value = false;
-  }
-}
-
-onMounted(load);
+import {computed,nextTick,onMounted,ref,watch} from 'vue';
+import {RouterLink} from 'vue-router';
+import ClientIcon from '../../components/reference/ClientIcon.vue';
+import BrandLoader from '../../components/design/BrandLoader.vue';
+import {currentLang} from '../../i18n/index.js';
+import {userText} from '../../i18n/user-messages.js';
+import {grantCents} from '../../lib/user-management.js';
+import {useUserManagement} from '../../composables/useUserManagement.js';
+import '../../components/design/user-management.css';
+const {filters,rows,total,active,admins,page,pageSize,applied,dirty,loading,error,search,reset,retry,goPage,selectedId,detail,detailLoading,detailError,openDetail,closeDetail,activity,activityKind,activityPage,activityTotal,activityLoading,activityError,loadActivity,retryActivity,grantForm,grantStage,grantReview,pending,mutationBusy,mutationError,notice,receipt,editGrant,reviewGrant,resumeGrant,backToEdit,confirmGrant,dismissRejected,statusReview,reviewStatus,confirmStatus,ownId}=useUserManagement();
+const dialog=ref(null),ut=(text,values)=>userText(currentLang.value,text,values);
+const pools=[{key:'model3',label:'低价次数'},{key:'model4',label:'高价次数'},{key:'drawMj',label:'绘图次数'},{key:'agent',label:'智能体次数'}],grantInputs=pools.map(pool=>({key:pool.key==='drawMj'?'drawMjCount':pool.key+'Count',label:pool.label})).concat({key:'days',label:'会员天数'});
+const tabs=[{key:'grants',label:'权益记录'},{key:'logins',label:'登录记录'},{key:'conversations',label:'对话记录'}];
+const metrics=computed(()=>[{label:'匹配用户',value:total.value,icon:'user'},{label:'可用账号',value:active.value,icon:'check'},{label:'管理账号',value:admins.value,icon:'lock'}]);
+const pages=computed(()=>Math.max(1,Math.ceil(total.value/pageSize))),activityPages=computed(()=>Math.max(1,Math.ceil(activityTotal.value/10)));
+const initial=user=>(user.displayName||user.username||'Q').slice(0,1).toUpperCase();
+const locale=()=>currentLang.value==='en'?'en-US':currentLang.value==='zh-TW'?'zh-TW':'zh-CN';
+const format=(value,dateOnly=false)=>value?new Date(value)[dateOnly?'toLocaleDateString':'toLocaleString'](locale(),{hour12:false}):'—';
+const money=value=>(value/100).toLocaleString(locale(),{minimumFractionDigits:2,maximumFractionDigits:2});
+const perpetual=value=>value&&new Date(value).getUTCFullYear()>=9999;
+const grantEntries=value=>grantInputs.filter(field=>field.key!=='days'&&value[field.key]).map(field=>({label:field.label,value:value[field.key]}));
+const source=value=>({admin:'管理员发放',crami:'卡密兑换',order:'套餐购买',gift:'赠送',signin:'签到奖励'}[value]||'其他来源');
+async function openGrant(id){if(await openDetail(id))editGrant();}
+watch(selectedId,async value=>{await nextTick();if(value&&selectedId.value&&!dialog.value?.open)dialog.value?.showModal();else if(!selectedId.value&&dialog.value?.open)dialog.value.close();});
+watch(grantStage,async value=>{if(value==='review'){await nextTick();dialog.value?.querySelector('[data-confirm-grant]')?.focus();}else if(value==='edit'){await nextTick();dialog.value?.querySelector('[name="model3Count"]')?.focus();}});
+function closeBackdrop(event){if(event.target===event.currentTarget){const b=event.currentTarget.getBoundingClientRect();if(event.clientX<b.left||event.clientX>b.right||event.clientY<b.top||event.clientY>b.bottom)closeDetail();}}
+onMounted(search);
 </script>
