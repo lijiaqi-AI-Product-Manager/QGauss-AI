@@ -15,3 +15,4 @@ html.dark .qgu-error{color:#f3a5bf}html.dark .qgu-state{color:#86d9c4}html.dark 
 
 @media(min-width:761px){.qgu-hero{min-height:125px;padding-bottom:20px}.qgu-sculpture{height:108px;transform:scale(.88);transform-origin:center}.qgu-metrics article{padding:16px 20px}.qgu-metrics strong{line-height:1.1}.qgu-filters{padding:20px}.qgu-filters h2{margin-bottom:14px}.qgu-more{margin-top:12px;padding-top:0}}
 .qgu-profile .qgu-detail-actions{margin:0 0 20px}.qgu-metrics small{word-break:normal;overflow-wrap:normal}.dark[data-qg-design=orbit] .qgu-primary{color:#18223b;background:linear-gradient(120deg,#b4a4ff,#8bd9de)}
+.qgu-counts article>p{display:grid;grid-template-columns:minmax(0,1fr) max-content;align-items:start;gap:6px}.qgu-counts article>p>strong{white-space:nowrap;overflow-wrap:normal;font-variant-numeric:tabular-nums}
