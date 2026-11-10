@@ -1,4 +1,5 @@
 export const RECORD_MESSAGES = Object.freeze({
+  '用户或会话查询条件不正确':['使用者或對話查詢條件不正確','Check the person or conversation filters'],
   '对话记录':['對話記錄','Conversation records'], '每一次回应，都有迹可循':['每一次回應，都有跡可循','Every reply, in perspective'],
   '查找消息、查看分支与费用凭据，把一次对话的来龙去脉看清楚。':['尋找訊息、查看分支與費用憑據，把一次對話的來龍去脈看清楚。','Find messages, follow reply branches and check their billing receipts.'],
   '匹配记录':['符合條件的記錄','Matching records'], '本页已完成':['本頁已完成','Completed on this page'], '本页处理中':['本頁處理中','In progress on this page'],

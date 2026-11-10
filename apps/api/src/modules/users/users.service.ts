@@ -4,6 +4,12 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { BusinessException, ErrorCode } from '../../common/exceptions/business.exception';
 import { RateLimitService } from '../../common/ratelimit/rate-limit.service';
 import { passwordProblem } from '../../common/security/password-policy';
+import { Prisma } from '@prisma/client';
+import { userQuery, userConditions, userId, activityQuery } from './users.query';
+import { shanghaiDate } from '../commerce/ledger.service';
+
+const publicUser = { id:true,email:true,username:true,displayName:true,role:true,status:true,isDistribution:true,emailVerifiedAt:true,createdAt:true,updatedAt:true } satisfies Prisma.UserSelect;
+const orderBy = [{ createdAt:'desc' as const },{ id:'desc' as const }];
 
 @Injectable()
 export class UsersService {
@@ -60,68 +66,68 @@ export class UsersService {
     return { ok: true };
   }
 
-  async list(page = 1, pageSize = 20, keyword?: string) {
-    const where = {
-      deletedAt: null,
-      ...(keyword
-        ? {
-            OR: [
-              { email: { contains: keyword } },
-              { username: { contains: keyword } },
-              { displayName: { contains: keyword } },
-            ],
-          }
-        : {}),
-    };
-    const [items, total] = await Promise.all([
-      this.prisma.user.findMany({
-        where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          email: true,
-          username: true,
-          displayName: true,
-          role: true,
-          status: true,
-          createdAt: true,
-        },
-      }),
-      this.prisma.user.count({ where }),
-    ]);
-    return { items, total, page, pageSize };
+  async list(input: Record<string, unknown> = {}) {
+    const q=userQuery(input),where=userConditions(q);
+    return this.prisma.$transaction(async tx=>{
+      const ids=await tx.$queryRaw<{id:string}[]>(Prisma.sql`SELECT u."id" FROM "users" u WHERE ${where} ORDER BY u."createdAt" DESC,u."id" DESC LIMIT ${q.pageSize} OFFSET ${(q.page-1)*q.pageSize}`);
+      const counts=await tx.$queryRaw<{total:bigint;active:bigint;admins:bigint}[]>(Prisma.sql`SELECT count(*) total,coalesce(sum(CASE WHEN u."status"='ACTIVE' THEN 1 ELSE 0 END),0) active,coalesce(sum(CASE WHEN u."role"='ADMIN' THEN 1 ELSE 0 END),0) admins FROM "users" u WHERE ${where}`);
+      const items=ids.length?await tx.user.findMany({where:{id:{in:ids.map(row=>row.id)}},select:publicUser,orderBy}):[];
+      return {items,total:Number(counts[0].total),active:Number(counts[0].active),admins:Number(counts[0].admins),page:q.page,pageSize:q.pageSize,asOf:q.asOf};
+    });
+  }
+
+  async detail(id: string) {
+    userId(id);
+    return this.prisma.$transaction(async tx=>{
+      const user=await tx.user.findFirst({where:{id,deletedAt:null},select:publicUser});
+      if(!user)throw new BusinessException(ErrorCode.NOT_FOUND,'用户不存在',404);
+      const [ub,money,reserved,conversations,grants,logins]=await Promise.all([
+        tx.userBalance.findUnique({where:{userId:id}}),tx.balance.findUnique({where:{userId:id},select:{balanceCents:true}}),
+        tx.countReservation.groupBy({by:['pool'],where:{userId:id,status:'HELD'},_sum:{amount:true}}),
+        tx.conversation.count({where:{userId:id}}),tx.accountLog.count({where:{userId:id}}),tx.userLoginLog.count({where:{userId:id}}),
+      ]);
+      const now=new Date(),isMember=!!ub?.expirationTime&&ub.expirationTime>now,reset=ub?.memberResetOn!==shanghaiDate(now);
+      const pools=[['model3','model3Count','memberModel3Count','dailyModel3Count'],['model4','model4Count','memberModel4Count','dailyModel4Count'],['drawMj','drawMjCount','memberDrawMjCount','dailyDrawMjCount'],['agent','agentCount','memberAgentCount','dailyAgentCount']] as const;
+      const counts=Object.fromEntries(pools.map(([key,paid,member,daily])=>[key,{paid:ub?.[paid]??0,member:isMember?(ub?.[reset?daily:member]??0):0,reserved:reserved.find(row=>row.pool===key)?._sum.amount??0}]));
+      return {...user,balanceCents:money?.balanceCents??0,counts,isMember,expirationTime:ub?.expirationTime??null,activity:{conversations,grants,logins},readAt:now.toISOString()};
+    });
+  }
+
+  async activity(id: string,input: Record<string,unknown> = {}) {
+    userId(id);const {kind,page,pageSize,asOf}=activityQuery(input),where={userId:id,createdAt:{lte:new Date(asOf)}},skip=(page-1)*pageSize;
+    return this.prisma.$transaction(async tx=>{
+      if(!await tx.user.findFirst({where:{id,deletedAt:null},select:{id:true}}))throw new BusinessException(ErrorCode.NOT_FOUND,'用户不存在',404);
+      const [items,total]=kind==='logins'?await Promise.all([
+        tx.userLoginLog.findMany({where,orderBy,skip,take:pageSize,select:{id:true,success:true,ip:true,userAgent:true,createdAt:true}}),tx.userLoginLog.count({where}),
+      ]):kind==='grants'?await Promise.all([
+        tx.accountLog.findMany({where,orderBy,skip,take:pageSize,select:{id:true,uid:true,pkgName:true,rechargeType:true,model3Count:true,model4Count:true,drawMjCount:true,agentCount:true,days:true,amountCents:true,remark:true,createdAt:true}}),tx.accountLog.count({where}),
+      ]):await Promise.all([
+        tx.conversation.findMany({where,orderBy,skip,take:pageSize,select:{id:true,title:true,deletedAt:true,createdAt:true,updatedAt:true}}),tx.conversation.count({where}),
+      ]);
+      return {items,total,page,pageSize,kind,userId:id,asOf};
+    });
   }
 
   /** 封禁/解封：封禁时立即失效所有凭证 */
-  async setStatus(id: string, status: 'ACTIVE' | 'DISABLED', actorId?: string) {
+  async setStatus(id: string, status: 'ACTIVE' | 'DISABLED', actorId?: string, expectedUpdatedAt?: string) {
     // 自己把自己禁用 = 把唯一管理员锁在门外，直接拒绝
     if (actorId && actorId === id && status === 'DISABLED') {
       throw new BusinessException(ErrorCode.PARAM_INVALID, '不能禁用自己的账号');
     }
 
     // 先查再改：直接 update 不存在的 id 会抛 P2025，前端只会看到 500
-    const exists = await this.prisma.user.findFirst({
-      where: { id, deletedAt: null },
-      select: { id: true },
+    userId(id);
+    return this.prisma.$transaction(async tx=>{
+      await tx.$executeRaw`UPDATE "users" SET "id"="id" WHERE "id"=${actorId||id}`;
+      if(actorId&&!await tx.user.findFirst({where:{id:actorId,role:'ADMIN',status:'ACTIVE',deletedAt:null},select:{id:true}}))throw new BusinessException(ErrorCode.FORBIDDEN,'当前账号无权管理用户',403);
+      const existing=await tx.user.findFirst({where:{id,deletedAt:null},select:publicUser});
+      if(!existing)throw new BusinessException(ErrorCode.NOT_FOUND,'用户不存在',404);
+      if(existing.status===status)return existing;
+      if(expectedUpdatedAt&&existing.updatedAt.toISOString()!==expectedUpdatedAt)throw new BusinessException(ErrorCode.PARAM_INVALID,'用户资料已变化，请重新核对',409);
+      const user=await tx.user.update({where:{id},data:{status,...(status==='DISABLED'?{tokenVersion:{increment:1}}:{})},select:publicUser});
+      if(status==='DISABLED')await tx.refreshToken.updateMany({where:{userId:id,revokedAt:null},data:{revokedAt:new Date()}});
+      return user;
     });
-    if (!exists) throw new BusinessException(ErrorCode.NOT_FOUND, '用户不存在', 404);
-
-    const user = await this.prisma.user.update({
-      where: { id },
-      data: {
-        status,
-        ...(status === 'DISABLED' ? { tokenVersion: { increment: 1 } } : {}),
-      },
-    });
-    if (status === 'DISABLED') {
-      await this.prisma.refreshToken.updateMany({
-        where: { userId: id, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
-    }
-    return this.strip(user);
   }
 
   /** 登录日志 */

@@ -70,5 +70,5 @@ export function useConversationRecords({ client = api, download = fetchBlob, sav
   watch(() => [auth.identityRevision, auth.user?.id, auth.user?.role, auth.isLoggedIn], () => { clear(); Object.assign(filters, RECORD_FILTERS); }, { flush: 'sync' });
   onScopeDispose(() => { clear(); alive = false; });
   return { filters, rows, total, page, pageSize, loading, error, applied, dirty, exporting, exportError, exportNotice, canExport,
-    selectedId, detail, detailLoading, detailError, search, reset, retry, goPage, openDetail, closeDetail, exportExcel, cancelExport };
+    selectedId, detail, detailLoading, detailError, search, reset, retry, goPage, openDetail, closeDetail, exportExcel, cancelExport, clearRecords:clear };
 }
