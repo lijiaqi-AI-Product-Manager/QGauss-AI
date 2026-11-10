@@ -1,17 +1,20 @@
 <template>
-  <section class="qev-card" :class="{ 'is-verified': verifiedAt, 'is-compact': registration }" aria-label="邮箱验证">
-    <div class="qev-top"><span class="qev-envelope" aria-hidden="true"><i></i><b>{{ verifiedAt ? '✓' : '✦' }}</b></span><div><span class="qev-eyebrow">A LITTLE STEP / BELONGS TO YOU</span><h3 ref="verificationTitle" tabindex="-1">{{ verifiedAt ? '邮箱，已与你的空间相连。' : registration ? '给新灵感，一个可靠的地址。' : '把邮箱，和你的空间连起来。' }}</h3><p>{{ verifiedAt ? '已确认这个邮箱由你使用。' : registration ? '输入寄到邮箱的六位数字，再开启你的 QGauss 空间。' : '一封短信笺，确认这个地址由你使用。' }}</p></div></div>
-    <p class="qev-address"><span>{{ email || '先填写你的邮箱' }}</span><b>{{ verifiedAt ? '已验证' : challenge ? '等待核对' : '待验证' }}</b></p>
+  <section class="qev-card" :class="{ 'is-verified': verifiedAt, 'is-compact': registration }" :aria-label="ct('邮箱验证')">
+    <div class="qev-top"><span class="qev-envelope" aria-hidden="true"><i></i><b>{{ verifiedAt ? '✓' : '✦' }}</b></span><div><span class="qev-eyebrow">A LITTLE STEP / BELONGS TO YOU</span><h3 ref="verificationTitle" tabindex="-1">{{ verifiedAt ? ct('邮箱，已与你的空间相连。') : registration ? ct('给新灵感，一个可靠的地址。') : ct('把邮箱，和你的空间连起来。') }}</h3><p>{{ verifiedAt ? ct('已确认这个邮箱由你使用。') : registration ? ct('输入寄到邮箱的六位数字，再开启你的 QGauss 空间。') : ct('一封短信笺，确认这个地址由你使用。') }}</p></div></div>
+    <p class="qev-address"><span>{{ email || ct('先填写你的邮箱') }}</span><b>{{ verifiedAt ? ct('已验证') : challenge ? ct('等待核对') : ct('待验证') }}</b></p>
     <template v-if="!verifiedAt">
-      <p v-if="!deliveryReady" class="qev-unavailable" role="status">邮箱投递尚未就绪，请稍后再来。</p>
-      <div v-else class="qev-controls"><button type="button" class="qev-send" :disabled="disabled || busy || remaining > 0 || !email" @click="sendCode"><BrandLoader v-if="sending" :size="18" />{{ sending ? '正在寄出…' : remaining > 0 ? remaining + ' 秒后可重发' : challenge ? '重新寄送验证码' : '寄送邮箱验证码' }}<span v-if="!sending" aria-hidden="true">↗</span></button><div v-if="challenge" class="qev-code"><label :for="inputId">邮箱验证码</label><input :id="inputId" :value="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="六位数字" aria-label="邮箱验证码" :disabled="disabled || confirming" @input="changed($event.target.value)"/><span class="qev-expiry">{{ expired ? '验证码已过期，请重新寄送。' : '验证码十分钟内有效，新代码会替换旧代码。' }}</span></div><button v-if="challenge && !registration" type="button" class="qev-confirm" :disabled="disabled || busy || !/^\d{6}$/.test(code) || expired" @click="confirm"><BrandLoader v-if="confirming" :size="18"/>{{ confirming ? '正在核对…' : '确认这个邮箱' }}</button></div>
-      <p v-if="registration && challenge" class="qev-note">验证码在创建账户时核对；需要重新寄送时，请填写更新后的图形验证码。</p>
-      <p v-if="error" class="qev-error" role="alert">{{ error }}</p><p v-else-if="notice" class="qev-note" role="status">{{ notice }}</p>
+      <p v-if="!deliveryReady" class="qev-unavailable" role="status">{{ ct('邮箱投递尚未就绪，请稍后再来。') }}</p>
+      <div v-else class="qev-controls"><button type="button" class="qev-send" :disabled="disabled || busy || remaining > 0 || !email" @click="sendCode"><BrandLoader v-if="sending" :size="18" />{{ sending ? ct('正在寄出…') : remaining > 0 ? ct('{seconds} 秒后可重发',{seconds:remaining}) : challenge ? ct('重新寄送验证码') : ct('寄送邮箱验证码') }}<span v-if="!sending" aria-hidden="true">↗</span></button><div v-if="challenge" class="qev-code"><label :for="inputId">{{ ct('邮箱验证码') }}</label><input :id="inputId" :value="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" :placeholder="ct('六位数字')" :aria-label="ct('邮箱验证码')" :disabled="disabled || confirming" @input="changed($event.target.value)"/><span class="qev-expiry">{{ expired ? ct('验证码已过期，请重新寄送。') : ct('验证码十分钟内有效，新代码会替换旧代码。') }}</span></div><button v-if="challenge && !registration" type="button" class="qev-confirm" :disabled="disabled || busy || !/^\d{6}$/.test(code) || expired" @click="confirm"><BrandLoader v-if="confirming" :size="18"/>{{ confirming ? ct('正在核对…') : ct('确认这个邮箱') }}</button></div>
+      <p v-if="registration && challenge" class="qev-note">{{ ct('验证码在创建账户时核对；需要重新寄送时，请填写更新后的图形验证码。') }}</p>
+      <p v-if="ct(error)" class="qev-error" role="alert">{{ ct(error) }}</p><p v-else-if="ct(notice)" class="qev-note" role="status">{{ ct(notice) }}</p>
     </template>
   </section>
 </template>
 
 <script setup>
+import {currentLang} from '../../i18n/index.js';
+import {accountText} from '../../i18n/account-messages.js';
+const ct=(key,params)=>accountText(currentLang.value,key,params);
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../stores/auth.js';

@@ -9,7 +9,7 @@ export async function guardNavigation(to) {
   const auth = useAuth();
   if (auth.booting) await auth.bootstrap();
   if (to.meta.public && to.path !== '/agent/chat') {
-    if (auth.isLoggedIn && to.name === 'login') return { path: '/chat' };
+    if (auth.isLoggedIn && to.name === 'login' && to.query?.mode !== 'forget') return { path: '/chat' };
     return true;
   }
   if (!auth.isLoggedIn) return { path: '/login', query: { redirect: to.fullPath } };

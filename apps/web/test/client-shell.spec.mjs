@@ -116,7 +116,7 @@ async function mount({ loggedIn = false, admin = false, pending = false, history
   const conversations=archive.rows;
   const modelRows = [{ id: 'model-a', name: 'qa-model', displayName: '测试模型', vendor: 'QGauss', ready: true }, { id: 'model-b', name: 'qa-second', displayName: '第二模型', vendor: 'QGauss', ready: true }, { id: 'model-c', name: 'qa-offline', displayName: '离线模型', vendor: 'QGauss 研发', ready: false }];
   const selections = new Map([['c1', 'model-a'], ['c2', 'model-a']]);
-  let profileRow={id:'test-user',username:'测试用户',displayName:'灵感观察员',email:'observer@qgauss.test',avatar:'qgauss:violet',role:admin?'ADMIN':'USER',createdAt:'2026-10-30T08:00:00Z'};
+  let profileRow={id:'test-user',username:'测试用户',displayName:'灵感观察员',email:'observer@qgauss.test',avatar:'qgauss:violet',role:admin?'ADMIN':'USER',signature:'',updatedAt:'2026-11-10T00:00:00.000Z',createdAt:'2026-10-30T08:00:00Z'};
   globalThis.fetch = async (url, init = {}) => {
     const call = { signal: init.signal, url: String(url), method: init.method || 'GET', authorization: new Headers(init.headers).get('authorization'), installationToken: new Headers(init.headers).get('x-qgauss-install-token'), body: typeof init.body === 'string' ? JSON.parse(init.body) : init.body || null };
     calls.push(call);
@@ -1704,7 +1704,7 @@ test('明确拒绝的提现重试不产生虚假的未知结果或残留恢复�
 });
 
 
-const accountRow=(overrides={})=>({id:'test-user',username:'测试用户',displayName:'灵感观察员',email:'observer@qgauss.test',avatar:'qgauss:violet',role:'USER',createdAt:'2026-10-30T08:00:00Z',...overrides});
+const accountRow=(overrides={})=>({id:'test-user',username:'测试用户',displayName:'灵感观察员',email:'observer@qgauss.test',avatar:'qgauss:violet',role:'USER',signature:'',updatedAt:'2026-11-10T00:00:00.000Z',createdAt:'2026-10-30T08:00:00Z',...overrides});
 function accountInput(selector,value){const input=document.querySelector(selector);assert.ok(input,selector);input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));}
 function accountSubmit(selector){document.querySelector(selector).dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));}
 const accountWrites=f=>f.calls.filter(call=>call.method!=='GET'&&/users\/(profile|password)|auth\/reset-password/.test(call.url));
@@ -1715,7 +1715,7 @@ test('个人空间从账户菜单进入，昵称与头像只在明确保存后�
   const f=await mount({loggedIn:true});try{document.querySelector('.qgc-user').click();await settle();const link=[...document.querySelectorAll('.qgc-popover a')].find(x=>x.textContent==='个人空间');assert.ok(link);link.click();await settle();
     assert.equal(f.router.currentRoute.value.path,'/account');assert.equal(document.querySelector('#qac-name').value,'灵感观察员');assert.equal(accountWrites(f).length,0);
     accountInput('#qac-name','  新的创作名字  ');document.querySelector('[aria-label="珊瑚搭档"]').click();await settle();assert.equal(accountWrites(f).length,0);
-    accountSubmit('.qac-profile-form');await settle();assert.deepEqual(accountWrites(f)[0].body,{displayName:'新的创作名字',avatar:'qgauss:coral'});assert.equal(f.auth.user.displayName,'新的创作名字');assert.equal(f.auth.user.avatar,'qgauss:coral');assert.match(document.querySelector('.qac-inline-note').textContent,/已保存/);await f.router.push('/chat');await settle();assert.match(document.querySelector('.qgc-empty').textContent,/新的创作名字/);assert.deepEqual(f.errors,[]);
+    accountSubmit('.qac-profile-form');await settle();assert.deepEqual(accountWrites(f)[0].body,{displayName:'新的创作名字',avatar:'qgauss:coral',expectedUpdatedAt:'2026-11-10T00:00:00.000Z'});assert.equal(f.auth.user.displayName,'新的创作名字');assert.equal(f.auth.user.avatar,'qgauss:coral');assert.match(document.querySelector('.qac-inline-note').textContent,/已保存/);await f.router.push('/chat');await settle();assert.match(document.querySelector('.qgc-empty').textContent,/新的创作名字/);assert.deepEqual(f.errors,[]);
   }finally{await f.close();}
 });
 test('个人空间保留未保存昵称，切换外观不触发写入，旧头像地址不会产生外部图片',async()=>{
@@ -1727,7 +1727,7 @@ test('个人空间保留未保存昵称，切换外观不触发写入，旧头�
 test('个人空间保存结果未知时先读取原结果，不自动重复写入',async()=>{
   let saved=false;const f=await mount({loggedIn:true,initialPath:'/account',intercept:call=>{if(call.url!=='/api/users/profile')return;if(call.method==='PATCH'){saved=true;throw new TypeError('Synthetic lost response');}return relayJson(accountRow({displayName:saved?'已接受的名字':'灵感观察员'}));}});try{
     accountInput('#qac-name','已接受的名字');accountSubmit('.qac-profile-form');await settle();assert.match(document.querySelector('.qac-inline-note').textContent,/尚未确认/);assert.equal(accountWrites(f).length,1);
-    [...document.querySelectorAll('.qac-form-actions button')].find(x=>x.textContent==='读取最新资料').click();await settle();assert.match(document.querySelector('.qac-inline-note').textContent,/已确认/);assert.equal(accountWrites(f).length,1);assert.equal(f.auth.user.displayName,'已接受的名字');assert.deepEqual(f.errors,[]);
+    [...document.querySelectorAll('.qac-form-actions button')].find(x=>x.textContent==='读取最新资料').click();await settle();assert.match(document.querySelector('.qac-inline-note').textContent,/内容与你的编辑一致/);assert.equal(accountWrites(f).length,1);assert.equal(f.auth.user.displayName,'已接受的名字');assert.deepEqual(f.errors,[]);
   }finally{await f.close();}
 });
 test('个人空间切换账号后，迟到的资料不能覆盖新账号',async()=>{
@@ -1754,7 +1754,7 @@ test('个人空间改密拒绝后清空密码，双击只提交一次',async()=>
   }finally{await f.close();}
 });
 test('个人空间旧改密请求的迟到结果不能退出新账号或清空新表单',async()=>{
-  let finish;const f=await mount({loggedIn:true,initialPath:'/account',intercept:call=>call.url==='/api/users/password'?new Promise(done=>finish=done):undefined});try{
+  let finish;const f=await mount({loggedIn:true,initialPath:'/account',intercept:call=>call.url==='/api/users/password'?new Promise(done=>finish=done):call.url==='/api/users/profile'&&call.authorization==='Bearer second-access'?relayJson(accountRow({id:'second-user',displayName:'新账号的资料'})):undefined});try{
     await accountSecurity();await accountReview();document.querySelector('.qac-dialog-actions .qac-primary').click();await settle();f.auth.apply({accessToken:'second-access',refreshToken:'second-refresh',user:{id:'second-user',username:'新账号',role:'USER'}});await settle();await accountSecurity();accountInput('#qac-old-password','SecondAccountPrivate-123');finish(relayJson({ok:true}));await settle();assert.equal(f.auth.user.id,'second-user');assert.equal(document.querySelector('#qac-old-password').value,'SecondAccountPrivate-123');assert.deepEqual(f.errors,[]);
   }finally{await f.close();}
 });
@@ -2406,3 +2406,6 @@ registerUserRecordLinkTests({test,assert,mount,settle,relayJson});
 
 import {registerUserAccountControlTests} from './user-account-controls-ui.cases.mjs';
 registerUserAccountControlTests({test,assert,mount,settle,relayJson,setLang});
+
+import {registerAccountExperienceTests} from './account-experience-ui.cases.mjs';
+registerAccountExperienceTests({test,assert,mount,settle,relayJson,setLang});

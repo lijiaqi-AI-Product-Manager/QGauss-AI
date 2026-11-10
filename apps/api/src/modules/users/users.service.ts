@@ -7,6 +7,8 @@ import { passwordProblem } from '../../common/security/password-policy';
 import { Prisma } from '@prisma/client';
 import { userQuery, userConditions, userId, activityQuery } from './users.query';
 import { shanghaiDate } from '../commerce/ledger.service';
+import {AuthUser,authSession} from '../../common/decorators/current-user.decorator';
+import {profileInput,ProfileInput} from './profile.query';
 
 const publicUser = { id:true,email:true,username:true,displayName:true,role:true,status:true,isDistribution:true,adminNote:true,emailVerifiedAt:true,createdAt:true,updatedAt:true } satisfies Prisma.UserSelect;
 const orderBy = [{ createdAt:'desc' as const },{ id:'desc' as const }];
@@ -38,15 +40,19 @@ export class UsersService {
     return this.strip(user);
   }
 
-  async updateProfile(userId: string, data: { displayName?: string; avatar?: string }) {
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        ...(data.displayName !== undefined ? { displayName: data.displayName.trim() } : {}),
-        ...(data.avatar !== undefined ? { avatar: data.avatar } : {}),
-      },
+  async updateProfile(userId:string,input:ProfileInput,actor?:AuthUser){
+    const {expectedUpdatedAt,...fields}=profileInput(input);
+    return this.prisma.$transaction(async tx=>{
+      await tx.$executeRaw`UPDATE "users" SET "id"="id" WHERE "id"=${userId}`;
+      const person=await tx.user.findFirst({where:{id:userId,status:'ACTIVE',deletedAt:null}});
+      if(!person)throw new BusinessException(ErrorCode.FORBIDDEN,'当前账号无法修改资料',403);
+      if(actor){const context=authSession(actor);if(actor.id!==userId||!context||context.tokenVersion!==person.tokenVersion||!await tx.refreshToken.findFirst({where:{userId,familyId:context.familyId,revokedAt:null,expiresAt:{gt:new Date()}},select:{id:true}}))throw new BusinessException(ErrorCode.FORBIDDEN,'当前登录无权执行此操作',403);}
+      if(expectedUpdatedAt!==undefined&&person.updatedAt.toISOString()!==expectedUpdatedAt)throw new BusinessException(ErrorCode.PARAM_INVALID,'资料已变化，请读取最新资料并核对修改',409);
+      const changes=Object.fromEntries(Object.entries(fields).filter(([key,value])=>person[key as keyof typeof person]!==value));
+      if(!Object.keys(changes).length)return this.strip(person);
+      const saved=await tx.user.update({where:{id:userId},data:{...changes,updatedAt:new Date(Math.max(Date.now(),person.updatedAt.getTime()+1))}});
+      return this.strip(saved);
     });
-    return this.strip(user);
   }
 
   /**

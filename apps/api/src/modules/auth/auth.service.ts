@@ -303,21 +303,24 @@ export class AuthService implements OnModuleInit {
    */
   async forgotPassword(email: string, meta: {ip?:string} = {}) {
     if (!this.rateLimit.tryConsume('forgot-password:' + (meta.ip ?? 'unknown'),20,15*60_000)) throw new BusinessException(ErrorCode.RATE_LIMITED,'申请过于频繁，请稍后再试',429);
+    if(!this.mail.configurationSummary().ready)throw new BusinessException(ErrorCode.EMAIL_DELIVERY_UNAVAILABLE,'邮箱投递尚未就绪，请联系站点管理员',503);
     const normalized = email.trim().toLowerCase();
     const user = await this.prisma.user.findFirst({where:{email:normalized,deletedAt:null,status:'ACTIVE'}});
     if (!user) return {ok:true};
-    const token = randomBytes(24).toString('hex');
-    const accepted = await this.prisma.$transaction(async tx => {
-      const locked = await tx.user.updateMany({where:{id:user.id,tokenVersion:user.tokenVersion,status:'ACTIVE',deletedAt:null},data:{tokenVersion:{increment:0}}});
-      if (locked.count !== 1) return false;
-      await tx.passwordReset.deleteMany({where:{userId:user.id,usedAt:null}});
-      await tx.passwordReset.create({data:{userId:user.id,tokenHash:this.sha256(token),expiresAt:new Date(Date.now()+30*60_000)}});
-      return true;
-    });
-    if (!accepted) return {ok:true};
-    const baseUrl = await this.settings.get<string>('site.baseUrl');
-    await this.mail.send('resetPassword',user.email,{username:user.username,resetUrl:baseUrl.replace(/\/+$/,'')+'/reset-password?token='+token}).catch(error=>this.logger.warn('重置邮件失败: '+error.message));
-    return {ok:true};
+    const token=randomBytes(24).toString('hex');
+    try{
+      const baseUrl=await this.settings.get<string>('site.baseUrl'),prepared=await this.mail.prepare('resetPassword',{username:user.username,resetUrl:baseUrl.replace(/\/+$/,'')+'/reset-password?token='+token});
+      const accepted=await this.prisma.$transaction(async tx=>{
+        const locked=await tx.user.updateMany({where:{id:user.id,tokenVersion:user.tokenVersion,status:'ACTIVE',deletedAt:null},data:{tokenVersion:{increment:0}}});
+        if(locked.count!==1)return false;
+        await tx.passwordReset.deleteMany({where:{userId:user.id,usedAt:null}});
+        await tx.passwordReset.create({data:{userId:user.id,tokenHash:this.sha256(token),expiresAt:new Date(Date.now()+30*60_000)}});
+        await tx.mailOutbox.create({data:{...prepared,to:user.email}});
+        return true;
+      });
+      if(accepted)this.mail.kick();
+    }catch{this.logger.warn('重置邮件申请暂未完成');}
+    return{ok:true};
   }
 
   async resetPassword(token: string, newPassword: string, meta: {ip?:string} = {}) {

@@ -1,8 +1,8 @@
 <template>
   <div class="qg-auth-form-flow">
     <div class="login-form-container" :class="{ 'is-login': mode === 'login' }">
-      <form class="n-form" novalidate @submit.prevent="submit">
-        <p v-if="mode === 'register' && !emailPolicyKnown" class="qg-auth-notice" role="status">{{ emailPolicyError || '正在确认注册要求…' }}<button v-if="emailPolicyError" type="button" @click="loadEmailPolicy">重新读取</button></p>
+      <form class="n-form" novalidate @submit.prevent="submit"><section v-if="mode==='forget'" class="qg-recovery-intro" aria-live="polite"><h3>{{ct('通过邮箱，找回创作空间。')}}</h3><p>{{ct(!emailPolicyKnown?'正在确认邮箱恢复是否可用…':emailReady?'输入账户使用的邮箱。若账户可用，将向该地址寄送三十分钟内有效的重置链接。':'邮箱找回暂未开放，请联系站点管理员。')}}</p><button v-if="!emailPolicyKnown" type="button" :disabled="loading" @click="loadEmailPolicy">{{ct('重新读取')}}</button></section>
+        <p v-if="mode === 'register' && !emailPolicyKnown" class="qg-auth-notice" role="status">{{ ct(emailPolicyError || '正在确认注册要求…') }}<button v-if="emailPolicyError" type="button" @click="loadEmailPolicy">{{ct('重新读取')}}</button></p>
         <div v-for="field in fields" :key="field.key" class="n-form-item input-3d">
           <label class="n-form-item-label" :for="`qg-auth-${field.key}`"><span class="n-form-item-label__text">{{ field.label }}</span></label>
           <div class="n-form-item-blank" :class="{ 'qg-auth-captcha-row': field.key === 'captchaCode' }">
@@ -10,7 +10,7 @@
               <div class="n-input-wrapper">
                 <input :id="`qg-auth-${field.key}`" v-model="form[field.key]" class="n-input__input-el"
                   :type="field.key === 'password' ? visible ? 'text' : 'password' : field.type || 'text'"
-                  :name="field.key" :data-qg-password="field.key === 'password' ? '' : undefined" :autocomplete="field.autocomplete" :maxlength="field.key === 'password' ? 32 : undefined"
+                  :name="field.key" :data-qg-password="field.key === 'password' ? '' : undefined" :autocomplete="field.autocomplete" :maxlength="field.key === 'password' ? 32 : undefined" :disabled="loading"
                   :placeholder="fieldErrors[field.key] || field.placeholder" :aria-invalid="!!fieldErrors[field.key]"
                   :aria-describedby="error ? 'qg-auth-error' : undefined" @focus="focus(field.key)" @blur="focus('none')" @input="changed(field.key)" />
                 <button v-if="field.key === 'password'" class="n-input__eye" type="button" :aria-label="text(visible ? 'hidePassword' : 'showPassword')" :aria-pressed="visible" @mousedown.prevent @click="togglePassword">
@@ -22,21 +22,21 @@
           </div>
         </div>
         <EmailVerificationCard v-if="mode === 'register' && emailRequired" v-model:code="emailCode" :email="form.email" registration :delivery-ready="emailReady" :captcha-id="captcha.id" :captcha-code="form.captchaCode" :disabled="loading" @challenge="emailChallenge = $event" @busy="emailBusy = $event" @captcha-used="refreshEmailCaptcha" />
-        <div v-if="mode === 'login' && registerEnabled" class="qg-auth-assist">
+        <div v-if="mode === 'login'" class="qg-auth-assist">
           <label><input v-model="remember" type="checkbox" />{{ text('remember') }}</label>
           <button type="button" @click="changeMode('forget')">{{ text('forgot') }}</button>
         </div>
-        <p v-if="error" id="qg-auth-error" class="qg-auth-error" role="alert">{{ error }}</p>
-        <p v-if="notice" class="qg-auth-notice" role="status">{{ notice }}</p>
+        <p v-if="error" id="qg-auth-error" class="qg-auth-error" role="alert">{{ct(error)}}</p>
+        <p v-if="notice" class="qg-auth-notice" role="status">{{ct(notice)}}</p>
         <div class="n-form-item form-btn-item"><div class="n-form-item-blank">
-          <button class="n-button n-button--primary-type" type="submit" :disabled="loading || emailBusy || mode === 'register' && !emailPolicyKnown" :aria-busy="loading"><span class="n-button__content">{{ loading ? text('loading') : text(mode === 'login' ? 'submit' : mode === 'register' ? 'register' : 'reset') }}</span></button>
+          <button class="n-button n-button--primary-type" type="submit" :disabled="loading || emailBusy || mode === 'register' && !emailPolicyKnown || mode==='forget' && (!emailPolicyKnown || !emailReady)" :aria-busy="loading"><span class="n-button__content">{{ loading ? text('loading') : text(mode === 'login' ? 'submit' : mode === 'register' ? 'register' : 'reset') }}</span></button>
         </div></div>
       </form>
       <div v-if="mode === 'login'" class="login-type-switch-slot"><slot name="switch" /></div>
     </div>
-    <div v-if="mode !== 'login'" class="qg-auth-return"><button type="button" @click="changeMode('login')">{{ text('back') }}</button></div>
+    <div v-if="mode !== 'login'" class="qg-auth-return"><button type="button" :disabled="loading" @click="changeMode('login')">{{ text('back') }}</button></div>
     <div class="qg-auth-form-footer">
-      <div class="box-agreement">
+      <div v-if="mode!=='forget'" class="box-agreement">
         <label class="qg-auth-agreement-check"><input v-model="agreed" type="checkbox" :aria-label="text('agreementRequired')" /></label>
         <div class="content">{{ text(mode === 'login' ? 'agreement' : 'agreementRegister') }}<a class="agreement-text" href="/agreement/userAgreement.html" target="_blank" rel="noopener">{{ text('userAgreement') }}</a>{{ text('and') }}<a class="agreement-text" href="/agreement/privacyAgreement.html" target="_blank" rel="noopener">{{ text('privacy') }}</a></div>
       </div>
@@ -57,6 +57,9 @@
 </template>
 
 <script setup>
+import {currentLang} from '../../i18n/index.js';
+import {accountText} from '../../i18n/account-messages.js';
+const ct=(key,params)=>accountText(currentLang.value,key,params);
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '../../api/client.js';
@@ -114,6 +117,8 @@ async function loadCaptcha() {
 function refreshEmailCaptcha(){form.captchaCode='';loadCaptcha();}
 async function loadEmailPolicy(){const epoch=++policyEpoch;emailPolicyError.value='';try{const policy=await api.get('/auth/registration-policy',{signal:configAbort.signal,retry:false});if(!policy||typeof policy.emailVerificationRequired!=='boolean'||typeof policy.emailDeliveryReady!=='boolean')throw Error('暂时无法确认注册要求，请重新读取。');if(authAlive&&epoch===policyEpoch){emailRequired.value=policy.emailVerificationRequired;emailReady.value=policy.emailDeliveryReady;emailPolicyKnown.value=true;}}catch(e){if(authAlive&&epoch===policyEpoch){emailPolicyKnown.value=false;emailPolicyError.value=e.message;}}}
 function changeMode(next) {
+  if(loading.value)return;
+  form.password='';if(next==='forget'&&!form.email&&auth.user?.email)form.email=auth.user.email;
   if (next === 'register' && !registerEnabled.value) { error.value = text('registrationClosed'); return; }
   emailChallenge.value=null;emailCode.value='';emailBusy.value=false;mode.value = next; visible.value = false; error.value = ''; notice.value = ''; focused.value = 'none';
   if (next !== 'register') captchaEpoch++;
@@ -123,8 +128,12 @@ function changeMode(next) {
 }
 async function submit() {
   if (loading.value||emailBusy.value) return;
+  const submissionMode=mode.value;
+  if(mode.value==='forget'&&!emailPolicyKnown.value)await loadEmailPolicy();
+  if(!authAlive||mode.value!==submissionMode)return;
+  if(mode.value==='forget'&&(!emailPolicyKnown.value||!emailReady.value)){error.value='邮箱找回暂未开放，请联系站点管理员。';return;}
   if(mode.value==='register'&&!emailPolicyKnown.value){await loadEmailPolicy();if(!emailPolicyKnown.value)return;}
-  if (!agreed.value) { consentVisible.value = true; return; }
+  if (mode.value!=='forget' && !agreed.value) { consentVisible.value = true; return; }
   const empty = fields.value.filter((field) => field.key !== 'inviteCode' && !(field.key==='captchaCode'&&emailRequired.value&&emailChallenge.value) && !form[field.key].trim());
   if (empty.length) {
     for (const field of empty) fieldErrors[field.key] = field.placeholder;
@@ -134,15 +143,18 @@ async function submit() {
   loading.value = true; error.value = ''; notice.value = '';
   try {
     if (mode.value === 'forget') {
-      await api.post('/auth/forgot-password', { email: form.email }); notice.value = text('resetSent');
+      await api.post('/auth/forgot-password',{email:form.email.trim()},{signal:configAbort.signal,retry:false});if(!authAlive)return;notice.value='系统已收到找回申请。若邮箱关联可用账户，请留意收件箱或垃圾邮件。';
     } else {
       if (mode.value === 'login') await auth.login(form.account, form.password, { remember: remember.value });
       else await auth.register({ username: form.username, password: form.password, email: form.email, ...(emailRequired.value?{emailChallengeId:emailChallenge.value.id,emailCode:emailCode.value}:{captchaId:captcha.id,captchaCode:form.captchaCode}), inviteCode: form.inviteCode });
+      if(!authAlive)return;
       const destination = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') && !route.query.redirect.startsWith('//') ? route.query.redirect : '/chat';
       await router.push(destination);
     }
   } catch (failure) {
-    error.value = failure.message || text('required'); dispatch('login-error-state', true); interaction();
+    if(!authAlive)return;
+    error.value=mode.value==='forget'&&!failure.status?'申请结果尚未确认，请先检查收件箱或垃圾邮件，稍后再手动申请。':failure.message||text('required');
+    if(mode.value==='forget'&&failure.status===503)await loadEmailPolicy(); dispatch('login-error-state', true); interaction();
     if (mode.value === 'register') {await loadCaptcha();await loadEmailPolicy();}
   } finally { loading.value = false; }
 }
@@ -161,12 +173,12 @@ watch(consentVisible, async (shown) => {
 });
 watch(() => form.password, interaction);
 onMounted(async () => {
-  emit('subViewChange', 'login');
+  if(route.query.mode==='forget')changeMode('forget');else emit('subViewChange','login');
   loadEmailPolicy();
   try {
     const config = await api.get('/settings/public', { signal: configAbort.signal }); if (!authAlive) return; registerEnabled.value = !!config['security.registerEnabled'];
     const invite = typeof route.query.invite === 'string' ? route.query.invite.trim().toUpperCase() : '';
-    if (registerEnabled.value && /^[A-Z0-9]{8}$/.test(invite)) { form.inviteCode = invite; changeMode('register'); notice.value = text('invitationReady'); }
+    if (route.query.mode!=='forget' && registerEnabled.value && /^[A-Z0-9]{8}$/.test(invite)) { form.inviteCode = invite; changeMode('register'); notice.value = text('invitationReady'); }
   } catch { if (authAlive) registerEnabled.value = false; }
 });
 onBeforeUnmount(() => { authAlive = false; captchaEpoch++; configAbort.abort(); emit('interaction', { isTyping: false, passwordLength: 0, isPasswordFocus: false, isPasswordVisible: false, focusedField: 'none', isLoginError: false }); });
