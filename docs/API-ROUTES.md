@@ -1,7 +1,7 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **310** 条路由，分布在 **32** 个控制器。
+> 共 **311** 条路由，分布在 **32** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
@@ -10,7 +10,7 @@
 | `/auth` | 12 | `src/modules/auth/auth.controller.ts` |
 | `/balance` | 7 | `src/modules/commerce/wallet.controller.ts` |
 | `/chat` | 4 | `src/modules/chat/chat.controller.ts` |
-| `/chat-logs` | 2 | `src/modules/chatlog/chatlog.controller.ts` |
+| `/chat-logs` | 3 | `src/modules/chatlog/chatlog.controller.ts` |
 | `/conversations` | 14 | `src/modules/conversations/conversations.controller.ts` |
 | `/crami` | 11 | `src/modules/commerce/crami.controller.ts` |
 | `/extensions` | 10 | `src/modules/extensions/extensions.controller.ts` |
@@ -143,6 +143,7 @@
 |---|---|---|
 | GET | `/chat-logs` | ADMIN |
 | GET | `/chat-logs/export` | ADMIN |
+| GET | `/chat-logs/:id` | ADMIN |
 
 ## /conversations
 
