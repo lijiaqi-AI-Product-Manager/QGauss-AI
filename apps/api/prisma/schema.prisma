@@ -404,6 +404,8 @@ model Message {
 
   @@unique([conversationId, clientMsgId])
   @@index([conversationId, createdAt])
+  @@index([createdAt, id])
+  @@index([conversationId, parentId, createdAt, id])
   @@index([status, updatedAt])
   @@map("messages")
 }
