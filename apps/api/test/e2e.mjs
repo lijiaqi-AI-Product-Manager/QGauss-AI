@@ -9,7 +9,7 @@
  * 运行：node test/e2e.mjs
  */
 import { PrismaClient } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import {randomUUID,randomBytes,createHash} from 'node:crypto';
 const API = process.env.E2E_API ?? 'http://127.0.0.1:9520/api';
 // 夹具命名工具：必须真唯一。
 // 早先若干处写成 `Date.now() % 1000`，只有 1000 种取值，
@@ -704,23 +704,16 @@ const health = await api('/models/channels/health');
   ok('体验信核对入口拒绝非法请求标识', (await api('/mail/probes/not-a-uuid')).status === 400);
   ok('不能确认其他人或不存在的体验信', (await api('/mail/probes/missing-receipt/confirm', { method:'POST', body:'{}' })).status === 404);
 
-  await api('/auth/forgot-password', {
-    method: 'POST',
-    body: JSON.stringify({ email: mailUser.email }),
-  });
-  const outbox2 = await api('/mail/outbox?template=resetPassword&keyword=' + encodeURIComponent(mailUser.email));
-  const reset = outbox2.body.data?.items?.find(
-    (m) => m.template === 'resetPassword',
-  );
-  ok('产生重置邮件', !!reset);
-  ok('发件回执不返回正文、变量、原始错误或完整邮箱', !!reset && !['body','payload','error','dispatchToken','requestKey'].some(key => Object.hasOwn(reset,key)) && reset.to !== mailUser.email);
-  if (process.env.DATABASE_URL !== 'file:./e2e.db') throw Error('Reset fixture access requires the isolated e2e database');
-  const mailPrisma = new PrismaClient();
-  let storedReset;
-  try { storedReset = await mailPrisma.mailOutbox.findFirst({ where: { to: mailUser.email, template: 'resetPassword' }, orderBy: { createdAt: 'desc' } }); }
-  finally { await mailPrisma.$disconnect(); }
-  const tokenMatch = /token=([a-f0-9]+)/.exec(storedReset?.body ?? '');
-  ok('隔离数据库中的重置邮件含有效链接', !!tokenMatch);
+  const recoveryUnavailable=await api('/auth/forgot-password',{method:'POST',body:JSON.stringify({email:mailUser.email})});
+  ok('未配邮件时找回明确不可用',recoveryUnavailable.status===503);
+  const unknownRecovery=await api('/auth/forgot-password',{method:'POST',body:JSON.stringify({email:'unknown-recovery@qgauss.test'})});
+  ok('邮件未就绪时不存在账号得到相同结果',unknownRecovery.status===recoveryUnavailable.status);
+  const outbox2=await api('/mail/outbox?template=resetPassword&keyword='+encodeURIComponent(mailUser.email));
+  ok('未配邮件不产生不可投递的重置链接',outbox2.body.data?.items?.length===0);
+  if(process.env.DATABASE_URL!=='file:./e2e.db')throw Error('Reset fixture access requires the isolated e2e database');
+  const mailPrisma=new PrismaClient(),fixtureToken=randomBytes(24).toString('hex');
+  try{const owner=await mailPrisma.user.findUniqueOrThrow({where:{email:mailUser.email}});ok('未就绪申请不变更重置凭证',await mailPrisma.passwordReset.count({where:{userId:owner.id}})===0);await mailPrisma.passwordReset.create({data:{userId:owner.id,tokenHash:createHash('sha256').update(fixtureToken).digest('hex'),expiresAt:new Date(Date.now()+1800000)}});}finally{await mailPrisma.$disconnect();}
+  const tokenMatch=[null,fixtureToken];
 
   const resetRes = await api('/auth/reset-password', {
     method: 'POST',

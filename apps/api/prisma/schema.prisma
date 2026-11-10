@@ -31,6 +31,7 @@ model User {
   passwordHash String
   displayName  String?
   avatar       String?
+  signature    String    @default("")
   role         String    @default("USER") // USER | ADMIN | SUPER（SUPER 暂未启用）
   status       String    @default("ACTIVE") // ACTIVE | DISABLED
   tokenVersion Int       @default(0) // 改密/封禁时 +1，立即作废 access token

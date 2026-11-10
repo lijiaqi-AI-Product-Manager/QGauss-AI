@@ -9,6 +9,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { mailFixtures, mailSettles } from './mail-fixture.mjs';
+import {JwtService} from '@nestjs/jwt';
+import bcrypt from 'bcryptjs';
+import {AuthService} from '../dist/modules/auth/auth.service.js';
+import {RateLimitService} from '../dist/common/ratelimit/rate-limit.service.js';
 const fixtures = mailFixtures(); after(() => fixtures.close());
 
 async function smtpFixture() {
@@ -77,6 +81,15 @@ function mimePart(raw, type) {
   }
   return content;
 }
+
+test('password recovery commits a usable link, delivers it through SMTP and resets the account', {timeout:15000}, async t=>{
+  const smtp=await smtpFixture();t.after(()=>smtp.close());const f=await fixtures.fixture(),{service,close}=realService(smtp.port,f);t.after(close);
+  const auth=new AuthService(f.prisma,new JwtService({secret:randomBytes(48).toString('hex')}),{get:()=>undefined},{verify:()=>true},f.settings,service,new RateLimitService());
+  assert.deepEqual(await auth.forgotPassword(f.user.email,{ip:'127.0.0.1'}),{ok:true});
+  const queued=await f.prisma.mailOutbox.findFirstOrThrow({where:{to:f.user.email,template:'resetPassword'}});await mailSettles(f.prisma,queued.id,['sent']);assert.equal(smtp.messages.length,1);
+  const html=mimePart(smtp.messages[0].raw,'text/html'),match=/reset-password\?token=([a-f0-9]{48})/.exec(html);assert.ok(match);const token=match[1],reset=await f.prisma.passwordReset.findFirstOrThrow({where:{userId:f.user.id}});assert.equal(reset.tokenHash,createHash('sha256').update(token).digest('hex'));
+  await auth.resetPassword(token,'QgaussRecovery-728',{ip:'127.0.0.1'});const user=await f.prisma.user.findUniqueOrThrow({where:{id:f.user.id}});assert.equal(await bcrypt.compare('QgaussRecovery-728',user.passwordHash),true);assert.ok((await f.prisma.passwordReset.findUniqueOrThrow({where:{id:reset.id}})).usedAt);await assert.rejects(()=>auth.resetPassword(token,'QgaussRecovery-729',{ip:'127.0.0.1'}));
+});
 
 test('SMTP 真实适配器完成认证、信封和双格式欢迎邮件', { timeout: 10000 }, async t => {
   const smtp = await smtpFixture();

@@ -23,15 +23,15 @@ const here=dirname(fileURLToPath(import.meta.url)),folder=mkdtempSync(join(tmpdi
 execFileSync(process.execPath,[join(here,'../prisma/migrate.mjs')],{env:{...process.env,DATABASE_FILE:join(folder,'test.db')},stdio:'pipe'});
 const prisma=new PrismaClient({datasources:{db:{url:'file:'+join(folder,'test.db').replace(/\\/g,'/')}}});
 const secret=randomBytes(48).toString('base64url'),config={get:key=>key==='JWT_SECRET'?secret:undefined,getOrThrow:()=>secret};
-const settings={get:async key=>key==='site.baseUrl'?'http://qgauss.test':1000},mail=[];
-const mailer={send:async(type,to,context)=>{mail.push({type,to,context});return{ok:true};}};
+const settings={get:async key=>key==='site.baseUrl'?'http://qgauss.test':1000};
+const mailer={configurationSummary:()=>({ready:true}),prepare:async(template,data)=>({subject:'QGauss recovery',template,payload:JSON.stringify(data),body:'QGauss recovery',status:'queued',error:null}),kick(){}};
 function authWith(db=prisma){return new AuthService(db,new JwtService({secret}),config,{verify:()=>true},settings,mailer,new RateLimitService());}
 const auth=authWith(),users=new UsersService(prisma,new RateLimitService()),strategy=new JwtStrategy(config,prisma);
 const initialPassword='IsolatedOldPass-123';
 async function userFixture(){const name='account-'+randomUUID();return prisma.user.create({data:{username:name,email:name+'@qgauss.test',passwordHash:await bcrypt.hash(initialPassword,10)}});}
 const login=user=>auth.login({account:user.email,password:initialPassword},{ip:user.id,userAgent:'QGauss isolated browser'});
 const hash=value=>createHash('sha256').update(value).digest('hex');
-async function resetFixture(user){await auth.forgotPassword(user.email,{ip:user.id});return new URL(mail.at(-1).context.resetUrl).searchParams.get('token');}
+async function resetFixture(user){await auth.forgotPassword(user.email,{ip:user.id});const row=await prisma.mailOutbox.findFirstOrThrow({where:{to:user.email,template:'resetPassword'},orderBy:[{createdAt:'desc'},{id:'desc'}]});return new URL(JSON.parse(row.payload).resetUrl).searchParams.get('token');}
 function readBarrier(model,method,count=1){let release,arrived;const gate=new Promise(done=>release=done),reached=new Promise(done=>arrived=done);let seen=0;const delegate=new Proxy(prisma[model],{get(target,key){if(key!==method){const value=target[key];return typeof value==='function'?value.bind(target):value;}return async(...args)=>{const value=await target[method](...args);seen++;if(seen>=count)arrived();await gate;return value;};}});const db=new Proxy(prisma,{get(target,key){if(key===model)return delegate;const value=target[key];return typeof value==='function'?value.bind(target):value;}});return{db,reached,release};}
 after(async()=>{await prisma.$disconnect();const target=resolve(folder);assert.ok(target.startsWith(resolve(tmpdir())+sep+'qgauss-account-security-'));rmSync(target,{recursive:true,force:true,maxRetries:10,retryDelay:100});});
 

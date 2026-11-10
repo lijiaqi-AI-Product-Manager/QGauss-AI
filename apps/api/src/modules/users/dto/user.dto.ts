@@ -13,6 +13,19 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(2048)
   avatar?: string;
+
+  @ValidateIf((_object,value)=>value!==undefined)
+  @Transform(({obj,key})=>obj[key])
+  @IsString()
+  @MaxLength(300)
+  signature?: string;
+
+  @ValidateIf((_object,value)=>value!==undefined)
+  @Transform(({obj,key})=>obj[key])
+  @IsString()
+  @IsISO8601({strict:true})
+  @MaxLength(40)
+  expectedUpdatedAt?: string;
 }
 
 export class ChangePasswordDto {

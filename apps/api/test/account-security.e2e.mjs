@@ -2,6 +2,8 @@
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
+import {randomBytes,createHash} from 'node:crypto';
+import {basename,resolve} from 'node:path';
 const root=process.env.E2E_API||'http://127.0.0.1:9520/api',prisma=new PrismaClient(),tag=Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 let admin='',passed=0,original={};
 const initialPassword='QGaussOld-12345',changedPassword='QGaussChanged-456',resetPassword='QGaussReset-789';
@@ -10,7 +12,7 @@ async function api(path,method='GET',body,access=admin){const response=await fet
 async function settings(values){assert.equal((await api('/settings','PUT',{settings:Object.entries(values).map(([key,value])=>({key,value}))})).status,200);}
 async function signIn(user,password=initialPassword){return api('/auth/login','POST',{account:user.email,password},'');}
 async function userFixture(suffix){const email='qa'+tag+suffix+'@qgauss.test',username='qa'+tag+suffix;const response=await api('/auth/register','POST',{email,username,password:initialPassword},'');assert.ok(response.data?.accessToken,'isolated registration');return{...response.data,email,id:response.data.user.id};}
-async function resetLink(user){assert.equal((await api('/auth/forgot-password','POST',{email:user.email},'')).status,201);const row=await prisma.mailOutbox.findFirst({where:{to:user.email,template:'resetPassword'},orderBy:{createdAt:'desc'}});assert.equal(row.status,'skipped','SMTP must stay disabled');const token=/token=([a-f0-9]{48})/.exec(row.body)?.[1];assert.ok(token,'synthetic reset token');return{token,row};}
+async function resetLink(user){assert.equal((await api('/auth/forgot-password','POST',{email:user.email},'')).status,503);const file=process.env.E2E_DATABASE_FILE;assert.ok(file&&basename(file)==='e2e.db','reset fixtures require the isolated database');assert.equal(resolve((await prisma.$queryRawUnsafe('PRAGMA database_list')).find(row=>row.name==='main').file),resolve(file));const token=randomBytes(24).toString('hex');await prisma.passwordReset.create({data:{userId:user.id,tokenHash:createHash('sha256').update(token).digest('hex'),expiresAt:new Date(Date.now()+1800000)}});return{token};}
 try{
   const login=await api('/auth/login','POST',{account:process.env.E2E_ADMIN||'admin',password:process.env.E2E_PASSWORD||'admin123456'},'');admin=login.data?.accessToken;assert.ok(admin);
   const keys=['security.registerEnabled','security.captchaEnabled','security.loginRateLimit','security.registerRateLimit'];const stored=await prisma.globalConfig.findMany({where:{key:{in:keys}}});original=Object.fromEntries(stored.map(row=>{let value;try{value=JSON.parse(row.value);}catch{value=row.value;}return[row.key,value];}));
@@ -38,7 +40,7 @@ try{
   check('错误的当前密码不能修改账户',(await api('/users/password','POST',{oldPassword:'WrongSynthetic-123',newPassword:changedPassword},first.accessToken)).status===400);
   check('新旧密码相同被拒绝',(await api('/users/password','POST',{oldPassword:initialPassword,newPassword:initialPassword},first.accessToken)).status===400);
   check('密码字段不接受隐式数字转换',(await api('/users/password','POST',{oldPassword:initialPassword,newPassword:12345678},first.accessToken)).status===400);
-  const stale=await resetLink(first);check('重置邮件指向已实现的页面且未外发',stale.row.status==='skipped'&&stale.row.body.includes('/reset-password?token='));
+  const stale=await resetLink(first);check('未配置邮件时不创建不可投递的找回邮件',await prisma.mailOutbox.count({where:{to:first.email,template:'resetPassword'}})===0);
   check('本人能够明确修改密码',(await api('/users/password','POST',{oldPassword:initialPassword,newPassword:changedPassword},first.accessToken)).data?.ok===true);
   check('改密后所有旧登录立即失效',(await api('/users/profile','GET',undefined,first.accessToken)).status===401&&(await api('/users/profile','GET',undefined,signed.accessToken)).status===401);
   check('改密后旧刷新凭证不能建立新登录',(await api('/auth/refresh','POST',{refreshToken:first.refreshToken},'')).status===401);

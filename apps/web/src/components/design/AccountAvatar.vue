@@ -1,7 +1,10 @@
 <template>
-  <span class="qac-avatar" :class="'qac-avatar-' + choice.tone" :style="{ '--qac-avatar-size': size + 'px' }" :role="decorative ? undefined : 'img'" :aria-label="decorative ? undefined : choice.name" :aria-hidden="decorative ? 'true' : undefined"><span class="qac-avatar-face"><i></i><i></i><b></b></span><span class="qac-avatar-glint"></span></span>
+  <span class="qac-avatar" :class="'qac-avatar-' + choice.tone" :style="{ '--qac-avatar-size': size + 'px' }" :role="decorative ? undefined : 'img'" :aria-label="decorative ? undefined : ct(choice.name)" :aria-hidden="decorative ? 'true' : undefined"><span class="qac-avatar-face"><i></i><i></i><b></b></span><span class="qac-avatar-glint"></span></span>
 </template>
 <script setup>
+import {currentLang} from '../../i18n/index.js';
+import {accountText} from '../../i18n/account-messages.js';
+const ct=(key,params)=>accountText(currentLang.value,key,params);
 import { computed } from 'vue';
 import { accountAvatar } from '../../lib/account-profile.js';
 const props = defineProps({ value: String, size: { type: Number, default: 48 }, decorative: Boolean });

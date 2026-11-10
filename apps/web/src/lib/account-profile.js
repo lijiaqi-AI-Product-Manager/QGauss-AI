@@ -9,16 +9,16 @@ export function accountAvatar(value) {
   return ACCOUNT_AVATARS.find(item => item.id === value) || ACCOUNT_AVATARS[0];
 }
 
-export function accountDate(value) {
+export function accountDate(value,lang='zh-CN') {
   const date = new Date(value);
   if (!value || !Number.isFinite(date.getTime())) return '暂无记录';
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+  return new Intl.DateTimeFormat(lang==='en'?'en-US':lang==='zh-TW'?'zh-TW':'zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
 }
 
-export function loginDevice(value) {
+export function loginDevice(value,lang='zh-CN') {
   const ua = String(value || '');
   const system = /Android/i.test(ua) ? 'Android' : /iPhone|iPad/i.test(ua) ? 'iOS / iPadOS' : /Windows/i.test(ua) ? 'Windows' : /Macintosh|Mac OS/i.test(ua) ? 'macOS' : /Linux/i.test(ua) ? 'Linux' : '';
-  const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '浏览器';
+  const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : lang==='en'?'Browser':lang==='zh-TW'?'瀏覽器':'浏览器';
   return [browser, system].filter(Boolean).join(' · ');
 }
 

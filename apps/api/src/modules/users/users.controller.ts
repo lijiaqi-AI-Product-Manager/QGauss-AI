@@ -17,7 +17,7 @@ export class UsersController {
 
   @Patch('profile')
   update(@CurrentUser() user: AuthUser, @Body() dto: UpdateProfileDto) {
-    return this.users.updateProfile(user.id, dto);
+    return this.users.updateProfile(user.id, dto, user);
   }
 
   @Post('password')
