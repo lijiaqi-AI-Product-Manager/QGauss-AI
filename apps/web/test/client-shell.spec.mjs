@@ -2403,3 +2403,6 @@ registerUserManagementTests({test,assert,mount,settle,relayJson,setLang});
 
 import {registerUserRecordLinkTests} from './user-record-links-ui.cases.mjs';
 registerUserRecordLinkTests({test,assert,mount,settle,relayJson});
+
+import {registerUserAccountControlTests} from './user-account-controls-ui.cases.mjs';
+registerUserAccountControlTests({test,assert,mount,settle,relayJson,setLang});

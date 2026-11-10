@@ -38,6 +38,7 @@ model User {
   inviteCode     String?  @unique // 邀请码，10 位；惰性生成
   invitedBy      String   @default("") // 邀请人的 inviteCode
   isDistribution Boolean  @default(false) // 是否具备分销资格（决定分销菜单可见性）
+  adminNote      String   @default("") // 仅管理端使用，不进入个人资料和登录响应
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
@@ -67,6 +68,20 @@ model User {
   videoRequests VideoRequest[]
 
   @@map("users")
+}
+
+model UserAccountOperation {
+  id String @id
+  actorId String
+  userId String
+  requestKey String
+  kind String
+  payloadHash String
+  resultJson String
+  createdAt DateTime @default(now())
+  @@unique([actorId, requestKey])
+  @@index([userId, createdAt, id])
+  @@map("user_account_operations")
 }
 
 model MindmapDocument {

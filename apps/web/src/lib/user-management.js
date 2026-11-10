@@ -1,4 +1,4 @@
-export const USER_FILTERS = Object.freeze({keyword:'',status:'',role:'',username:'',email:'',distribution:'',from:'',to:''});
+export const USER_FILTERS = Object.freeze({keyword:'',status:'',role:'',username:'',email:'',distribution:'',adminNote:'',from:'',to:''});
 export const GRANT_FIELDS = Object.freeze(['model3Count','model4Count','drawMjCount','agentCount','days']);
 export const emptyGrant = () => ({model3Count:0,model4Count:0,drawMjCount:0,agentCount:0,days:0,amountYuan:'',remark:''});
 const id = value => typeof value==='string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);

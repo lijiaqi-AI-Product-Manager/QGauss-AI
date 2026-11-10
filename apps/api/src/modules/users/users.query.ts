@@ -13,10 +13,10 @@ export function userId(value: string) {
   return value;
 }
 export function userQuery(input: Record<string, unknown> = {}) {
-  const allowed = new Set(['page','pageSize','keyword','username','email','userId','status','role','distribution','from','to','asOf']);
+  const allowed = new Set(['page','pageSize','keyword','username','email','userId','status','role','distribution','adminNote','from','to','asOf']);
   if (Object.keys(input).some(key => !allowed.has(key))) return invalid('不支持的用户查询条件');
   const q = { ...recordPaging(input), keyword:text(input.keyword,'keyword'), username:text(input.username,'username'), email:text(input.email,'email'),
-    userId:text(input.userId,'userId',128), status:text(input.status,'status'), role:text(input.role,'role'), distribution:text(input.distribution,'distribution'),
+    userId:text(input.userId,'userId',128), status:text(input.status,'status'), role:text(input.role,'role'), distribution:text(input.distribution,'distribution'),adminNote:text(input.adminNote,'adminNote'),
     from:text(input.from,'from',40), to:text(input.to,'to',40), asOf:text(input.asOf,'asOf',40) || new Date().toISOString() };
   if (q.pageSize > 100) return invalid('每页最多 100 位用户');
   if (q.userId) userId(q.userId);
@@ -35,6 +35,7 @@ export function userConditions(q: ReturnType<typeof userQuery>) {
   if(q.status)parts.push(Prisma.sql`u."status"=${q.status}`);
   if(q.role)parts.push(Prisma.sql`u."role"=${q.role}`);
   if(q.distribution)parts.push(Prisma.sql`u."isDistribution"=${q.distribution==='true'}`);
+  if(q.adminNote)parts.push(Prisma.sql`instr(lower(u."adminNote"),lower(${q.adminNote}))>0`);
   if(q.from)parts.push(Prisma.sql`u."createdAt">=${new Date(q.from)}`);
   if(q.to)parts.push(Prisma.sql`u."createdAt"<=${new Date(q.to)}`);
   return Prisma.join(parts,' AND ');
@@ -42,7 +43,7 @@ export function userConditions(q: ReturnType<typeof userQuery>) {
 export function activityQuery(input: Record<string, unknown> = {}) {
   if(Object.keys(input).some(key=>!['kind','page','pageSize','asOf'].includes(key)))return invalid('不支持的明细查询条件');
   const kind=text(input.kind,'kind') || 'grants';
-  if(!['grants','logins','conversations'].includes(kind))return invalid('用户明细类型不正确');
+  if(!['grants','logins','conversations','management'].includes(kind))return invalid('用户明细类型不正确');
   const paging=recordPaging(input);if(paging.pageSize>50)return invalid('明细每页最多 50 条');
   const asOf=text(input.asOf,'asOf',40)||new Date().toISOString(),point=recordDate(asOf,'asOf')!;
   if(point.getTime()>Date.now()+1000)return invalid('查询时间不能晚于当前时间');
