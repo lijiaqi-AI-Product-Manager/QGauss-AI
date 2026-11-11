@@ -91,6 +91,10 @@ export async function uploadAppImage(file,requestKey,crop,options={}) {
   return uploadMultipart('/apps/icons',file,{...options,retry:false,fields:{requestKey,crop:JSON.stringify(crop)}});
 }
 
+export async function uploadProfileAvatar(file,requestKey,crop,expectedVersion=0,options={}) {
+  return uploadMultipart('/users/me/avatar/uploads/'+encodeURIComponent(requestKey),file,{...options,retry:false,fields:{expectedVersion:String(expectedVersion),crop:JSON.stringify(crop)}});
+}
+
 async function uploadMultipart(path, file, { retry = true, signal, fields = {} } = {}) {
   const requestedToken = accessToken;
   const requestedIdentity = accessIdentity;

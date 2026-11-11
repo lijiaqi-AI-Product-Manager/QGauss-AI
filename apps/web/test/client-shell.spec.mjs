@@ -1718,10 +1718,10 @@ test('个人空间从账户菜单进入，昵称与头像只在明确保存后�
     accountSubmit('.qac-profile-form');await settle();assert.deepEqual(accountWrites(f)[0].body,{displayName:'新的创作名字',avatar:'qgauss:coral',expectedUpdatedAt:'2026-11-10T00:00:00.000Z'});assert.equal(f.auth.user.displayName,'新的创作名字');assert.equal(f.auth.user.avatar,'qgauss:coral');assert.match(document.querySelector('.qac-inline-note').textContent,/已保存/);await f.router.push('/chat');await settle();assert.match(document.querySelector('.qgc-empty').textContent,/新的创作名字/);assert.deepEqual(f.errors,[]);
   }finally{await f.close();}
 });
-test('个人空间保留未保存昵称，切换外观不触发写入，旧头像地址不会产生外部图片',async()=>{
+test('个人空间保留未保存昵称，切换外观不触发写入并兼容旧头像',async()=>{
   const f=await mount({loggedIn:true,initialPath:'/account',intercept:call=>call.url==='/api/users/profile'?relayJson(accountRow({avatar:'https://legacy.example.invalid/private-avatar.png'})):undefined});try{
     assert.equal(document.querySelector('.qac-profile-form button[type=submit]').disabled,true);accountInput('#qac-name','尚未保存的创作名字');await settle();
-    document.querySelector('[aria-label="打开外观实验室"]').click();await settle();const orbitCard=[...document.querySelectorAll('button[aria-pressed]')].find(x=>x.textContent.includes('星际液态'));assert.ok(orbitCard);orbitCard.click();document.querySelector('[aria-label="关闭外观实验室"]').click();await settle();assert.equal(document.querySelector('#qac-name').value,'尚未保存的创作名字');assert.equal(document.documentElement.getAttribute('data-qg-design'),'orbit');assert.equal(accountWrites(f).length,0);assert.equal(document.querySelector('img[src^="https://legacy.example.invalid"]'),null);assert.deepEqual(f.errors,[]);
+    document.querySelector('[aria-label="打开外观实验室"]').click();await settle();const orbitCard=[...document.querySelectorAll('button[aria-pressed]')].find(x=>x.textContent.includes('星际液态'));assert.ok(orbitCard);orbitCard.click();document.querySelector('[aria-label="关闭外观实验室"]').click();await settle();assert.equal(document.querySelector('#qac-name').value,'尚未保存的创作名字');assert.equal(document.documentElement.getAttribute('data-qg-design'),'orbit');assert.equal(accountWrites(f).length,0);assert.equal(document.querySelector('img[src^="https://legacy.example.invalid"]').getAttribute('referrerpolicy'),'no-referrer');assert.deepEqual(f.errors,[]);
   }finally{await f.close();}
 });
 test('个人空间保存结果未知时先读取原结果，不自动重复写入',async()=>{
@@ -2409,3 +2409,5 @@ registerUserAccountControlTests({test,assert,mount,settle,relayJson,setLang});
 
 import {registerAccountExperienceTests} from './account-experience-ui.cases.mjs';
 registerAccountExperienceTests({test,assert,mount,settle,relayJson,setLang});
+import {registerProfileAvatarTests} from './profile-avatar-ui.cases.mjs';
+registerProfileAvatarTests({test,assert,mount,settle,relayJson,setLang});

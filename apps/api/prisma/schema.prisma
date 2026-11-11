@@ -53,6 +53,7 @@ model User {
   uploads       UploadFile[]
   artifactSaves AgentArtifactSave[]
   uploadReceipts UploadReceipt[]
+  avatarUploads UserAvatarUpload[]
   passwordResets PasswordReset[]
   emailVerifications EmailVerification[]
   createdApps App[] @relation("UserCreatedApps")
@@ -69,6 +70,29 @@ model User {
   videoRequests VideoRequest[]
 
   @@map("users")
+}
+
+model UserAvatarUpload {
+  id String @id @default(cuid())
+  userId String
+  requestKey String
+  inputHash String?
+  version Int @default(1)
+  status String @default("PROCESSING")
+  stageJson String?
+  fileId String?
+  errorCode String?
+  acceptedDay String
+  familyId String
+  tokenVersion Int
+  accessExpiresAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@unique([userId, requestKey])
+  @@index([userId, acceptedDay])
+  @@index([status, updatedAt])
+  @@map("user_avatar_uploads")
 }
 
 model UserAccountOperation {

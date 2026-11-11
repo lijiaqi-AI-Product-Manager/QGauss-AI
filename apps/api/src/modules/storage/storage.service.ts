@@ -48,7 +48,7 @@ export class StorageService {
   }
 
   async upload(userId: string, file: IncomingFile, scope = 'chat') {
-    if (scope === 'app-icon') throw new BusinessException(ErrorCode.PARAM_INVALID, '请从应用编辑页添加图片形象', 400);
+    if (['app-icon','user-avatar'].includes(scope)) throw new BusinessException(ErrorCode.PARAM_INVALID, '请从对应编辑页添加图片形象', 400);
     if (!file || !file.buffer?.length) {
       throw new BusinessException(ErrorCode.PARAM_INVALID, '没有收到文件');
     }
@@ -175,7 +175,7 @@ export class StorageService {
 
   private async findOwned(id: string, userId: string, role: string) {
     const row = await this.prisma.uploadFile.findUnique({ where: { id } });
-    if (!row || row.deletedAt || row.purgedAt || row.expiresAt && row.expiresAt <= new Date()) {
+    if (!row || row.scope==='user-avatar' || row.deletedAt || row.purgedAt || row.expiresAt && row.expiresAt <= new Date()) {
       throw new BusinessException(ErrorCode.NOT_FOUND, '文件不存在', 404);
     }
     if (row.userId !== userId && (role !== 'ADMIN'||['voice-recording','voice-result','app-icon','agent-result'].includes(row.scope))) {
@@ -252,12 +252,12 @@ export class StorageService {
     const safeSize = Number.isFinite(pageSize) ? Math.min(100, Math.max(1, Math.floor(pageSize))) : 20;
     const [items, total] = await Promise.all([
       this.prisma.uploadFile.findMany({
-        where: { userId, scope:{not:'app-icon'}, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] },
+        where: { userId, scope:{notIn:['app-icon','user-avatar']}, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] },
         orderBy: { createdAt: 'desc' },
         skip: (safePage - 1) * safeSize,
         take: safeSize,
       }),
-      this.prisma.uploadFile.count({ where: { userId, scope:{not:'app-icon'}, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] } }),
+      this.prisma.uploadFile.count({ where: { userId, scope:{notIn:['app-icon','user-avatar']}, deletedAt: null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}] } }),
     ]);
     return { items: items.map((r) => this.view(r)), total, page: safePage, pageSize: safeSize };
   }
@@ -273,7 +273,7 @@ export class StorageService {
     const now=new Date(),id=randomUUID();return{id,storedKey:`${now.getUTCFullYear()}/${String(now.getUTCMonth()+1).padStart(2,'0')}/${id}.${type.ext}`,filename:decodeFilename(file.originalname)?.slice(0,200)||`QGauss-file.${type.ext}`,mime:type.mime,size:file.buffer.length,sha256:createHash('sha256').update(file.buffer).digest('hex'),backend:this.driver.name};
   }
   async checkAttachments(userId:string,ids:string[]){
-    const rows=await this.prisma.uploadFile.findMany({where:{id:{in:ids},userId,deletedAt:null,purgedAt:null,scope:{not:'app-icon'},OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}}),byId=new Map(rows.map(row=>[row.id,row]));
+    const rows=await this.prisma.uploadFile.findMany({where:{id:{in:ids},userId,deletedAt:null,purgedAt:null,scope:{notIn:['app-icon','user-avatar']},OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}}),byId=new Map(rows.map(row=>[row.id,row]));
     return{items:await Promise.all(ids.map(async id=>{const row=byId.get(id);if(!row||!/^image\/(png|jpeg|gif|webp)$/.test(row.mime)&&!isDocumentMime(row.mime))return{id,status:'unavailable'};
       try{if(!await this.driver.exists(row.storedKey))return{id,status:'unavailable'};}catch{return{id,status:'unknown'};}
       return{id,status:'available',file:this.view(row)};
@@ -298,6 +298,21 @@ export class StorageService {
     if(!stage||!/^[a-z0-9-]{8,64}$/.test(stage.id)||!/^\d{4}\/\d{2}\/[a-z0-9-]{8,64}\.[a-z0-9]{1,8}$/.test(stage.storedKey)||!Number.isSafeInteger(stage.size)||stage.size<=0||stage.size>200*1024*1024||!/^[a-f0-9]{64}$/.test(stage.sha256)||stage.backend!==this.driver.name)throw new Error('STORAGE');
   }
   async putArtifact(stage:ArtifactStage,buffer:Buffer){this.checkStage(stage);if(buffer.length!==stage.size||createHash('sha256').update(buffer).digest('hex')!==stage.sha256)throw new Error('STORAGE');await this.driver.put(stage.storedKey,buffer);}
+  async prepareAvatarArtifact(buffer:Buffer,mime:string,extension:string):Promise<ArtifactStage>{
+    if(!buffer.length||buffer.length>64*1024*1024||!['image/png','image/webp'].includes(mime)||!['png','webp'].includes(extension))throw new Error('STORAGE');
+    const now=new Date(),id=randomUUID();return{id,storedKey:`${now.getUTCFullYear()}/${String(now.getUTCMonth()+1).padStart(2,'0')}/${id}.${extension}`,filename:`QGauss-avatar.${extension}`,mime,size:buffer.length,sha256:createHash('sha256').update(buffer).digest('hex'),backend:this.driver.name};
+  }
+  async readAvatarFile(id:string,userId:string){
+    const row=await this.prisma.uploadFile.findFirst({where:{id,userId,scope:'user-avatar',deletedAt:null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}});
+    if(!row)throw new BusinessException(ErrorCode.NOT_FOUND,'这张头像图片当前不可用。',404);
+    const buffer=await this.driver.get(row.storedKey);
+    if(buffer.length!==row.size||createHash('sha256').update(buffer).digest('hex')!==row.sha256)throw new BusinessException(ErrorCode.NOT_FOUND,'这张头像图片当前不可用。',404);
+    return{buffer,mime:row.mime,filename:row.filename};
+  }
+  async purgeAvatarFile(id:string,userId:string){
+    const row=await this.prisma.uploadFile.findFirst({where:{id,userId,scope:'user-avatar',deletedAt:{not:null},purgedAt:null}});if(!row)return;
+    await this.driver.remove(row.storedKey);await this.prisma.uploadFile.updateMany({where:{id,userId,scope:'user-avatar',deletedAt:{not:null},purgedAt:null},data:{purgedAt:new Date()}});
+  }
   async verifyArtifact(stage:ArtifactStage){this.checkStage(stage);if(!await this.driver.exists(stage.storedKey))return false;const buffer=await this.driver.get(stage.storedKey);if(buffer.length!==stage.size||createHash('sha256').update(buffer).digest('hex')!==stage.sha256)throw new Error('INTEGRITY');return true;}
   async discardArtifact(stage:ArtifactStage){this.checkStage(stage);await this.driver.remove(stage.storedKey);}
   async artifactFile(userId:string,id:string){
