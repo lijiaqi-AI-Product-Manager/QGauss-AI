@@ -9,6 +9,7 @@ import { userQuery, userConditions, userId, activityQuery } from './users.query'
 import { shanghaiDate } from '../commerce/ledger.service';
 import {AuthUser,authSession} from '../../common/decorators/current-user.decorator';
 import {profileInput,ProfileInput} from './profile.query';
+import {AVATAR_PREFIX,AVATAR_SCOPE,avatarId} from './avatar-image';
 
 const publicUser = { id:true,email:true,username:true,displayName:true,role:true,status:true,isDistribution:true,adminNote:true,emailVerifiedAt:true,createdAt:true,updatedAt:true } satisfies Prisma.UserSelect;
 const orderBy = [{ createdAt:'desc' as const },{ id:'desc' as const }];
@@ -50,6 +51,17 @@ export class UsersService {
       if(expectedUpdatedAt!==undefined&&person.updatedAt.toISOString()!==expectedUpdatedAt)throw new BusinessException(ErrorCode.PARAM_INVALID,'资料已变化，请读取最新资料并核对修改',409);
       const changes=Object.fromEntries(Object.entries(fields).filter(([key,value])=>person[key as keyof typeof person]!==value));
       if(!Object.keys(changes).length)return this.strip(person);
+      if(Object.hasOwn(changes,'avatar')){
+        const id=avatarId(changes.avatar);
+        if(typeof changes.avatar==='string'&&changes.avatar.startsWith(AVATAR_PREFIX)&&!id)throw new BusinessException(ErrorCode.PARAM_INVALID,'头像内容不正确');
+        if(id){
+          const file=await tx.uploadFile.findFirst({where:{id,userId,scope:AVATAR_SCOPE,deletedAt:null,purgedAt:null,OR:[{expiresAt:null},{expiresAt:{gt:new Date()}}]}});
+          if(!file||!await tx.userAvatarUpload.findFirst({where:{userId,fileId:id,status:'READY'}}))throw new BusinessException(ErrorCode.PARAM_INVALID,'这份头像预览当前不可用，请重新选择图片。',409);
+          await tx.uploadFile.update({where:{id},data:{expiresAt:null}});
+        }
+        const previous=avatarId(person.avatar);
+        if(previous&&previous!==id)await tx.uploadFile.updateMany({where:{id:previous,userId,scope:AVATAR_SCOPE,deletedAt:null,purgedAt:null},data:{expiresAt:new Date(Date.now()+86400000)}});
+      }
       const saved=await tx.user.update({where:{id:userId},data:{...changes,updatedAt:new Date(Math.max(Date.now(),person.updatedAt.getTime()+1))}});
       return this.strip(saved);
     });

@@ -1,0 +1,13 @@
+import {ACCOUNT_AVATARS} from './account-profile.js';
+export const PROFILE_AVATAR_PREFIX='qgauss:avatar:';
+export const PROFILE_AVATAR_MAX_BYTES=12*1024*1024;
+export const PROFILE_AVATAR_MAX_PIXELS=64*1024*1024;
+export const PROFILE_AVATAR_TYPES=Object.freeze(['image/png','image/jpeg','image/jpg','image/webp','image/gif','image/bmp']);
+export const avatarImageId=value=>typeof value==='string'&&/^qgauss:avatar:av_[a-f\d]{48}$/.test(value)?value.slice(PROFILE_AVATAR_PREFIX.length):'';
+export const avatarImagePath=value=>avatarImageId(value)?'/api/users/me/avatar/files/'+avatarImageId(value):'';
+export function legacyAvatarUrl(value){if(typeof value!=='string'||value.length>2048||/[\x00-\x20\x7f]/.test(value))return'';try{const url=new URL(value);return['https:','http:'].includes(url.protocol)&&!url.username&&!url.password?url.href:'';}catch{return'';}}
+export function profileDraftAvatar(value){return avatarImageId(value)||legacyAvatarUrl(value)||ACCOUNT_AVATARS.some(row=>row.id===value)?value:ACCOUNT_AVATARS[0].id;}
+export function avatarFileProblem(file){if(!file?.size)return'请选择一张图片。';if(file.size>PROFILE_AVATAR_MAX_BYTES)return'头像图片不能超过 12MB。';if(!(PROFILE_AVATAR_TYPES.includes(String(file.type||'').toLowerCase())||file.type==='image/x-ms-bmp'||!file.type&&/\.(?:png|jpe?g|webp|gif|bmp)$/i.test(file.name||'')))return'请使用 PNG、JPEG、WebP、GIF 或 BMP 图片。';return'';}
+export function avatarCrop(width,height,zoom=1,cx=.5,cy=.5){if(!Number.isSafeInteger(width)||!Number.isSafeInteger(height)||width<1||height<1||width*height>PROFILE_AVATAR_MAX_PIXELS)throw Error('图片像素过大，请使用不超过 6400 万像素的图片。');if(![zoom,cx,cy].every(Number.isFinite))throw Error('请重新选择头像裁切范围。');const size=Math.max(1,Math.floor(Math.min(width,height)/Math.max(1,Math.min(4,zoom)))),x=Math.max(0,Math.min(width-size,Math.round(cx*width-size/2))),y=Math.max(0,Math.min(height-size,Math.round(cy*height-size/2)));return{x,y,size,width,height};}
+export function avatarReceipt(value,key){return!!value&&value.requestKey===key&&Number.isSafeInteger(value.version)&&value.version>=1&&['processing','ready','failed','closed'].includes(value.status)&&(value.status!=='ready'||!!avatarImageId(value.avatar))&&!Object.hasOwn(value,'inputHash')&&!Object.hasOwn(value,'stageJson');}
+export function decodeAvatarPending(value,owner){try{const row=JSON.parse(value);return row?.version===1&&row.owner===owner&&typeof row.key==='string'&&/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(row.key)&&Number.isSafeInteger(row.operationVersion)&&row.operationVersion>=0&&row.operationVersion<1e9?{version:1,owner,key:row.key,operationVersion:row.operationVersion}:null;}catch{return null;}}

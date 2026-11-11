@@ -36,8 +36,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message = Array.isArray(m) ? m.join('; ') : (m ?? exception.message);
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
-      this.logger.error(`${req.method} ${req.url} → ${message}`, exception.stack);
+      this.logger.error(`${req.method} ${req.url} → ${exception.message}`, exception.stack);
     }
 
     // 只有请求声明英文时才覆盖文案；中文场景保留业务侧更具体的描述

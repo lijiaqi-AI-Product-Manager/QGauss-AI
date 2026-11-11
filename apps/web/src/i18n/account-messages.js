@@ -1,4 +1,6 @@
+import {PROFILE_PHOTO_MESSAGES} from './avatar-messages.js';
 export const ACCOUNT_MESSAGE_ENTRIES=Object.freeze([
+ ...PROFILE_PHOTO_MESSAGES,
  ['一点关于我','一點關於我','A little about me'],
  ['留一句喜欢的话，让创作有自己的语气。','留一句喜歡的話，讓創作有自己的語氣。','Leave a line you love. Give your creations your own voice.'],
  ['返回创作卡正面','返回創作卡正面','Back to the front'],

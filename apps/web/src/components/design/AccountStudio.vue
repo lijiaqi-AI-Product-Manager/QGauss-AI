@@ -14,9 +14,10 @@
         <form class="qac-card qac-profile-form" @submit.prevent="saveProfile">
           <div class="qac-card-heading"><span class="qac-number">01</span><div><h2>{{ ct('和灵感打个招呼') }}</h2><p>{{ ct('这里的名字会出现在你的 QGauss 空间里。') }}</p></div></div>
           <label class="qac-label" for="qac-name">{{ ct('创作昵称') }} <span>{{ ct('最多 32 个字符') }}</span></label><input id="qac-name" v-model="draft.displayName" class="qac-input" maxlength="64" autocomplete="nickname" :placeholder="ct('你希望 QGauss 怎么称呼你？')" :disabled="profileSaving || sessionBusy" :aria-invalid="!!ct(nameProblem)" aria-describedby="qac-name-hint" /><p id="qac-name-hint" class="qac-field-hint" :class="{ 'is-error': ct(nameProblem) }">{{ ct(nameProblem) || ct('修改不会自动保存；邮箱与登录名保持原有设置。') }}</p><label class="qac-label" for="qac-signature">{{ ct('个人签名') }} <span>{{ [...draft.signature].length }} / 300</span></label><textarea id="qac-signature" v-model="draft.signature" class="qac-input qac-signature-input" maxlength="600" rows="3" :placeholder="ct('留下一句属于你的话，让灵感有自己的语气。')" :disabled="profileSaving || sessionBusy" :aria-invalid="!!ct(signatureProblem)" aria-describedby="qac-signature-hint"></textarea><p id="qac-signature-hint" class="qac-field-hint" :class="{'is-error':ct(signatureProblem)}">{{ ct(signatureProblem) || ct('最多 300 个字符，可留空。仅在你的个人空间展示。') }}</p>
-          <fieldset class="qac-avatar-field" :disabled="profileSaving || sessionBusy"><legend>{{ ct('挑一位头像搭档') }}</legend><div class="qac-avatar-options"><button v-for="avatar in ACCOUNT_AVATARS" :key="avatar.id" type="button" :aria-label="ct(avatar.name)" :aria-pressed="draft.avatar === avatar.id" @click="draft.avatar = avatar.id; avatarTouched = true"><AccountAvatar :value="avatar.id" :size="48" decorative /><span>{{ ct(avatar.name) }}</span><b v-if="draft.avatar === avatar.id" aria-hidden="true">✓</b></button></div></fieldset>
+          <fieldset class="qac-avatar-field" :disabled="profileSaving || sessionBusy || avatarBusy || avatarEditing"><legend>{{ ct('挑一位头像搭档') }}</legend><div class="qac-avatar-options"><button v-for="avatar in ACCOUNT_AVATARS" :key="avatar.id" type="button" :aria-label="ct(avatar.name)" :aria-pressed="draft.avatar === avatar.id" @click="draft.avatar = avatar.id; avatarTouched = true"><AccountAvatar :value="avatar.id" :size="48" decorative /><span>{{ ct(avatar.name) }}</span><b v-if="draft.avatar === avatar.id" aria-hidden="true">✓</b></button></div></fieldset>
+          <ProfilePhotoPicker :model-value="draft.avatar" :disabled="profileSaving||sessionBusy||passwordSaving" @update:model-value="choosePhoto" @busy="avatarBusy=$event" @editing="avatarEditing=$event" @refresh="confirmProfile"/>
           <div v-if="ct(profileNote)" class="qac-inline-note" :class="{ 'is-error': profileNoteKind === 'error' }" role="status">{{ ct(profileNote) }}</div>
-          <div class="qac-form-actions"><span>{{ profileUncertain ? ct('先确认保存结果，再继续编辑。') : dirty ? ct('有尚未保存的更改') : ct('资料已与当前账户同步') }}</span><button v-if="profileUncertain" type="button" class="qac-primary" :disabled="profileSaving || sessionBusy" @click="confirmProfile">{{ ct('读取最新资料') }}</button><button v-else type="submit" class="qac-primary" :disabled="!dirty || !!ct(nameProblem) || !!ct(signatureProblem) || profileSaving || sessionBusy"><span v-if="profileSaving" class="qac-spinner" aria-hidden="true"></span>{{ profileSaving ? ct('正在保存') : ct('保存创作身份') }}<ClientIcon v-if="!profileSaving" name="arrowUpRight" /></button></div>
+          <div class="qac-form-actions"><span>{{ profileUncertain ? ct('先确认保存结果，再继续编辑。') : dirty ? ct('有尚未保存的更改') : ct('资料已与当前账户同步') }}</span><button v-if="profileUncertain" type="button" class="qac-primary" :disabled="profileSaving || sessionBusy || avatarBusy || avatarEditing" @click="confirmProfile">{{ ct('读取最新资料') }}</button><button v-else type="submit" class="qac-primary" :disabled="!dirty || !!ct(nameProblem) || !!ct(signatureProblem) || profileSaving || sessionBusy || avatarBusy || avatarEditing"><span v-if="profileSaving" class="qac-spinner" aria-hidden="true"></span>{{ profileSaving ? ct('正在保存') : ct('保存创作身份') }}<ClientIcon v-if="!profileSaving" name="arrowUpRight" /></button></div>
         </form>
         <aside class="qac-card qac-account-facts"><span class="qac-eyebrow">BELONGS TO YOU</span><h2>{{ ct('你的账户名片') }}</h2><dl><div><dt>{{ ct('登录名') }}</dt><dd>{{ profile.username }}</dd></div><div><dt>{{ ct('注册邮箱') }}</dt><dd>{{ profile.email || ct('暂无记录') }}</dd></div><div><dt>{{ ct('加入时间') }}</dt><dd>{{ accountDate(profile.createdAt) }}</dd></div><div><dt>{{ ct('账户角色') }}</dt><dd>{{ profile.role === 'ADMIN' ? ct('站点管理员') : ct('普通用户') }}</dd></div></dl><p>{{ ct('个人空间仅供本人查看。需要调整登录邮箱或账户角色时，请联系站点管理员。') }}</p><button type="button" @click="openSection('security')">{{ ct('查看登录足迹') }} <ClientIcon name="arrowUpRight" /></button></aside>
       </section>
@@ -46,6 +47,7 @@ import { useAuth } from '../../stores/auth.js';
 import { useAppearance } from '../../stores/appearance.js';
 import { ACCOUNT_AVATARS, accountAvatar, accountDate as baseAccountDate, loginDevice as baseLoginDevice, passwordProblem } from '../../lib/account-profile.js';
 import AccountAvatar from './AccountAvatar.vue';
+import ProfilePhotoPicker from './ProfilePhotoPicker.vue';
 import ClientIcon from '../reference/ClientIcon.vue';
 import BrandLoader from './BrandLoader.vue';
 import EmailVerificationCard from '../auth/EmailVerificationCard.vue';
@@ -53,7 +55,8 @@ import './account-studio.css';
 import AccountSessionsCard from './AccountSessionsCard.vue';
 const auth = useAuth(), appearance = useAppearance();
 const accountDate=value=>baseAccountDate(value,currentLang.value),loginDevice=value=>baseLoginDevice(value,currentLang.value);
-const sessionBusy=ref(false),cardTurned=ref(false),signaturePreview=ref(null);
+const sessionBusy=ref(false),cardTurned=ref(false),signaturePreview=ref(null),avatarBusy=ref(false),avatarEditing=ref(false);
+function choosePhoto(value){draft.avatar=value;avatarTouched.value=true;}
 async function turnCard(){cardTurned.value=!cardTurned.value;await nextTick();if(cardTurned.value)signaturePreview.value?.focus();}
 const route = useRoute();
 const emailCode=ref(''),emailReady=ref(false);
@@ -65,7 +68,7 @@ const sections = [{id:'profile',title:'创作身份',icon:'user',number:'01'},{i
 const startSteps = [{number:'01 / CHAT',title:'聊清楚一个想法',description:'选择合适的模型，把问题、文档或图片交给你的搭档。',path:'/chat',icon:'chat'},{number:'02 / CREATE',title:'把脑海里的画面画出来',description:'从一段描述开始，在绘画工作台调整画面与参数。',path:'/painting',icon:'image'},{number:'03 / DISCOVER',title:'遇见不同专长的搭档',description:'去应用中心，挑一位适合眼前任务的 AI 助手。',path:'/apps',icon:'apps'}];
 const section=ref('profile'),sectionNavigation=ref(null),tabButtons=[];
 const password=reactive({old:'',next:'',confirm:''}),passwordSaving=ref(false),passwordError=ref(''),showPasswords=ref(false),passwordDialog=ref(null);
-const {profile,draft,loading,loadError,profileSaving,profileNote,profileNoteKind,profileUncertain,avatarTouched,nameProblem,signatureProblem,dirty,loadProfile,saveProfile,confirmProfile,applyProfile,resetProfile}=usePersonalProfile({auth,blocked:()=>sessionBusy.value||passwordSaving.value});
+const {profile,draft,loading,loadError,profileSaving,profileNote,profileNoteKind,profileUncertain,avatarTouched,nameProblem,signatureProblem,dirty,loadProfile,saveProfile,confirmProfile,applyProfile,resetProfile}=usePersonalProfile({auth,blocked:()=>sessionBusy.value||passwordSaving.value||avatarBusy.value||avatarEditing.value});
 const loginRows=ref([]),logsLoading=ref(false),logsError=ref(''),logPage=ref(1),logTotal=ref(0),logPageSize=4,revealNetwork=ref(false);
 let alive=true,logsRequest=null,writeRequest=null,logVersion=0;
 const current=stamp=>alive&&auth.isLoggedIn&&auth.user?.id===stamp.id&&auth.identityRevision===stamp.revision;

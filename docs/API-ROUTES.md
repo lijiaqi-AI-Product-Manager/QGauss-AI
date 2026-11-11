@@ -1,7 +1,7 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **320** 条路由，分布在 **32** 个控制器。
+> 共 **325** 条路由，分布在 **33** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
@@ -35,6 +35,7 @@
 | `/statistic` | 6 | `src/modules/statistic/statistic.controller.ts` |
 | `/upload` | 10 | `src/modules/storage/upload.controller.ts` |
 | `/users` | 17 | `src/modules/users/users.controller.ts` |
+| `/users/me/avatar` | 5 | `src/modules/users/avatar.controller.ts` |
 | `/video` | 24 | `src/modules/video/video.controller.ts` |
 | `/voice` | 17 | `src/modules/voice/voice.controller.ts` |
 
@@ -466,6 +467,16 @@
 | PATCH | `/users/:id/status` | ADMIN |
 | GET | `/users/:id/logins` | ADMIN |
 | POST | `/users/:id/kick` | ADMIN |
+
+## /users/me/avatar
+
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| GET | `/users/me/avatar/policy` | 登录 |
+| POST | `/users/me/avatar/uploads/:key` | 登录 |
+| GET | `/users/me/avatar/uploads/:key` | 登录 |
+| POST | `/users/me/avatar/uploads/:key/close` | 登录 |
+| GET | `/users/me/avatar/files/:id` | 登录 |
 
 ## /video
 
