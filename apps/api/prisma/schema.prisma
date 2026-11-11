@@ -29,6 +29,7 @@ model User {
   emailVerifiedAt DateTime?
   username     String    @unique
   passwordHash String
+  passwordConfigured Boolean @default(true)
   displayName  String?
   avatar       String?
   signature    String    @default("")
@@ -55,6 +56,7 @@ model User {
   uploadReceipts UploadReceipt[]
   avatarUploads UserAvatarUpload[]
   phoneIdentity UserPhoneIdentity?
+  externalIdentities ExternalIdentity[]
   passwordResets PasswordReset[]
   emailVerifications EmailVerification[]
   createdApps App[] @relation("UserCreatedApps")
@@ -71,6 +73,86 @@ model User {
   videoRequests VideoRequest[]
 
   @@map("users")
+}
+
+model ExternalIdentity {
+  id String @id @default(cuid())
+  userId String
+  provider String
+  appId String
+  subjectHash String
+  verifiedAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@unique([provider,appId,subjectHash])
+  @@unique([userId,provider,appId])
+  @@map("external_identities")
+}
+
+model ExternalAuthRequest {
+  id String @id
+  owner String
+  purpose String
+  method String
+  proofHash String
+  inputHash String?
+  providerAppId String @default("")
+  sceneKey String? @unique
+  state String @default("PREPARING")
+  version Int @default(1)
+  ipHash String @default("")
+  inviteCode String @default("")
+  agreedAt DateTime?
+  familyId String?
+  tokenVersion Int?
+  accessExpiresAt DateTime?
+  qrImage String?
+  providerTicketHash String?
+  subjectHash String?
+  subjectUserId String?
+  failureCode String?
+  prepareStartedAt DateTime?
+  oauthCodeHash String?
+  oauthLeaseUntil DateTime?
+  exchangeEnc String?
+  exchangeExpiresAt DateTime?
+  exchangeFamilyId String?
+  exchangeTokenVersion Int?
+  exchangeRefreshId String?
+  acceptedAt DateTime?
+  appliedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([owner,purpose,createdAt])
+  @@index([ipHash,createdAt])
+  @@index([state,expiresAt])
+  @@map("external_auth_requests")
+}
+
+model ExternalAuthEvent {
+  id String @id
+  requestId String
+  kind String
+  payloadHash String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@index([expiresAt])
+  @@map("external_auth_events")
+}
+
+model ExternalProviderState {
+  id String @id
+  credentialHash String
+  tokenEnc String?
+  tokenExpiresAt DateTime?
+  leaseOwner String?
+  leaseUntil DateTime?
+  version Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@map("external_provider_states")
 }
 
 model UserPhoneIdentity {

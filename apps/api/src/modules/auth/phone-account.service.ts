@@ -19,7 +19,7 @@ const changed=()=>phoneBad('这次处理已有变化，请重新核对。',409);
 export class PhoneAccountService {
   constructor(private readonly prisma:PrismaService,private readonly delivery:PhoneDeliveryService,private readonly settings:SettingsService,private readonly rateLimit:RateLimitService){}
   private receipt(row:PhoneAccountAction){return{requestKey:row.id,purpose:row.purpose,status:row.status==='APPLIED'?'applied':'closed',version:row.version,serverNow:new Date().toISOString(),...(row.appliedAt?{appliedAt:row.appliedAt.toISOString()}:{}),...(row.phoneMasked?{phoneMasked:row.phoneMasked}:{})};}
-  private same(row:PhoneAccountAction,owner:string,purpose?:string){if(row.owner!==owner)throw missing();if(purpose&&row.purpose!==purpose)throw changed();if(owner==='guest'&&row.purpose==='bind'||owner!=='guest'&&row.purpose!=='bind')throw missing();}
+  private same(row:PhoneAccountAction,owner:string,purpose?:string){if(row.owner!==owner)throw missing();if(purpose&&row.purpose!==purpose)throw changed();if(owner==='guest'&&['bind','initial'].includes(row.purpose)||owner!=='guest'&&!['bind','initial'].includes(row.purpose))throw missing();}
   async read(key:string,actor?:AuthUser){const row=await this.prisma.phoneAccountAction.findUnique({where:{id:phoneKey(key)}});if(!row)throw missing();this.same(row,actor?.id||'guest');return this.receipt(row);}
   async identity(actor:AuthUser){return this.prisma.$transaction(async tx=>{await phoneSession(tx,actor);const row=await tx.userPhoneIdentity.findUnique({where:{userId:actor.id}});return{phoneMasked:row?maskedPhone(row.phone):null,verifiedAt:row?.verifiedAt.toISOString()||null,updatedAt:row?.updatedAt.toISOString()||null};});}
   async apply(key:string,input:unknown,meta:Meta={},actor?:AuthUser){
@@ -33,8 +33,9 @@ export class PhoneAccountService {
     if(body.purpose==='register'&&!policy.registrationEnabled)throw phoneBad('注册暂未开放，已有账户仍可登录。');
     if(body.purpose==='register'&&accessInvite&&body.inviteCode!==accessInvite)throw phoneBad('邀请码不正确');
     const current=actor?await this.prisma.user.findFirst({where:{id:actor.id,status:'ACTIVE',deletedAt:null}}):null;
-    if(actor&&(!current||!await bcrypt.compare(body.password,current.passwordHash)))throw new BusinessException(ErrorCode.CREDENTIAL_INVALID,'当前密码不正确，请重新填写',401);
-    const passwordHash=actor?undefined:await bcrypt.hash(body.password,10);
+    if(actor&&body.purpose!=='initial'&&(!current||!current.passwordConfigured||!await bcrypt.compare(body.password,current.passwordHash)))throw new BusinessException(ErrorCode.CREDENTIAL_INVALID,'当前密码不正确，请重新填写',401);
+    if(body.purpose==='initial'&&(!current||current.passwordConfigured))throw phoneBad('这个账户不需要首次密码设置，请核对账户状态。');
+    const passwordHash=!actor||body.purpose==='initial'?await bcrypt.hash(body.password,10):undefined;
     let result:{row?:PhoneAccountAction;error?:BusinessException};
     try{result=await this.prisma.$transaction(async tx=>{
       await tx.$executeRaw`UPDATE "phone_account_actions" SET "id"="id" WHERE "id"=${id}`;
@@ -47,24 +48,27 @@ export class PhoneAccountService {
       if(body.purpose==='recover'){
         person=identity?await tx.user.findFirst({where:{id:identity.userId,status:'ACTIVE',deletedAt:null}})||undefined:undefined;
         if(!person)return{error:phoneBad()};
-      }else if(body.purpose==='bind'){
+      }else if(body.purpose==='bind'||body.purpose==='initial'){
         if(!person)throw new BusinessException(ErrorCode.UNAUTHORIZED,'请重新登录',401);
         if(person.updatedAt.toISOString()!==body.expectedUpdatedAt)throw changed();
+        if(body.purpose==='initial'&&(person.passwordConfigured||!await tx.externalIdentity.findFirst({where:{userId:person.id},select:{id:true}})))throw phoneBad('这个账户不需要首次密码设置，请核对账户状态。');
       }
       const proof=await this.delivery.claimTx(tx,body.phone,body.purpose,body.code,owner,person?{id:person.id,tokenVersion:person.tokenVersion}:undefined);
       if(!proof)return{error:phoneBad()};
       if(body.purpose==='register'&&(identity||await tx.user.findUnique({where:{username:body.username},select:{id:true}})))return{error:phoneBad('号码或登录名已被使用，请核对后再试')};
       if(body.purpose==='bind'&&identity)return{error:phoneBad(identity.userId===person!.id?'这个号码已经绑定当前账户':'这个号码当前无法绑定，请核对后再试')};
+      if(body.purpose==='initial'&&identity&&identity.userId!==person!.id)return{error:phoneBad('这个号码当前无法绑定，请核对后再试')};
       const now=new Date();let subjectId:string;
       if(body.purpose==='register'){
         const referral=body.inviteCode.trim().toUpperCase();let invitedBy='';
         if(referral&&body.inviteCode!==accessInvite){const inviter=await tx.user.findFirst({where:{inviteCode:referral,isDistribution:true,deletedAt:null},select:{id:true}});if(inviter)invitedBy=inviter.id;}
         const user=await tx.user.create({data:{email:null,username:body.username,passwordHash:passwordHash!,invitedBy}});
         await tx.userPhoneIdentity.create({data:{userId:user.id,phone:body.phone,verifiedAt:now}});subjectId=user.id;
-      }else if(body.purpose==='recover'){
+      }else if(body.purpose==='recover'||body.purpose==='initial'){
         const problem=passwordProblem(body.password,['ADMIN','SUPER'].includes(person!.role));if(problem)return{error:phoneBad(problem,422)};
         if(await bcrypt.compare(body.password,person!.passwordHash))return{error:phoneBad('请使用与当前密码不同的新密码。',422)};
-        const accepted=await tx.user.updateMany({where:{id:person!.id,tokenVersion:person!.tokenVersion,passwordHash:person!.passwordHash,status:'ACTIVE',deletedAt:null},data:{passwordHash:passwordHash!,tokenVersion:{increment:1},updatedAt:new Date(Math.max(Date.now(),person!.updatedAt.getTime()+1))}});
+        if(body.purpose==='initial')await tx.userPhoneIdentity.upsert({where:{userId:person!.id},create:{userId:person!.id,phone:body.phone,verifiedAt:now},update:{phone:body.phone,verifiedAt:now}});
+        const accepted=await tx.user.updateMany({where:{id:person!.id,tokenVersion:person!.tokenVersion,passwordHash:person!.passwordHash,status:'ACTIVE',deletedAt:null},data:{passwordHash:passwordHash!,passwordConfigured:true,tokenVersion:{increment:1},updatedAt:new Date(Math.max(Date.now(),person!.updatedAt.getTime()+1))}});
         if(accepted.count!==1)throw changed();
         await tx.refreshToken.updateMany({where:{userId:person!.id,revokedAt:null},data:{revokedAt:now}});
         await tx.passwordReset.updateMany({where:{userId:person!.id,usedAt:null},data:{usedAt:now}});subjectId=person!.id;

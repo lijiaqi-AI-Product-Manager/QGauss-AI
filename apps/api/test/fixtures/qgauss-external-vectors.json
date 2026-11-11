@@ -1,0 +1,14 @@
+{
+  "allValuesSynthetic": true,
+  "format": "AES-CBC frame with 32-byte padding",
+  "independentRuntime": "Python Crypto.Cipher",
+  "encodingKey": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  "appId": "wx0123456789abcdef",
+  "message": "<xml><ToUserName><![CDATA[gh_qgauss]]></ToUserName><FromUserName><![CDATA[qgauss_synthetic_openid]]></FromUserName><CreateTime>1700000000</CreateTime><MsgType><![CDATA[event]]></MsgType><Event><![CDATA[SCAN]]></Event><EventKey><![CDATA[qgauss_synthetic_scene]]></EventKey><Ticket><![CDATA[qgauss_synthetic_ticket]]></Ticket></xml>",
+  "randomPrefix": "0123456789abcdef",
+  "encrypted": "4j/AuRx71kQlxVlzbpsMWPtovJywMt5Fi2wzrjCqJ60oKlH7cj2gC4MzAZ2kwVp0PKzlNLH3T1gVYTfweQ2v820VkhU4oZlkEn9d2NbFwP1ibBgk1dzSkK5G0nKEfyZiRX6jU2cDVPz7S0ZE8rHw71vJheBHl0bJUeDWbKJZhyPhOIPgJos3XVsrFTYT3UOwWrQ04DLUy5f5tiicS31+5yv+vol1Rvim6fBOuJ6WcbGTLbwivbBNpt1c5OwcypBSodRkSeVS3XBs4jSrEHP9yaUFYnmsC3MldGTJd1o3UijZYbNdNouW5D6VNsjSOesrTPH4h0iiOdgiVQimbIbg0lBZ9cMmUmfnC+kUBYmVH6NeIdXFHk2SQ7I8p8AGYPiaz2jhJx/5OsvkoOFdDx4w+RcDXMSFAkyigTgBbxSGyIjZZVkLTZSxqzvwYJep4ICQIXGlUGZiH9K/gnVh6ECs30toauEXlmh1/9RZjuC42+OqLzR36GYu34a7UgMPNt7K",
+  "token": "QGaussCallback123",
+  "timestamp": "1700000000",
+  "nonce": "synthetic_nonce_01",
+  "signature": "b5a04b110ddfe58dc33bfad89b7d965096ce7685"
+}

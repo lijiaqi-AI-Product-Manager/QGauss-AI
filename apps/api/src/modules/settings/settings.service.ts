@@ -85,7 +85,7 @@ export class SettingsService {
       throw new BusinessException(ErrorCode.PARAM_INVALID, `配置 ${key} 的取值不合法`);
     }
     if(key.startsWith('apps.reviewReward.')&&!Number.isSafeInteger(value))throw new BusinessException(ErrorCode.PARAM_INVALID,'创作者奖励需要填写整数次数');
-    if(key==='security.smsDailyLimit'&&!Number.isSafeInteger(value))throw new BusinessException(ErrorCode.PARAM_INVALID,'短信申请上限需要填写整数次数');
+    if(['security.smsDailyLimit','security.externalDailyLimit'].includes(key)&&!Number.isSafeInteger(value))throw new BusinessException(ErrorCode.PARAM_INVALID,key==='security.smsDailyLimit'?'短信申请上限需要填写整数次数':'连接申请上限需要填写整数次数');
     if(key==='security.emailVerificationRequired'&&value===true&&!mailTransportConfiguration(process.env).ready)throw new BusinessException(ErrorCode.PARAM_INVALID,'请先准备发件设置，再开启注册邮箱必验');
     return value;
   }

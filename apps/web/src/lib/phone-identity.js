@@ -1,4 +1,4 @@
-export const PHONE_PURPOSES=Object.freeze(['register','recover','bind']);
+export const PHONE_PURPOSES=Object.freeze(['register','recover','bind','initial']);
 export const PHONE_REQUEST_KEY=/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
 export function normalizedPhone(value){if(typeof value!=='string'||value.length>40)return'';let digits=value.trim().replace(/[\s()\-]/g,'');if(digits.startsWith('+86'))digits=digits.slice(3);else if(digits.startsWith('0086'))digits=digits.slice(4);return/^1[3-9]\d{9}$/.test(digits)?'+86'+digits:'';}
 export const phoneProblem=value=>normalizedPhone(value)?'':'请填写有效的中国大陆手机号码。';
