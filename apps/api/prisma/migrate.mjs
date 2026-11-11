@@ -55,9 +55,13 @@ let count = 0;
 for (const file of files) {
   if (applied.has(file)) continue;
   const sql = readFileSync(join(migrationsDir, file), 'utf8');
+  const rebuild=sql.startsWith('-- qgauss:foreign-key-rebuild\n')||sql.startsWith('-- qgauss:foreign-key-rebuild\r\n');
+  // SQLite ignores this pragma within a transaction. Rebuilds must set it before BEGIN.
+  if(rebuild)db.exec('PRAGMA foreign_keys = OFF;');
   db.exec('BEGIN');
   try {
     db.exec(sql);
+    if(rebuild&&db.prepare('PRAGMA foreign_key_check').all().length)throw new Error('迁移后的账户关联检查未通过');
     db.prepare('INSERT INTO "_migrations" ("name","appliedAt") VALUES (?, ?)').run(
       file,
       new Date().toISOString(),
@@ -67,8 +71,12 @@ for (const file of files) {
     count += 1;
   } catch (err) {
     db.exec('ROLLBACK');
+    if(rebuild)db.exec('PRAGMA foreign_keys = ON;');
+    db.close();lease.close();
     console.error(`  ✘ failed ${file}\n${err.message}`);
     process.exit(1);
+  } finally {
+    if(rebuild&&db.isOpen)db.exec('PRAGMA foreign_keys = ON;');
   }
 }
 

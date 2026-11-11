@@ -67,15 +67,17 @@ export class AuthService implements OnModuleInit {
 
   /** 签发 access + 不透明 refresh（refresh 落库，只存 hash） */
   private async issue(
-    user: { id: string; email: string; username: string; role: string; tokenVersion: number; displayName?: string | null; avatar?: string | null; createdAt?: Date; emailVerifiedAt?: Date | null },
+    user: { id: string; email: string | null; username: string; role: string; tokenVersion: number; displayName?: string | null; avatar?: string | null; createdAt?: Date; emailVerifiedAt?: Date | null },
     familyId: string,
     meta: { ip?: string; userAgent?: string } = {},
     transaction?: Prisma.TransactionClient,
+    identityPhone?: string,
   ) {
     if (!transaction) return this.prisma.$transaction(async tx => {
       const accepted = await tx.user.updateMany({where:{id:user.id,tokenVersion:user.tokenVersion,status:'ACTIVE',deletedAt:null},data:{tokenVersion:{increment:0}}});
       if (accepted.count !== 1) throw new UnauthorizedException({code:2002,message:'账号或密码已变更，请重新登录'});
-      return this.issue(user,familyId,meta,tx);
+      if(identityPhone&&!await tx.userPhoneIdentity.findFirst({where:{userId:user.id,phone:identityPhone},select:{userId:true}}))throw new UnauthorizedException({code:2005,message:'号码或密码已变更，请重新登录'});
+      return this.issue(user,familyId,meta,tx,identityPhone);
     });
     const accessToken = await this.jwt.signAsync(
       {
@@ -181,7 +183,7 @@ export class AuthService implements OnModuleInit {
     this.logger.log(`new user registered: ${user.username}`);
 
     // 欢迎邮件：await 保证可观测（失败也只记日志，不影响注册）
-    await this.mail
+    if(user.email)await this.mail
       .send('welcome', user.email, { username: user.username })
       .catch((e) => this.logger.warn(`欢迎邮件失败: ${e.message}`));
 
@@ -190,12 +192,20 @@ export class AuthService implements OnModuleInit {
   }
 
   async login(dto: LoginDto, meta: { ip?: string; userAgent?: string } = {}) {
+    return this.passwordLogin(dto.account.trim(),dto.password,meta);
+  }
+
+  async loginByPhone(phone:string,password:string,meta:{ip?:string;userAgent?:string}={}){
+    return this.passwordLogin(phone,password,meta,true);
+  }
+
+  private async passwordLogin(account:string,password:string,meta:{ip?:string;userAgent?:string},byPhone=false){
     const loginLimit = await this.settings.get<number>('security.loginRateLimit');
     if (!this.rateLimit.tryConsume(`login:${meta.ip ?? 'unknown'}`, loginLimit)) {
       throw new BusinessException(ErrorCode.RATE_LIMITED, '登录尝试过于频繁，请稍后再试', 429);
     }
 
-    const account = dto.account.trim();
+    const logAccount=byPhone?account.slice(0,6)+'****'+account.slice(-4):account;
 
     /** 登录失败：记日志后再抛错，便于后台排查撞库/异常登录 */
     const fail = async (userId: string | null, reason: string, code: number, message: string) => {
@@ -203,7 +213,7 @@ export class AuthService implements OnModuleInit {
         .create({
           data: {
             userId,
-            account: dto.account,
+            account: logAccount,
             success: false,
             reason,
             ip: meta.ip,
@@ -214,25 +224,21 @@ export class AuthService implements OnModuleInit {
       throw new UnauthorizedException({ code, message });
     };
 
-    const user = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ email: account.toLowerCase() }, { username: account }],
-        deletedAt: null,
-      },
-    });
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+    const identity=byPhone?await this.prisma.userPhoneIdentity.findUnique({where:{phone:account}}):null;
+    const user=byPhone?(identity?await this.prisma.user.findFirst({where:{id:identity.userId,deletedAt:null}}):null):await this.prisma.user.findFirst({where:{OR:[{email:account.toLowerCase()},{username:account}],deletedAt:null}});
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       await fail(user?.id ?? null, 'bad_credentials', 2005, '账号或密码错误');
     }
     if (user!.status !== 'ACTIVE') {
       await fail(user!.id, 'disabled', 2004, '账号已被禁用');
     }
 
-    const { _recordId, ...tokens } = await this.issue(user!, randomUUID(), meta);
+    const { _recordId, ...tokens } = await this.issue(user!, randomUUID(), meta,undefined,byPhone?account:undefined);
     await this.prisma.userLoginLog
       .create({
         data: {
           userId: user!.id,
-          account: dto.account,
+          account: logAccount,
           success: true,
           ip: meta.ip,
           userAgent: meta.userAgent,
@@ -306,7 +312,8 @@ export class AuthService implements OnModuleInit {
     if(!this.mail.configurationSummary().ready)throw new BusinessException(ErrorCode.EMAIL_DELIVERY_UNAVAILABLE,'邮箱投递尚未就绪，请联系站点管理员',503);
     const normalized = email.trim().toLowerCase();
     const user = await this.prisma.user.findFirst({where:{email:normalized,deletedAt:null,status:'ACTIVE'}});
-    if (!user) return {ok:true};
+    if (!user?.email) return {ok:true};
+    const recipient=user.email;
     const token=randomBytes(24).toString('hex');
     try{
       const baseUrl=await this.settings.get<string>('site.baseUrl'),prepared=await this.mail.prepare('resetPassword',{username:user.username,resetUrl:baseUrl.replace(/\/+$/,'')+'/reset-password?token='+token});
@@ -315,7 +322,7 @@ export class AuthService implements OnModuleInit {
         if(locked.count!==1)return false;
         await tx.passwordReset.deleteMany({where:{userId:user.id,usedAt:null}});
         await tx.passwordReset.create({data:{userId:user.id,tokenHash:this.sha256(token),expiresAt:new Date(Date.now()+30*60_000)}});
-        await tx.mailOutbox.create({data:{...prepared,to:user.email}});
+        await tx.mailOutbox.create({data:{...prepared,to:recipient}});
         return true;
       });
       if(accepted)this.mail.kick();

@@ -170,10 +170,10 @@ export class MailService implements OnModuleInit, OnModuleDestroy {
       const reset = await this.prisma.passwordReset.findUnique({ where: { tokenHash: createHash('sha256').update(token).digest('hex') } });
       if (!reset || reset.usedAt || reset.expiresAt.getTime() <= Date.now()) return invalid('RESET_INACTIVE');
       const user = await this.prisma.user.findUnique({ where: { id: reset.userId } });
-      if (!user || user.deletedAt || user.status !== 'ACTIVE' || user.email.toLowerCase() !== row.to.toLowerCase()) return invalid('RESET_INACTIVE');
+      if (!user?.email || user.deletedAt || user.status !== 'ACTIVE' || user.email.toLowerCase() !== row.to.toLowerCase()) return invalid('RESET_INACTIVE');
     } else {
       const user = await this.prisma.user.findFirst({ where: { ...(row.requestedById ? { id: row.requestedById } : { email: row.to }), deletedAt: null, status: 'ACTIVE' } });
-      if (!user || user.email.toLowerCase() !== row.to.toLowerCase()) return invalid('DATA_INVALID');
+      if (!user?.email || user.email.toLowerCase() !== row.to.toLowerCase()) return invalid('DATA_INVALID');
     }
     try { return { ok: true as const, rendered: renderMail(row.template as MailTemplateName, { ...data, siteName: await this.settings.get<string>('site.name') }) }; }
     catch { return invalid('DATA_INVALID'); }

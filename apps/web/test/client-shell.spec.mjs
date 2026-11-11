@@ -2411,3 +2411,5 @@ import {registerAccountExperienceTests} from './account-experience-ui.cases.mjs'
 registerAccountExperienceTests({test,assert,mount,settle,relayJson,setLang});
 import {registerProfileAvatarTests} from './profile-avatar-ui.cases.mjs';
 registerProfileAvatarTests({test,assert,mount,settle,relayJson,setLang});
+import {registerPhoneIdentityTests} from './phone-identity-ui.cases.mjs';
+registerPhoneIdentityTests({test,assert,mount,settle,relayJson,setLang});

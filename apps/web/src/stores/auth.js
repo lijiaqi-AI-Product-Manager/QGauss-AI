@@ -50,6 +50,14 @@ export const useAuth = defineStore('auth', {
   },
 
   actions: {
+    acceptLogin(data, { remember = true } = {}) {
+      if (!data || typeof data.accessToken !== 'string' || !data.accessToken || typeof data.refreshToken !== 'string' || !data.refreshToken || typeof data.user?.id !== 'string' || !data.user.id) {
+        throw new Error('登录结果不完整，请重新登录。');
+      }
+      writeStoredToken('', !remember);
+      this.remember = remember;
+      this.apply(data);
+    },
     apply(data, { renewal = false } = {}) {
       this.sessionRevision += 1;
       if (!renewal) this.identityRevision += 1;

@@ -15,7 +15,7 @@ type Target=Prisma.UserGetPayload<{select:typeof targetSelect}>;
 type Group={familyId:string;signature:string;createdAt:number|bigint|string|Date;lastSeenAt:number|bigint|string|Date;expiresAt:number|bigint|string|Date;revision?:string};
 const milliseconds=(value:Group['createdAt'])=>typeof value==='bigint'?Number(value):typeof value==='number'?value:new Date(value).getTime();
 const stamp=(value:Group['createdAt'])=>new Date(milliseconds(value)).toISOString();
-const identity=(value:{id:string;username:string;email:string})=>({id:value.id,username:value.username,email:value.email});
+const identity=(value:{id:string;username:string;email:string|null})=>({id:value.id,username:value.username,email:value.email});
 const nextUpdatedAt=(current:Date)=>new Date(Math.max(Date.now(),current.getTime()+1));
 const conflict=(message:string):never=>{throw new BusinessException(ErrorCode.PARAM_INVALID,message,409);};
 

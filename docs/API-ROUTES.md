@@ -1,13 +1,14 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **325** 条路由，分布在 **33** 个控制器。
+> 共 **341** 条路由，分布在 **35** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
 | `/agents` | 18 | `src/modules/agents/agents.controller.ts` |
 | `/apps` | 33 | `src/modules/apps/apps.controller.ts` |
 | `/auth` | 12 | `src/modules/auth/auth.controller.ts` |
+| `/auth/phone` | 9 | `src/modules/auth/phone.controller.ts` |
 | `/balance` | 7 | `src/modules/commerce/wallet.controller.ts` |
 | `/chat` | 4 | `src/modules/chat/chat.controller.ts` |
 | `/chat-logs` | 3 | `src/modules/chatlog/chatlog.controller.ts` |
@@ -36,6 +37,7 @@
 | `/upload` | 10 | `src/modules/storage/upload.controller.ts` |
 | `/users` | 17 | `src/modules/users/users.controller.ts` |
 | `/users/me/avatar` | 5 | `src/modules/users/avatar.controller.ts` |
+| `/users/me/phone` | 7 | `src/modules/auth/phone.controller.ts` |
 | `/video` | 24 | `src/modules/video/video.controller.ts` |
 | `/voice` | 17 | `src/modules/voice/voice.controller.ts` |
 
@@ -116,6 +118,20 @@
 | POST | `/auth/reset-password` | 公开 |
 | POST | `/auth/logout` | 公开 |
 | GET | `/auth/me` | 登录 |
+
+## /auth/phone
+
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| GET | `/auth/phone/policy` | 公开 |
+| GET | `/auth/phone/configuration` | ADMIN |
+| POST | `/auth/phone/login` | 公开 |
+| POST | `/auth/phone/requests/:key` | 公开 |
+| GET | `/auth/phone/requests/:key` | 公开 |
+| POST | `/auth/phone/requests/:key/close` | 公开 |
+| POST | `/auth/phone/actions/:key` | 公开 |
+| GET | `/auth/phone/actions/:key` | 公开 |
+| POST | `/auth/phone/actions/:key/close` | 公开 |
 
 ## /balance
 
@@ -477,6 +493,18 @@
 | GET | `/users/me/avatar/uploads/:key` | 登录 |
 | POST | `/users/me/avatar/uploads/:key/close` | 登录 |
 | GET | `/users/me/avatar/files/:id` | 登录 |
+
+## /users/me/phone
+
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| GET | `/users/me/phone` | 登录 |
+| POST | `/users/me/phone/requests/:key` | 登录 |
+| GET | `/users/me/phone/requests/:key` | 登录 |
+| POST | `/users/me/phone/requests/:key/close` | 登录 |
+| POST | `/users/me/phone/actions/:key` | 登录 |
+| GET | `/users/me/phone/actions/:key` | 登录 |
+| POST | `/users/me/phone/actions/:key/close` | 登录 |
 
 ## /video
 

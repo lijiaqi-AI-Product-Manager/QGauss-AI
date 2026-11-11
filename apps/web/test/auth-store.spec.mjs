@@ -36,6 +36,11 @@ beforeEach(() => {
   setActivePinia(createPinia());
 });
 
+test('phone sign-in accepts an empty email contact and persists only a complete reviewed session',()=>{
+  const auth=useAuth();auth.acceptLogin({accessToken:'phone-access',refreshToken:'phone-refresh',user:{id:'phone-user',email:null}},{remember:false});assert.equal(auth.user.email,null);assert.equal(session.get(KEY),'phone-refresh');assert.equal(storage.get(KEY),undefined);
+  for(const data of [{accessToken:'incomplete'},{accessToken:'new',refreshToken:'new',user:{id:''}}])assert.throws(()=>auth.acceptLogin(data),/登录结果不完整/);assert.equal(auth.user.id,'phone-user');assert.equal(auth.accessToken,'phone-access');
+});
+
 test('网络中断不算登录失效：令牌保留，不清用户', async () => {
   storage.set(KEY, 'r1');
   globalThis.fetch = async () => {

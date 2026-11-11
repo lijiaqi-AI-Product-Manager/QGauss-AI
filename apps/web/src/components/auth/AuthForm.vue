@@ -1,6 +1,9 @@
 <template>
   <div class="qg-auth-form-flow">
-    <div class="login-form-container" :class="{ 'is-login': mode === 'login' }">
+    <div class="qph-channel-tabs" role="tablist" :aria-label="ct('选择账户入口')" @keydown="channelKeydown">
+      <button v-for="item in channels" :id="channelId+'-'+item.id" :key="item.id" type="button" role="tab" :aria-selected="channel===item.id" :aria-controls="channelId+'-panel-'+item.id" :tabindex="channel===item.id?0:-1" :disabled="loading||phoneBusy" @click="selectChannel(item.id)"><span aria-hidden="true">{{item.icon}}</span>{{ct(item.label)}}</button>
+    </div>
+    <div v-show="channel==='account'" :id="channelId+'-panel-account'" class="login-form-container" :class="{ 'is-login': mode === 'login' }" role="tabpanel" :aria-labelledby="channelId+'-account'">
       <form class="n-form" novalidate @submit.prevent="submit"><section v-if="mode==='forget'" class="qg-recovery-intro" aria-live="polite"><h3>{{ct('通过邮箱，找回创作空间。')}}</h3><p>{{ct(!emailPolicyKnown?'正在确认邮箱恢复是否可用…':emailReady?'输入账户使用的邮箱。若账户可用，将向该地址寄送三十分钟内有效的重置链接。':'邮箱找回暂未开放，请联系站点管理员。')}}</p><button v-if="!emailPolicyKnown" type="button" :disabled="loading" @click="loadEmailPolicy">{{ct('重新读取')}}</button></section>
         <p v-if="mode === 'register' && !emailPolicyKnown" class="qg-auth-notice" role="status">{{ ct(emailPolicyError || '正在确认注册要求…') }}<button v-if="emailPolicyError" type="button" @click="loadEmailPolicy">{{ct('重新读取')}}</button></p>
         <div v-for="field in fields" :key="field.key" class="n-form-item input-3d">
@@ -34,13 +37,14 @@
       </form>
       <div v-if="mode === 'login'" class="login-type-switch-slot"><slot name="switch" /></div>
     </div>
-    <div v-if="mode !== 'login'" class="qg-auth-return"><button type="button" :disabled="loading" @click="changeMode('login')">{{ text('back') }}</button></div>
+    <div v-if="phoneOpened" v-show="channel==='phone'" :id="channelId+'-panel-phone'" role="tabpanel" :aria-labelledby="channelId+'-phone'"><PhoneAccessPanel ref="phonePanel" :mode="mode" :active="channel==='phone'" :agreed="agreed" :remember="remember" :register-enabled="registerEnabled" @mode-change="changeMode" @remember-change="remember=$event" @consent-required="consentVisible=true" @interaction="$emit('interaction',$event)" @busy="phoneBusy=$event" /></div>
+    <div v-if="mode !== 'login'" class="qg-auth-return"><button type="button" :disabled="loading||phoneBusy" @click="changeMode('login')">{{ text('back') }}</button></div>
     <div class="qg-auth-form-footer">
       <div v-if="mode!=='forget'" class="box-agreement">
         <label class="qg-auth-agreement-check"><input v-model="agreed" type="checkbox" :aria-label="text('agreementRequired')" /></label>
         <div class="content">{{ text(mode === 'login' ? 'agreement' : 'agreementRegister') }}<a class="agreement-text" href="/agreement/userAgreement.html" target="_blank" rel="noopener">{{ text('userAgreement') }}</a>{{ text('and') }}<a class="agreement-text" href="/agreement/privacyAgreement.html" target="_blank" rel="noopener">{{ text('privacy') }}</a></div>
       </div>
-      <div v-if="registerEnabled" class="signup-bottom" :class="{ 'is-hidden': mode !== 'login' }"><span>{{ text('noAccount') }}</span><button type="button" @click="changeMode('register')">{{ text('goRegister') }}</button></div>
+      <div v-if="registerEnabled" class="signup-bottom" :class="{ 'is-hidden': mode !== 'login' }"><span>{{ text('noAccount') }}</span><button type="button" :disabled="loading||phoneBusy" @click="changeMode('register')">{{ text('goRegister') }}</button></div>
     </div>
     <Teleport to="body">
       <div v-if="consentVisible" class="qg-auth-consent-mask" @click.self="consentVisible = false" @keydown="consentKeydown">
@@ -60,18 +64,22 @@
 import {currentLang} from '../../i18n/index.js';
 import {accountText} from '../../i18n/account-messages.js';
 const ct=(key,params)=>accountText(currentLang.value,key,params);
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, useId, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../stores/auth.js';
 import { authText as text } from './auth-locale.js';
 import EmailVerificationCard from './EmailVerificationCard.vue';
+import PhoneAccessPanel from './PhoneAccessPanel.vue';
+import './phone-identity.css';
 
 const emit = defineEmits(['interaction', 'subViewChange']);
 const auth = useAuth();
 const router = useRouter();
 const route = useRoute();
 const mode = ref('login');
+const channel=ref('account'), phoneOpened=ref(false), phonePanel=ref(null), phoneBusy=ref(false), channelId='qph-channel-'+useId();
+const channels=[{id:'account',label:'邮箱或登录名',icon:'@'},{id:'phone',label:'手机号码',icon:'↗'}];
 const loading = ref(false);
 const visible = ref(false);
 const agreed = ref(false);
@@ -105,6 +113,8 @@ const fields = computed(() => mode.value === 'login' ? [
 ]);
 
 function dispatch(name, detail) { window.dispatchEvent(new CustomEvent(name, { detail })); }
+function selectChannel(value){if(loading.value||phoneBusy.value||!channels.some(item=>item.id===value))return;channel.value=value;if(value==='phone')phoneOpened.value=true;else interaction();}
+async function channelKeydown(event){if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)||loading.value||phoneBusy.value)return;event.preventDefault();selectChannel(event.key==='Home'?'account':event.key==='End'?'phone':channel.value==='phone'?'account':'phone');await nextTick();document.getElementById(channelId+'-'+channel.value)?.focus();}
 function interaction() { emit('interaction', { isTyping: focused.value !== 'none', passwordLength: form.password.length, isPasswordFocus: focused.value === 'password', isPasswordVisible: visible.value, focusedField: focused.value === 'account' ? 'email' : focused.value, isLoginError: !!error.value }); }
 function focus(key) { focused.value = key; interaction(); dispatch('login-field-focus', key === 'account' ? 'email' : key); }
 function changed(key) { delete fieldErrors[key]; error.value = ''; notice.value = ''; dispatch('login-error-state', false); interaction(); }
@@ -127,6 +137,7 @@ function changeMode(next) {
   if (next === 'register') loadCaptcha();
 }
 async function submit() {
+  if(channel.value==='phone'){await phonePanel.value?.submit();return;}
   if (loading.value||emailBusy.value) return;
   const submissionMode=mode.value;
   if(mode.value==='forget'&&!emailPolicyKnown.value)await loadEmailPolicy();
@@ -173,6 +184,7 @@ watch(consentVisible, async (shown) => {
 });
 watch(() => form.password, interaction);
 onMounted(async () => {
+  if(route.query.channel==='phone')selectChannel('phone');
   if(route.query.mode==='forget')changeMode('forget');else emit('subViewChange','login');
   loadEmailPolicy();
   try {

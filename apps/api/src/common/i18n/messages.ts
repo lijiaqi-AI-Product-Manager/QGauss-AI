@@ -20,6 +20,7 @@ const ERROR_MESSAGES: Record<number, { zh: string; en: string }> = {
   2004: { zh: '账号已被禁用', en: 'Account disabled' },
   2005: { zh: '账号或密码错误', en: 'Invalid credentials' },
   2006: { zh: '账号已存在', en: 'Account already exists' },
+  2011: { zh: '短信服务暂未开放', en: 'Text message verification is not available yet. Linked numbers can still sign in with a password.' },
 
   3001: { zh: '模型不存在', en: 'Model not found' },
   3002: { zh: '暂无可用渠道', en: 'No available channel' },
@@ -49,5 +50,33 @@ export function detectLang(acceptLanguage?: string): Lang {
 
 export function translateError(code: number, lang: Lang, fallback: string): string {
   if (lang === 'zh') return fallback;
+  if(Object.hasOwn(PHONE_ERRORS,fallback))return PHONE_ERRORS[fallback];
   return ERROR_MESSAGES[code]?.en ?? fallback;
 }
+
+const PHONE_ERRORS:Record<string,string>={
+ '短信验证码错误、过期或已使用':'The text code is incorrect, expired, or already used.',
+ '请填写有效的中国大陆手机号码。':'Enter a valid mainland China mobile number.',
+ '请填写六位短信验证码。':'Enter the six-digit text message code.',
+ '手机密码登录暂未开放，请使用其他登录方式。':'Phone sign-in is unavailable for now. Choose another method.',
+ '注册暂未开放，已有账户仍可登录。':'Registration is closed for now. Existing accounts can still sign in.',
+ '这次处理已有变化，请重新核对。':'This account request has changed. Check its latest result.',
+ '这次申请已有变化，请重新核对。':'This text request has changed. Check its latest result.',
+ '图形验证码错误或已过期，请刷新后再试':'The image code is incorrect or expired. Refresh it and try again.',
+ '短信申请过于频繁，请稍后再试':'Text requests are too frequent. Try again later.',
+ '请等待一分钟后再申请短信':'Wait one minute before requesting another text.',
+ '今天的短信申请次数已用完，请稍后再试':'The text request limit for today has been reached. Try again later.',
+ '短信申请较多，请稍后再试':'The text queue is busy. Try again later.',
+ '号码或登录名已被使用，请核对后再试':'This number or username is already in use. Check your details.',
+ '这个号码已经绑定当前账户':'This number is already linked to your account.',
+ '这个号码当前无法绑定，请核对后再试':'This number cannot be linked right now. Check your details.',
+ '当前密码不正确，请重新填写':'The current password is incorrect. Enter it again.',
+ '当前登录已变化，请重新登录':'Your sign-in has changed. Sign in again.',
+ '号码或密码已变更，请重新登录':'The phone number or password has changed. Sign in again.',
+ '请重新读取当前资料后绑定号码':'Read your current account details before linking a number.',
+ '未找到这次短信申请':'This text request has not been found.',
+ '未找到这次账户处理':'This account request has not been found.',
+ '登录名需为 3–20 位字母、数字、下划线或短横线。':'Use 3–20 letters, numbers, underscores, or hyphens for your username.',
+ '两次填写的新密码不一致。':'The new passwords do not match.',
+ '请使用与当前密码不同的新密码。':'Choose a password different from your current one.',
+};

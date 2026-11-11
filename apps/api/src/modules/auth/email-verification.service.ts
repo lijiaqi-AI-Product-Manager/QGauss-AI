@@ -33,6 +33,7 @@ export class EmailVerificationService {
     if(!this.rateLimit.tryConsume('email-code-account:'+userId,6))throw limited('寄送请求过于频繁，请稍后再试');
     const user=await this.prisma.user.findFirst({where:{id:userId,status:'ACTIVE',deletedAt:null}});
     if(!user)throw new BusinessException(ErrorCode.UNAUTHORIZED,'请重新登录',401);
+    if(!user.email)throw bad('这个账户尚未设置邮箱，请使用手机入口');
     if(user.emailVerifiedAt)throw bad('这个邮箱已验证');
     return this.send(user.email,'ACCOUNT',ip,{id:user.id,tokenVersion:user.tokenVersion});
   }
@@ -76,6 +77,7 @@ export class EmailVerificationService {
   async confirmAccount(userId:string,challengeId:string,code:string,ip?:string){
     const user=await this.prisma.user.findFirst({where:{id:userId,status:'ACTIVE',deletedAt:null}});
     if(!user)throw new BusinessException(ErrorCode.UNAUTHORIZED,'请重新登录',401);
+    if(!user.email)throw bad('这个账户尚未设置邮箱，请使用手机入口');
     const proof=await this.claim(challengeId,code,user.email,'ACCOUNT',ip,{id:user.id,tokenVersion:user.tokenVersion});
     return this.prisma.$transaction(async tx=>{
       await this.consumeTx(tx,proof);const now=new Date();
