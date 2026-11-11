@@ -1,13 +1,14 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **341** 条路由，分布在 **35** 个控制器。
+> 共 **357** 条路由，分布在 **37** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
 | `/agents` | 18 | `src/modules/agents/agents.controller.ts` |
 | `/apps` | 33 | `src/modules/apps/apps.controller.ts` |
 | `/auth` | 12 | `src/modules/auth/auth.controller.ts` |
+| `/auth/external` | 11 | `src/modules/auth/external.controller.ts` |
 | `/auth/phone` | 9 | `src/modules/auth/phone.controller.ts` |
 | `/balance` | 7 | `src/modules/commerce/wallet.controller.ts` |
 | `/chat` | 4 | `src/modules/chat/chat.controller.ts` |
@@ -37,6 +38,7 @@
 | `/upload` | 10 | `src/modules/storage/upload.controller.ts` |
 | `/users` | 17 | `src/modules/users/users.controller.ts` |
 | `/users/me/avatar` | 5 | `src/modules/users/avatar.controller.ts` |
+| `/users/me/external` | 5 | `src/modules/auth/external.controller.ts` |
 | `/users/me/phone` | 7 | `src/modules/auth/phone.controller.ts` |
 | `/video` | 24 | `src/modules/video/video.controller.ts` |
 | `/voice` | 17 | `src/modules/voice/voice.controller.ts` |
@@ -118,6 +120,22 @@
 | POST | `/auth/reset-password` | 公开 |
 | POST | `/auth/logout` | 公开 |
 | GET | `/auth/me` | 登录 |
+
+## /auth/external
+
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| GET | `/auth/external/policy` | 公开 |
+| GET | `/auth/external/configuration` | ADMIN |
+| POST | `/auth/external/requests/:key` | 公开 |
+| GET | `/auth/external/requests/:key` | 公开 |
+| POST | `/auth/external/requests/:key/complete` | 公开 |
+| POST | `/auth/external/requests/:key/exchange` | 公开 |
+| POST | `/auth/external/requests/:key/acknowledge` | 公开 |
+| POST | `/auth/external/requests/:key/close` | 公开 |
+| GET | `/auth/external/notify` | 公开 |
+| POST | `/auth/external/notify` | 公开 |
+| GET | `/auth/external/callback` | 公开 |
 
 ## /auth/phone
 
@@ -493,6 +511,16 @@
 | GET | `/users/me/avatar/uploads/:key` | 登录 |
 | POST | `/users/me/avatar/uploads/:key/close` | 登录 |
 | GET | `/users/me/avatar/files/:id` | 登录 |
+
+## /users/me/external
+
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| GET | `/users/me/external` | 登录 |
+| POST | `/users/me/external/requests/:key` | 登录 |
+| GET | `/users/me/external/requests/:key` | 登录 |
+| POST | `/users/me/external/requests/:key/complete` | 登录 |
+| POST | `/users/me/external/requests/:key/close` | 登录 |
 
 ## /users/me/phone
 

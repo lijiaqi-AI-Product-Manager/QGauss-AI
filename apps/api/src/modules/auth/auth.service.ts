@@ -67,7 +67,7 @@ export class AuthService implements OnModuleInit {
 
   /** 签发 access + 不透明 refresh（refresh 落库，只存 hash） */
   private async issue(
-    user: { id: string; email: string | null; username: string; role: string; tokenVersion: number; displayName?: string | null; avatar?: string | null; createdAt?: Date; emailVerifiedAt?: Date | null },
+    user: { id: string; email: string | null; username: string; role: string; tokenVersion: number; passwordConfigured?: boolean; displayName?: string | null; avatar?: string | null; createdAt?: Date; emailVerifiedAt?: Date | null },
     familyId: string,
     meta: { ip?: string; userAgent?: string } = {},
     transaction?: Prisma.TransactionClient,
@@ -111,7 +111,7 @@ export class AuthService implements OnModuleInit {
       refreshToken,
       tokenType: 'Bearer',
       expiresIn: Math.floor(parseTtlMs(this.accessTtl) / 1000),
-      user: { id: user.id, email: user.email, username: user.username, role: user.role, displayName: user.displayName ?? null, avatar: user.avatar ?? null, createdAt: user.createdAt, emailVerifiedAt: user.emailVerifiedAt ?? null },
+      user: { id: user.id, email: user.email, username: user.username, role: user.role, displayName: user.displayName ?? null, avatar: user.avatar ?? null, createdAt: user.createdAt, emailVerifiedAt: user.emailVerifiedAt ?? null, passwordConfigured:user.passwordConfigured!==false },
       _recordId: record.id,
     };
   }
@@ -199,6 +199,19 @@ export class AuthService implements OnModuleInit {
     return this.passwordLogin(phone,password,meta,true);
   }
 
+  async externalSession(tx:Prisma.TransactionClient,userId:string,appId:string,subjectHash:string,meta:{ip?:string;userAgent?:string}={}){
+    const user=await tx.user.findFirst({where:{id:userId,status:'ACTIVE',deletedAt:null}});
+    if(!user||!await tx.externalIdentity.findFirst({where:{userId,provider:'weixin-official',appId,subjectHash},select:{id:true}}))throw new UnauthorizedException({code:2002,message:'当前登录已变化，请重新登录'});
+    const familyId=randomUUID(),{_recordId,...session}=await this.issue(user,familyId,meta,tx);
+    await tx.userLoginLog.create({data:{userId,account:'QGauss 扫码账户',success:true,ip:meta.ip,userAgent:meta.userAgent}});
+    return{session,familyId,refreshId:_recordId,tokenVersion:user.tokenVersion};
+  }
+
+  async externalSessionCurrent(accessToken:unknown,userId:string,familyId:string,tokenVersion:number){
+    if(typeof accessToken!=='string'||accessToken.length>8192)return false;
+    try{const payload=await this.jwt.verifyAsync(accessToken,{secret:this.config.get<string>('JWT_SECRET')});return payload.type==='access'&&payload.sub===userId&&payload.sid===familyId&&payload.tv===tokenVersion;}catch{return false;}
+  }
+
   private async passwordLogin(account:string,password:string,meta:{ip?:string;userAgent?:string},byPhone=false){
     const loginLimit = await this.settings.get<number>('security.loginRateLimit');
     if (!this.rateLimit.tryConsume(`login:${meta.ip ?? 'unknown'}`, loginLimit)) {
@@ -226,7 +239,7 @@ export class AuthService implements OnModuleInit {
 
     const identity=byPhone?await this.prisma.userPhoneIdentity.findUnique({where:{phone:account}}):null;
     const user=byPhone?(identity?await this.prisma.user.findFirst({where:{id:identity.userId,deletedAt:null}}):null):await this.prisma.user.findFirst({where:{OR:[{email:account.toLowerCase()},{username:account}],deletedAt:null}});
-    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    if (!user || user.passwordConfigured===false || !(await bcrypt.compare(password, user.passwordHash))) {
       await fail(user?.id ?? null, 'bad_credentials', 2005, '账号或密码错误');
     }
     if (user!.status !== 'ACTIVE') {
@@ -342,7 +355,7 @@ export class AuthService implements OnModuleInit {
     const passwordHash = await bcrypt.hash(newPassword,10);
     await this.prisma.$transaction(async tx => {
       const now = new Date();
-      const changed = await tx.user.updateMany({where:{id:user.id,passwordHash:user.passwordHash,tokenVersion:user.tokenVersion,status:'ACTIVE',deletedAt:null},data:{passwordHash,tokenVersion:{increment:1}}});
+      const changed = await tx.user.updateMany({where:{id:user.id,passwordHash:user.passwordHash,tokenVersion:user.tokenVersion,status:'ACTIVE',deletedAt:null},data:{passwordHash,passwordConfigured:true,tokenVersion:{increment:1}}});
       if (changed.count !== 1) throw new BusinessException(ErrorCode.PARAM_INVALID,'链接无效或账号已变更，请重新申请');
       const claimed = await tx.passwordReset.updateMany({where:{id:row.id,userId:user.id,usedAt:null,expiresAt:{gt:now}},data:{usedAt:now}});
       if (claimed.count !== 1) throw new BusinessException(ErrorCode.PARAM_INVALID,'链接无效或已过期，请重新申请');

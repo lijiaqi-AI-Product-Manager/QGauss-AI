@@ -39,7 +39,7 @@ export class PhoneDeliveryService implements OnModuleInit,OnModuleDestroy {
     return{requestKey:row.id,purpose:row.purpose,status:state[row.state],version:row.version,serverNow:new Date().toISOString(),...(row.phone?{phoneMasked:maskedPhone(row.phone),expiresAt:row.expiresAt!.toISOString(),cooldownUntil:row.cooldownUntil!.toISOString()}: {})};
   }
   private same(row:PhoneVerificationRequest,owner:string,purpose?:string){if(row.owner!==owner)throw missing();if(purpose&&row.purpose!==purpose)throw changed();}
-  async read(key:string,actor?:AuthUser){const row=await this.prisma.phoneVerificationRequest.findUnique({where:{id:phoneKey(key)}});if(!row)throw missing();this.same(row,actor?.id||'guest');if(actor&&row.purpose!=='bind')throw missing();if(!actor&&row.purpose==='bind')throw missing();return this.receipt(row);}
+  async read(key:string,actor?:AuthUser){const row=await this.prisma.phoneVerificationRequest.findUnique({where:{id:phoneKey(key)}});if(!row)throw missing();this.same(row,actor?.id||'guest');if(actor&&!['bind','initial'].includes(row.purpose))throw missing();if(!actor&&['bind','initial'].includes(row.purpose))throw missing();return this.receipt(row);}
   async request(key:string,input:unknown,meta:Meta={},actor?:AuthUser){
     const id=phoneKey(key),body=phoneSendInput(input,!!actor),owner=actor?.id||'guest',inputHash=this.digest('send',JSON.stringify([owner,body.purpose,body.phone]));
     if(body.expectedVersion!==0)throw changed();
@@ -54,6 +54,8 @@ export class PhoneDeliveryService implements OnModuleInit,OnModuleDestroy {
       await tx.$executeRaw`UPDATE "phone_verification_requests" SET "id"="id" WHERE "id"=${id}`;
       const existing=await tx.phoneVerificationRequest.findUnique({where:{id}});if(existing){this.same(existing,owner,body.purpose);if(existing.state!=='CLOSED'&&existing.inputHash!==inputHash)throw changed();return existing;}
       const session=actor?await phoneSession(tx,actor):null;
+      if(body.purpose==='initial'&&(!session||session.user.passwordConfigured||!await tx.externalIdentity.findFirst({where:{userId:session.user.id},select:{id:true}})))throw phoneBad('这个账户不需要首次密码设置，请核对账户状态。');
+      if(body.purpose==='bind'&&session&&!session.user.passwordConfigured)throw phoneBad('请先完成首次密码设置。');
       const latest=await tx.phoneVerificationRequest.findFirst({where:{phone:body.phone,cooldownUntil:{gt:now}},orderBy:{createdAt:'desc'}});
       if(latest)throw limited('请等待一分钟后再申请短信');
       const since=new Date(now.getTime()-86400_000);
@@ -63,8 +65,8 @@ export class PhoneDeliveryService implements OnModuleInit,OnModuleDestroy {
       if(queued>=25)throw new BusinessException(ErrorCode.SMS_DELIVERY_UNAVAILABLE,'短信申请较多，请稍后再试',503);
       const identity=await tx.userPhoneIdentity.findUnique({where:{phone:body.phone}});
       const target=body.purpose==='recover'&&identity?await tx.user.findFirst({where:{id:identity.userId,status:'ACTIVE',deletedAt:null}}):session?.user;
-      if(actor&&identity?.userId===actor.id)throw phoneBad('这个号码已经绑定当前账户');
-      const eligible=body.purpose==='recover'?!!target:!identity;
+      if(actor&&body.purpose==='bind'&&identity?.userId===actor.id)throw phoneBad('这个号码已经绑定当前账户');
+      const eligible=body.purpose==='recover'?!!target:body.purpose==='initial'?!!session&&(!identity||identity.userId===session.user.id):!identity;
       await tx.phoneVerificationRequest.updateMany({where:{phone:body.phone,purpose:body.purpose,state:{in:liveStates}},data:{state:'CLOSED',codeHash:null,codeEnc:null,version:{increment:1}}});
       return tx.phoneVerificationRequest.create({data:{id,owner,purpose:body.purpose,phone:body.phone,inputHash,codeHash:this.codeHash({id,phone:body.phone,purpose:body.purpose},code),codeEnc:eligible?this.box.encrypt(code):null,ipHash,eligible,targetUserId:target?.id,tokenVersion:target?.tokenVersion,familyId:session?.context.familyId,accessExpiresAt:session?.context.expiresAt?new Date(session.context.expiresAt):null,expiresAt:new Date(now.getTime()+PHONE_CODE_TTL),cooldownUntil:new Date(now.getTime()+PHONE_COOLDOWN),createdAt:now}});
     });
@@ -99,8 +101,9 @@ export class PhoneDeliveryService implements OnModuleInit,OnModuleDestroy {
     const identity=await tx.userPhoneIdentity.findUnique({where:{phone:row.phone}});
     if(row.purpose==='register')return!identity;
     if(row.purpose==='recover'){const user=row.targetUserId?await tx.user.findFirst({where:{id:row.targetUserId,tokenVersion:row.tokenVersion!,status:'ACTIVE',deletedAt:null}}):null;return!!user&&identity?.userId===user.id;}
-    if(identity||!row.targetUserId||!row.familyId||row.accessExpiresAt&&row.accessExpiresAt.getTime()<=Date.now())return false;
-    return!!await tx.user.findFirst({where:{id:row.targetUserId,tokenVersion:row.tokenVersion!,status:'ACTIVE',deletedAt:null}})&&!!await tx.refreshToken.findFirst({where:{userId:row.targetUserId,familyId:row.familyId,revokedAt:null,expiresAt:{gt:new Date()}},select:{id:true}});
+    if(identity&&!(row.purpose==='initial'&&identity.userId===row.targetUserId)||!row.targetUserId||!row.familyId||row.accessExpiresAt&&row.accessExpiresAt.getTime()<=Date.now())return false;
+    const user=await tx.user.findFirst({where:{id:row.targetUserId,tokenVersion:row.tokenVersion!,status:'ACTIVE',deletedAt:null}});if(!user||row.purpose==='initial'&&(user.passwordConfigured||!await tx.externalIdentity.findFirst({where:{userId:user.id},select:{id:true}})))return false;
+    return!!await tx.refreshToken.findFirst({where:{userId:row.targetUserId,familyId:row.familyId,revokedAt:null,expiresAt:{gt:new Date()}},select:{id:true}});
   }
   private async drain(){
     await this.prisma.phoneVerificationRequest.updateMany({where:{state:'SENDING',startedAt:{lt:new Date(Date.now()-30_000)}},data:{state:'UNKNOWN',codeEnc:null,version:{increment:1}}});

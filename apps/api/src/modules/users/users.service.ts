@@ -85,7 +85,7 @@ export class UsersService {
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await this.prisma.$transaction(async tx => {
-      const changed = await tx.user.updateMany({where:{id:userId,passwordHash:user.passwordHash,tokenVersion:user.tokenVersion,status:'ACTIVE',deletedAt:null},data:{passwordHash,tokenVersion:{increment:1}}});
+      const changed = await tx.user.updateMany({where:{id:userId,passwordHash:user.passwordHash,tokenVersion:user.tokenVersion,status:'ACTIVE',deletedAt:null},data:{passwordHash,passwordConfigured:true,tokenVersion:{increment:1}}});
       if (changed.count !== 1) throw new BusinessException(ErrorCode.CREDENTIAL_INVALID, '账号或密码已变更，请重新登录后操作', 409);
       const now = new Date();
       await tx.refreshToken.updateMany({where:{userId,revokedAt:null},data:{revokedAt:now}});

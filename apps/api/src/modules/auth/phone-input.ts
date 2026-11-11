@@ -1,7 +1,7 @@
 import {BusinessException,ErrorCode} from '../../common/exceptions/business.exception';
 import {passwordProblem} from '../../common/security/password-policy';
 
-export type PhonePurpose='register'|'recover'|'bind';
+export type PhonePurpose='register'|'recover'|'bind'|'initial';
 export const PHONE_CODE_TTL=300_000,PHONE_COOLDOWN=60_000;
 const KEY=/^[a-f\d]{8}-[a-f\d]{4}-4[a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i;
 export const phoneBad=(message='短信验证码错误、过期或已使用',status=400)=>new BusinessException(ErrorCode.PARAM_INVALID,message,status);
@@ -18,7 +18,7 @@ function record(input:unknown,keys:string[]):Record<string,unknown>{
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!keys.includes(key)))throw phoneBad('申请内容不正确');return input as Record<string,unknown>;
 }
 export function purposeOf(value:unknown,owned=false):PhonePurpose{
-  if(owned?value!=='bind':!['register','recover'].includes(value as string))throw phoneBad('短信验证用途不正确');return value as PhonePurpose;
+  if(owned?!['bind','initial'].includes(value as string):!['register','recover'].includes(value as string))throw phoneBad('短信验证用途不正确');return value as PhonePurpose;
 }
 function version(value:unknown){if(!Number.isSafeInteger(value)||(value as number)<0||(value as number)>=1e9)throw phoneBad('请核对当前申请版本');return value as number;}
 function text(value:unknown,max:number,required=false):string{
@@ -31,10 +31,10 @@ export function phoneSendInput(input:unknown,owned=false){
 export function phoneCloseInput(input:unknown,owned=false){const row=record(input,['purpose','expectedVersion']);return{purpose:purposeOf(row.purpose,owned),expectedVersion:version(row.expectedVersion)};}
 export function phoneLoginInput(input:unknown){const row=record(input,['phone','password']);return{phone:normalizedPhone(row.phone),password:text(row.password,128,true)};}
 export function phoneActionInput(input:unknown,owned=false){
-  const row=record(input,owned?['purpose','phone','code','password','expectedVersion','expectedUpdatedAt']:['purpose','phone','code','password','confirmation','username','inviteCode','expectedVersion']);
+  const row=record(input,owned?['purpose','phone','code','password','confirmation','expectedVersion','expectedUpdatedAt']:['purpose','phone','code','password','confirmation','username','inviteCode','expectedVersion']);
   const purpose=purposeOf(row.purpose,owned),phone=normalizedPhone(row.phone),code=text(row.code,6,true),password=text(row.password,128,true),expectedVersion=version(row.expectedVersion);
   if(!/^\d{6}$/.test(code))throw phoneBad('请填写六位短信验证码。');
-  if(owned){const value=row.expectedUpdatedAt;if(typeof value!=='string'||value.length>40||!Number.isFinite(Date.parse(value))||new Date(value).toISOString()!==value)throw phoneBad('请重新读取当前资料后绑定号码');return{purpose,phone,code,password,expectedVersion,expectedUpdatedAt:value,username:'',inviteCode:''};}
+  if(owned){if(purpose==='initial'){const problem=passwordProblem(password);if(problem)throw phoneBad(problem,422);if(password!==row.confirmation)throw phoneBad('两次填写的新密码不一致。',422);}else if(row.confirmation!==undefined)throw phoneBad('申请内容不正确');const value=row.expectedUpdatedAt;if(typeof value!=='string'||value.length>40||!Number.isFinite(Date.parse(value))||new Date(value).toISOString()!==value)throw phoneBad('请重新读取当前资料后绑定号码');return{purpose,phone,code,password,expectedVersion,expectedUpdatedAt:value,username:'',inviteCode:''};}
   const problem=passwordProblem(password);if(problem)throw phoneBad(problem,422);
   if(password!==row.confirmation)throw phoneBad('两次填写的新密码不一致。',422);
   let username='',inviteCode='';
