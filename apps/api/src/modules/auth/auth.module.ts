@@ -8,11 +8,14 @@ import { AuthService } from './auth.service';
 import { CaptchaService } from './captcha.service';
 import { JwtStrategy } from './jwt.strategy';
 import { EmailVerificationService } from './email-verification.service';
+import {PhoneDeliveryService} from './phone-delivery.service';
+import {PhoneAccountService} from './phone-account.service';
+import {PhoneAuthController,PhoneIdentityController} from './phone.controller';
 
 @Module({
   imports: [PassportModule, JwtModule.register({}), SettingsModule, MailModule],
-  controllers: [AuthController],
-  providers: [AuthService, CaptchaService, JwtStrategy, EmailVerificationService],
+  controllers: [AuthController,PhoneAuthController,PhoneIdentityController],
+  providers: [AuthService, CaptchaService, JwtStrategy, EmailVerificationService,PhoneDeliveryService,PhoneAccountService],
   exports: [AuthService],
 })
 export class AuthModule {}

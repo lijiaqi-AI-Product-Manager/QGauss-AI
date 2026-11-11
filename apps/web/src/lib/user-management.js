@@ -2,6 +2,7 @@ export const USER_FILTERS = Object.freeze({keyword:'',status:'',role:'',username
 export const GRANT_FIELDS = Object.freeze(['model3Count','model4Count','drawMjCount','agentCount','days']);
 export const emptyGrant = () => ({model3Count:0,model4Count:0,drawMjCount:0,agentCount:0,days:0,amountYuan:'',remark:''});
 const id = value => typeof value==='string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+const emailContact=value=>value===null||typeof value==='string';
 export function userSearch(filters) {
   const query={};
   for(const [key,value] of Object.entries(filters)){if(typeof value!=='string')throw Error('查询条件不正确');if(value.trim())query[key]=value.trim();}
@@ -13,12 +14,12 @@ export function userSearch(filters) {
   if(query.from&&query.to&&query.from>query.to)throw Error('开始时间不能晚于结束时间');return query;
 }
 export function userPage(data,page,pageSize) {
-  if(!data||!Array.isArray(data.items)||!Number.isSafeInteger(data.total)||data.total<0||data.page!==page||data.pageSize!==pageSize||!Number.isFinite(Date.parse(data.asOf))||data.items.length>Math.min(pageSize,data.total)||data.items.some(row=>!id(row.id)||typeof row.username!=='string'||typeof row.email!=='string'||!['ACTIVE','DISABLED'].includes(row.status)||!['USER','ADMIN'].includes(row.role))||!Number.isSafeInteger(data.active)||data.active<0||data.active>data.total||!Number.isSafeInteger(data.admins)||data.admins<0||data.admins>data.total)throw Error('incomplete users');
+  if(!data||!Array.isArray(data.items)||!Number.isSafeInteger(data.total)||data.total<0||data.page!==page||data.pageSize!==pageSize||!Number.isFinite(Date.parse(data.asOf))||data.items.length>Math.min(pageSize,data.total)||data.items.some(row=>!id(row.id)||typeof row.username!=='string'||!emailContact(row.email)||!['ACTIVE','DISABLED'].includes(row.status)||!['USER','ADMIN'].includes(row.role))||!Number.isSafeInteger(data.active)||data.active<0||data.active>data.total||!Number.isSafeInteger(data.admins)||data.admins<0||data.admins>data.total)throw Error('incomplete users');
   return data;
 }
 export function userDetail(data,expectedId){
   const count=value=>Number.isSafeInteger(value)&&value>=0;
-  if(!data||data.id!==expectedId||typeof data.username!=='string'||typeof data.email!=='string'||!['ACTIVE','DISABLED'].includes(data.status)||!['USER','ADMIN'].includes(data.role)||!Number.isFinite(Date.parse(data.updatedAt))||!Number.isFinite(Date.parse(data.readAt))||!count(data.balanceCents)||typeof data.isMember!=='boolean'||!data.activity||!['grants','logins','conversations'].every(key=>count(data.activity[key]))||!data.counts||!['model3','model4','drawMj','agent'].every(key=>data.counts[key]&&['paid','member','reserved'].every(field=>count(data.counts[key][field]))))throw Error('incomplete detail');
+  if(!data||data.id!==expectedId||typeof data.username!=='string'||!emailContact(data.email)||!['ACTIVE','DISABLED'].includes(data.status)||!['USER','ADMIN'].includes(data.role)||!Number.isFinite(Date.parse(data.updatedAt))||!Number.isFinite(Date.parse(data.readAt))||!count(data.balanceCents)||typeof data.isMember!=='boolean'||!data.activity||!['grants','logins','conversations'].every(key=>count(data.activity[key]))||!data.counts||!['model3','model4','drawMj','agent'].every(key=>data.counts[key]&&['paid','member','reserved'].every(field=>count(data.counts[key][field]))))throw Error('incomplete detail');
   return data;
 }
 export function grantPayload(form,user) {
@@ -38,7 +39,7 @@ export function readGrant(value,actorId) {
     if(!item||item.actorId!==actorId||!['uncertain','rejected'].includes(item.state)||!id(item.target?.id)||item.payload?.userId!==item.target.id||typeof item.payload.requestKey!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(item.payload.requestKey))return null;
     const expected=grantPayload(item.payload,{id:item.target.id,updatedAt:item.payload.expectedUpdatedAt});
     if(Object.keys(item.payload).some(key=>!Object.hasOwn(expected,key)&&key!=='requestKey'))return null;
-    return {actorId,state:item.state,target:{id:item.target.id,username:String(item.target.username||''),email:String(item.target.email||'')},payload:Object.freeze({...expected,requestKey:item.payload.requestKey})};
+    return {actorId,state:item.state,target:{id:item.target.id,username:String(item.target.username||''),email:item.target.email===null?null:String(item.target.email||'')},payload:Object.freeze({...expected,requestKey:item.payload.requestKey})};
   }catch{return null;}
 }
 export function grantReceipt(receipt,payload) {

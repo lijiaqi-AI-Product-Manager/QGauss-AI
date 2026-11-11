@@ -25,6 +25,9 @@ export interface ConfigDef {
 }
 
 export const CONFIG_REGISTRY: ConfigDef[] = [
+  {key:'security.phonePasswordEnabled',type:'boolean',default:true,group:'security',description:'允许已绑定号码使用密码登录'},
+  {key:'security.phoneRegistrationEnabled',type:'boolean',default:true,group:'security',description:'开放注册时允许通过手机验证创建账户'},
+  {key:'security.smsDailyLimit',type:'number',default:1000,group:'security',description:'全站最近二十四小时最多接收的短信申请数',min:1,max:10000},
   ...(['model3','model4','drawMj','agent'] as const).map(pool=>({key:'apps.reviewReward.'+pool,type:'number' as const,default:0,group:'apps',description:'用户应用首次审核通过赠送'+({model3:'基础次数',model4:'高级次数',drawMj:'绘画次数',agent:'应用次数'})[pool],min:0,max:10000})),
   { key:'security.voiceRateLimit',type:'number',default:20,group:'security',description:'单用户每分钟最多发起的语音生成次数',min:1,max:1000 },
   { key:'security.videoRateLimit',type:'number',default:10,group:'security',description:'单用户每分钟最多发起的视频创作次数',min:1,max:1000 },

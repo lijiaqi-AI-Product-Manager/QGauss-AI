@@ -29,8 +29,9 @@ export class MailOperationsService {
       this.siteReady(),
     ]);
     const configuration = this.mail.configurationSummary();
-    return { operatorMailbox: maskedMailbox(user.email), counts: Object.fromEntries(MAIL_STATES.map(status => [status, counts.find(row => row.status === status)?._count._all ?? 0])), recentProbe: recent ? this.probeReceipt(recent) : null,
-      transport: { canTest: configuration.ready && siteReady, checks: [
+    return { operatorMailbox: user.email ? maskedMailbox(user.email) : null, counts: Object.fromEntries(MAIL_STATES.map(status => [status, counts.find(row => row.status === status)?._count._all ?? 0])), recentProbe: recent ? this.probeReceipt(recent) : null,
+      transport: { canTest: configuration.ready && siteReady && !!user.email, checks: [
+        {id:'recipient',title:'体验信收件地址',ready:!!user.email,description:user.email?'将寄送到当前管理员的邮箱。':'当前管理员尚未设置邮箱，暂时不能寄送体验信。'},
         { id: 'sender', title: '发件账户与地址', ready: configuration.ready, description: configuration.ready ? '已加载可尝试投递的发件设置，仍需验证实际收信。' : configuration.issues.length ? '设置未完整加载，请由部署负责人核对发件配置。' : '尚未启用发件，请由部署负责人准备发件账户。' },
         { id: 'encryption', title: '邮件连接方式', ready: configuration.ready && (configuration.secure || configuration.requireTLS), description: configuration.secure || configuration.requireTLS ? '已要求加密连接；能否建立连接以实际投递为准。' : '尚未要求加密连接。生产站点需要启用加密后再开放。' },
         { id: 'origin', title: '站点与返回地址', ready: siteReady, description: siteReady ? '已填写站点地址。请继续验证找回密码链接是否能正确返回。' : '请先在站点设置中填写正确的访问地址。' },
@@ -50,6 +51,7 @@ export class MailOperationsService {
       const count = await tx.mailOutbox.count({ where: { requestedById: userId, template: 'deliveryProbe', createdAt: { gte: new Date(Date.now() - 900_000) } } });
       if (count >= 3 || !this.rate.tryConsume('mail-probe:' + ip, 10, 900_000)) throw new HttpException('发送较频繁，请稍后再试', 429);
       const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+      if(!user.email)throw new ServiceUnavailableException('当前账户尚未设置邮箱，暂时不能寄送体验信');
       return tx.mailOutbox.create({ data: { ...prepared, to: user.email, requestedById: userId, requestKey } });
     });
     this.mail.kick();

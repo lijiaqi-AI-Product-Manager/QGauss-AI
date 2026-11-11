@@ -7,7 +7,7 @@ import {withAuthSession} from '../../common/decorators/current-user.decorator';
 
 export interface JwtPayload {
   sub: string;
-  email: string;
+  email: string | null;
   username: string;
   role: 'USER' | 'ADMIN' | 'SUPER';
   tv: number;

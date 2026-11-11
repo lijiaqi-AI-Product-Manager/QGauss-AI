@@ -2,6 +2,7 @@ const identifier=value=>typeof value==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(v
 const timestamp=value=>typeof value==='string'&&value.length<=40&&Number.isFinite(Date.parse(value));
 const revision=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
 const requestKey=value=>typeof value==='string'&&/^[A-Za-z0-9_-]{16,128}$/.test(value);
+const emailContact=value=>value===null||typeof value==='string';
 const fail=message=>{throw Error(message);};
 
 export function managementPayload(kind,input){
@@ -23,7 +24,7 @@ export function managementPayload(kind,input){
 }
 
 export function readManagementIntent(value,actorId){
-  try{const item=typeof value==='string'?JSON.parse(value):value;if(!item||item.actorId!==actorId||!identifier(item.target?.id)||typeof item.target.username!=='string'||typeof item.target.email!=='string'||!['uncertain','rejected'].includes(item.state))return null;const payload=managementPayload(item.kind,item.payload),result={actorId,state:item.state,kind:item.kind,target:{id:item.target.id,username:item.target.username,email:item.target.email},payload};
+  try{const item=typeof value==='string'?JSON.parse(value):value;if(!item||item.actorId!==actorId||!identifier(item.target?.id)||typeof item.target.username!=='string'||!emailContact(item.target.email)||!['uncertain','rejected'].includes(item.state))return null;const payload=managementPayload(item.kind,item.payload),result={actorId,state:item.state,kind:item.kind,target:{id:item.target.id,username:item.target.username,email:item.target.email},payload};
     if(item.kind==='metadata'){if(typeof item.before?.adminNote!=='string'||item.before.adminNote.length>2000||typeof item.before.isDistribution!=='boolean')return null;result.before={adminNote:item.before.adminNote,isDistribution:item.before.isDistribution};}
     else if(item.kind==='session'){if(typeof item.device?.label!=='string'||typeof item.device.ip!=='string')return null;result.device={label:item.device.label,ip:item.device.ip};}
     else{if(!Number.isSafeInteger(item.count)||item.count<0)return null;result.count=item.count;}
@@ -41,7 +42,7 @@ export function managementReceipt(value,intent){
 
 export function loginSessionPage(value,userId,page,pageSize=8){
   const count=value=>Number.isSafeInteger(value)&&value>=0;
-  if(!value||value.userId!==userId||value.user?.id!==userId||!timestamp(value.user.updatedAt)||typeof value.user.username!=='string'||typeof value.user.email!=='string'||value.page!==page||value.pageSize!==pageSize||!timestamp(value.asOf)||!timestamp(value.readAt)||!revision(value.revision)||!revision(value.otherRevision)||!count(value.otherTotal)||!count(value.total)||!count(value.activeTotal)||value.activeTotal<value.total||value.otherTotal>value.activeTotal||!Array.isArray(value.items)||value.items.length>Math.min(pageSize,value.total)||value.items.some(row=>!identifier(row.id)||!revision(row.revision)||!timestamp(row.createdAt)||!timestamp(row.lastSeenAt)||!timestamp(row.expiresAt)||typeof row.isCurrent!=='boolean'||typeof row.userAgent!=='string'||typeof row.ip!=='string'))fail('登录列表暂未读取完整，请重试');
+  if(!value||value.userId!==userId||value.user?.id!==userId||!timestamp(value.user.updatedAt)||typeof value.user.username!=='string'||!emailContact(value.user.email)||value.page!==page||value.pageSize!==pageSize||!timestamp(value.asOf)||!timestamp(value.readAt)||!revision(value.revision)||!revision(value.otherRevision)||!count(value.otherTotal)||!count(value.total)||!count(value.activeTotal)||value.activeTotal<value.total||value.otherTotal>value.activeTotal||!Array.isArray(value.items)||value.items.length>Math.min(pageSize,value.total)||value.items.some(row=>!identifier(row.id)||!revision(row.revision)||!timestamp(row.createdAt)||!timestamp(row.lastSeenAt)||!timestamp(row.expiresAt)||typeof row.isCurrent!=='boolean'||typeof row.userAgent!=='string'||typeof row.ip!=='string'))fail('登录列表暂未读取完整，请重试');
   if(value.items.length>Math.max(0,Math.min(pageSize,value.total-(page-1)*pageSize)))fail('登录列表暂未读取完整，请重试');return value;
 }
 
