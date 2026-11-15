@@ -102,6 +102,10 @@ export class SettingsService {
     return { key, value };
   }
 
+  validateChange(key: string, value: unknown) {
+    return this.parsed(key, value);
+  }
+
   async setMany(items: { key: string; value: unknown }[], updatedBy?: string) {
     if(new Set(items.map(item=>item.key)).size!==items.length)throw new BusinessException(ErrorCode.PARAM_INVALID,'同一配置项不能重复提交');
     const results=items.map(item=>({key:item.key,value:this.parsed(item.key,item.value)}));

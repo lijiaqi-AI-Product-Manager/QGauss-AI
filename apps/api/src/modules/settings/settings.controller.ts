@@ -6,6 +6,7 @@ import { InstallationAllowed } from '../../common/decorators/installation-allowe
 import { AuthUser, CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { SettingsService } from './settings.service';
+import { BusinessException, ErrorCode } from '../../common/exceptions/business.exception';
 
 class ConfigItemDto {
   @IsString() key: string;
@@ -41,6 +42,7 @@ export class SettingsController {
   @Roles('ADMIN')
   @Put()
   save(@CurrentUser() user: AuthUser, @Body() dto: SaveConfigDto) {
+    if (dto.settings.length > 20) throw new BusinessException(ErrorCode.PARAM_INVALID, '设置页面已更新，请刷新页面后预览保存。', 409);
     return this.settings.setMany(dto.settings, user.id);
   }
 }

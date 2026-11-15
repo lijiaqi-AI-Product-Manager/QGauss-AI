@@ -630,10 +630,30 @@ model ChatAttempt {
 model GlobalConfig {
   key       String   @id
   value     String   @default("{}") // JSON；可编辑配置命中注册表，installation.state 仅供安装流程读写
+  version   Int      @default(0)
   updatedAt DateTime @updatedAt
   updatedBy String?
 
   @@map("global_configs")
+}
+
+model SettingsOperation {
+  id              String   @id
+  ownerId         String
+  familyId        String
+  tokenVersion    Int
+  inputHash       String   @default("")
+  status          String
+  version         Int      @default(1)
+  reason          String   @default("")
+  conflicts       String   @default("[]")
+  payloadEnc      String?
+  appliedAt       DateTime?
+  closedAt        DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+  @@map("settings_operations")
 }
 
 model SensitiveWord {
