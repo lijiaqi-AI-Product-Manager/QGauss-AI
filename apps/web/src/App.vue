@@ -203,6 +203,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn.mjs';
 import zhTw from 'element-plus/es/locale/lang/zh-tw.mjs';
 import en from 'element-plus/es/locale/lang/en.mjs';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import {subscribeSettingsChanges} from './lib/settings-changes.js';
 import {bindAppearanceSync} from './lib/appearance-sync.js';
 import {isImplementedRoute} from './lib/route-recovery.js';
 import { useRoute, useRouter } from 'vue-router';
@@ -358,20 +359,25 @@ async function loadMenus() {
   }
 }
 
+let publicSettingsEpoch=0;
 async function loadPublicSettings() {
+  const epoch=++publicSettingsEpoch;
   try {
     const pub = await api.get('/settings/public');
+    if(epoch!==publicSettingsEpoch||!pub||typeof pub!=='object'||Array.isArray(pub))return;
     publicSiteConfig.value = pub || {};
     commerceEnabled.value = pub?.['commerce.enabled'] === true;
     setCommerceEnabled(commerceEnabled.value);
     const text = pub?.['site.announcement'] ?? '';
     // 关掉过一次就不再用同一条公告打扰用户
     let dismissed='';try{dismissed=localStorage.getItem(DISMISS_KEY)||'';}catch{}
-    if (text && dismissed !== text) announcement.value = text;
+    announcement.value = text && dismissed !== text ? text : '';
   } catch {
     /* 忽略 */
   }
 }
+
+onUnmounted(subscribeSettingsChanges(loadPublicSettings));
 
 function dismissAnnouncement() {
   try{localStorage.setItem(DISMISS_KEY, announcement.value);}catch{}

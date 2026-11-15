@@ -1,7 +1,7 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **357** 条路由，分布在 **37** 个控制器。
+> 共 **361** 条路由，分布在 **38** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
@@ -32,6 +32,7 @@
 | `/pay` | 4 | `src/modules/commerce/pay.controller.ts` |
 | `/presets` | 9 | `src/modules/presets/presets.controller.ts` |
 | `/sales` | 9 | `src/modules/commerce/sales.controller.ts` |
+| `/settings` | 4 | `src/modules/settings/settings-workspace.controller.ts` |
 | `/settings` | 3 | `src/modules/settings/settings.controller.ts` |
 | `/signin` | 2 | `src/modules/commerce/signin.controller.ts` |
 | `/statistic` | 6 | `src/modules/statistic/statistic.controller.ts` |
@@ -438,6 +439,15 @@
 | PATCH | `/sales/manage/:userId` | ADMIN |
 | GET | `/sales/audit` | ADMIN |
 | POST | `/sales/audit/:id` | ADMIN |
+
+## /settings
+
+| 方法 | 路径 | 权限 |
+|---|---|---|
+| GET | `/settings/workspace` | ADMIN |
+| GET | `/settings/operations/:key` | ADMIN |
+| POST | `/settings/operations/:key` | ADMIN |
+| POST | `/settings/operations/:key/close` | ADMIN |
 
 ## /settings
 
