@@ -3,48 +3,48 @@
   <!-- 登录页不加外壳 -->
   <router-view v-if="!showChrome" />
 
-  <ClientShell v-else-if="!route.meta.admin || route.meta.client" :menus="menus" :title="title" :site-config="publicSiteConfig" :announcement="announcement" :commerce-enabled="commerceEnabled" :balance="balance" :balance-tooltip="balanceTooltip" @logout="onLogout" @dismiss-announcement="dismissAnnouncement"><router-view /></ClientShell>
+  <ClientShell v-else-if="!route.meta.admin || route.meta.client" :menus="menus" :title="title" :site-config="publicSiteConfig" :announcement="announcement" :commerce-enabled="commerceEnabled" :balance="balance" :balance-tooltip="balanceTooltip" :can-manage="auth.isAdmin&&navRole==='ADMIN'" :navigation-error="navError" :navigation-loading="navLoading" @refresh-navigation="refreshMenus" @logout="onLogout" @dismiss-announcement="dismissAnnouncement"><router-view /></ClientShell>
 
   <div v-else class="qg-layout" :class="{ 'no-panel': !showPanel, immersive: immersive && route.name === 'chat' }">
     <div v-if="sidebarOpen" class="qg-sidebar-mask" @click="sidebarOpen = false"></div>
 
     <!-- 图标轨道：常驻，切页面不跳 -->
-    <aside class="qg-rail qg-glass" aria-label="主导航">
+    <aside class="qg-rail qg-glass" :aria-label="t('shell.primaryNavigation')">
       <router-link class="qg-rail-brand" to="/chat" title="QGauss AI" aria-label="QGauss AI">Q</router-link>
 
-      <router-link class="qg-rail-item" :class="{ active: route.path === '/chat' }" to="/chat" title="对话" aria-label="对话">
+      <router-link class="qg-rail-item" :class="{ active: route.path === '/chat' }" to="/chat" :title="t('shell.chat')" :aria-label="t('shell.chat')">
         <el-icon><ChatDotRound /></el-icon>
-        <span>对话</span>
+        <span>{{t('shell.tabChat')}}</span>
       </router-link>
-      <router-link class="qg-rail-item" :class="{ active: route.path === '/plaza' }" to="/plaza" title="模型广场" aria-label="模型广场">
+      <router-link class="qg-rail-item" :class="{ active: route.path === '/plaza' }" to="/plaza" :title="t('shell.models')" :aria-label="t('shell.models')">
         <el-icon><Shop /></el-icon>
-        <span>广场</span>
+        <span>{{t('shell.tabGallery')}}</span>
       </router-link>
-      <router-link class="qg-rail-item" :class="{ active: route.path === '/painting' }" to="/painting" title="专业绘画" aria-label="专业绘画">
+      <router-link class="qg-rail-item" :class="{ active: route.path === '/painting' }" to="/painting" :title="t('shell.painting')" :aria-label="t('shell.painting')">
         <el-icon><Picture /></el-icon>
-        <span>绘画</span>
+        <span>{{t('shell.tabPainting')}}</span>
       </router-link>
-      <router-link class="qg-rail-item" :class="{ active: route.path === '/apps' }" to="/apps" title="应用" aria-label="应用">
+      <router-link class="qg-rail-item" :class="{ active: route.path === '/apps' }" to="/apps" :title="t('shell.apps')" :aria-label="t('shell.apps')">
         <el-icon><Grid /></el-icon>
-        <span>应用</span>
+        <span>{{t('shell.tabApps')}}</span>
       </router-link>
       <router-link
         v-if="commerceEnabled"
         class="qg-rail-item"
         :class="{ active: route.path === '/wallet' }"
-        to="/wallet" title="我的钱包" aria-label="我的钱包"
+        to="/wallet" :title="t('shell.wallet')" :aria-label="t('shell.wallet')"
       >
         <el-icon><Wallet /></el-icon>
-        <span>钱包</span>
+        <span>{{t('shell.tabWallet')}}</span>
       </router-link>
       <router-link
-        v-if="auth.user?.role === 'ADMIN'"
+        v-if="auth.isAdmin&&navRole==='ADMIN'"
         class="qg-rail-item"
         :class="{ active: route.path === '/statistic' }"
-        to="/statistic" title="管理后台" aria-label="管理后台"
+        to="/statistic" :title="t('shell.admin')" :aria-label="t('shell.admin')"
       >
         <el-icon><Setting /></el-icon>
-        <span>管理</span>
+        <span>{{t('shell.adminShort')}}</span>
       </router-link>
 
       <div class="qg-rail-spacer"></div>
@@ -53,85 +53,18 @@
         <button
           class="qg-icon-btn"
           type="button"
-          :title="isDark ? '切换到浅色' : '切换到深色'"
-          :aria-label="isDark ? '切换到浅色' : '切换到深色'"
+          :title="t('shell.theme')"
+          :aria-label="t('shell.theme')" :aria-pressed="isDark"
           @click="toggleTheme"
         >
           <el-icon><component :is="isDark ? 'Sunny' : 'Moon'" /></el-icon>
         </button>
-        <router-link class="qg-avatar-btn" to="/account" title="个人空间" aria-label="个人空间"><AccountAvatar :value="auth.user?.avatar" :size="30" decorative /></router-link>
+        <router-link class="qg-avatar-btn" to="/account" :title="t('shell.account')" :aria-label="t('shell.account')"><AccountAvatar :value="auth.user?.avatar" :size="30" decorative /></router-link>
       </div>
     </aside>
 
     <!-- 导航面板：对话/绘画自带左栏，桌面端不再叠一层；移动端以抽屉形式打开 -->
-    <aside v-if="showPanel || sidebarOpen" class="qg-panel qg-glass" :class="{ open: sidebarOpen }" aria-label="导航">
-      <div class="qg-panel-brand">
-        <span class="qg-brand-dot"></span>
-        <span>QGauss AI</span>
-      </div>
-
-      <nav class="qg-nav">
-        <!-- 移动端没有图标轨道，主入口放进抽屉 -->
-        <div class="qg-nav-primary">
-          <router-link
-            v-for="item in primaryNav"
-            :key="item.path"
-            class="qg-nav-item"
-            :class="{ active: route.path === item.path }"
-            :to="item.path"
-          >
-            <el-icon><component :is="item.icon" /></el-icon> {{ item.title }}
-          </router-link>
-        </div>
-        <template v-for="group in menus" :key="group.id">
-          <div class="qg-nav-group">{{ group.title }}</div>
-          <template v-for="item in group.children" :key="item.id">
-            <router-link
-              v-if="isImplemented(item.path)"
-              class="qg-nav-item"
-              :class="{ active: route.path === item.path }"
-              :to="item.path"
-            >
-              <el-icon><component :is="item.icon || 'Menu'" /></el-icon> {{ item.title }}
-            </router-link>
-            <div v-else class="qg-nav-item disabled" :title="'即将上线：' + item.title">
-              <el-icon><component :is="item.icon || 'Menu'" /></el-icon> {{ item.title }}
-            </div>
-          </template>
-        </template>
-
-        <template v-if="commerceEnabled">
-          <div class="qg-nav-group">商业化</div>
-          <router-link class="qg-nav-item" :class="{ active: route.path === '/recharge' }" to="/recharge">
-            <el-icon><Goods /></el-icon> 充值
-          </router-link>
-          <router-link class="qg-nav-item" :class="{ active: route.path === '/wallet' }" to="/wallet" title="我的钱包" aria-label="我的钱包">
-            <el-icon><Wallet /></el-icon> 我的钱包
-          </router-link>
-          <router-link class="qg-nav-item" :class="{ active: route.path === '/sales' }" to="/sales">
-            <el-icon><Share /></el-icon> 推广分佣
-          </router-link>
-          <template v-if="auth.user?.role === 'ADMIN'">
-            <router-link class="qg-nav-item" :class="{ active: route.path === '/admin/crami' }" to="/admin/crami">
-              <el-icon><Ticket /></el-icon> 卡密与套餐
-            </router-link>
-            <router-link class="qg-nav-item" :class="{ active: route.path === '/admin/orders' }" to="/admin/orders">
-              <el-icon><Document /></el-icon> 订单管理
-            </router-link>
-            <router-link class="qg-nav-item" :class="{ active: route.path === '/admin/sales' }" to="/admin/sales">
-              <el-icon><Money /></el-icon> 分销与提现
-            </router-link>
-          </template>
-        </template>
-      </nav>
-
-      <div class="qg-panel-foot">
-        <span>v0.1.0 · {{ auth.user?.username }}</span>
-        <button type="button" class="qg-icon-btn qg-only-mobile" :aria-label="t('logout')" :title="t('logout')" @click="onLogout">
-          <el-icon><SwitchButton /></el-icon>
-        </button>
-      </div>
-    </aside>
+    <aside v-if="showPanel || sidebarOpen" class="qg-panel qg-glass qan-panel" :class="{open:sidebarOpen}" :aria-label="t('shell.navigation')"><AdminNavigation :rows="adminMenus" :loading="navLoading" :error="navError" :can-manage="auth.isAdmin&&navRole==='ADMIN'" @refresh="refreshMenus" @close="sidebarOpen=false"/></aside>
 
     <main class="qg-main">
       <header class="qg-header">
@@ -203,6 +136,8 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn.mjs';
 import zhTw from 'element-plus/es/locale/lang/zh-tw.mjs';
 import en from 'element-plus/es/locale/lang/en.mjs';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import {useMenuNavigation} from './composables/useMenuNavigation.js';
+import AdminNavigation from './components/navigation/AdminNavigation.vue';
 import {subscribeSettingsChanges} from './lib/settings-changes.js';
 import {bindAppearanceSync} from './lib/appearance-sync.js';
 import {isImplementedRoute} from './lib/route-recovery.js';
@@ -233,7 +168,6 @@ const stopAppearanceSync=bindAppearanceSync(appearance,useTheme());
 onUnmounted(stopAppearanceSync);
 const route = useRoute();
 const router = useRouter();
-const menus = ref([]);
 const announcement = ref('');
 const publicSiteConfig = ref({});
 const sidebarOpen = ref(false);
@@ -255,6 +189,7 @@ const { immersive } = useUi();
 const DISMISS_KEY = 'qg:announcement-dismissed';
 
 const showChrome = computed(() => route.name !== 'login' && !route.meta.authSurface && (auth.isLoggedIn || route.meta.client));
+const {client:menus,manage:adminMenus,role:navRole,loading:navLoading,error:navError,refresh:refreshMenus}=useMenuNavigation(commerceEnabled,showChrome);
 // 对话与绘画页自带左栏（会话列表 / 参数面板），外壳不再叠导航面板
 const showPanel = computed(() => !['chat', 'painting'].includes(route.name));
 
@@ -302,63 +237,6 @@ const isImplemented=path=>isImplementedRoute(router,path);
 
 /** 顺序固定的兜底导航：菜单接口异常时前台不能没有入口 */
 /** 菜单表里如果也配了 /chat 会渲染两遍，这里统一剔掉 */
-function withoutChat(groups) {
-  return groups
-    .map((g) => ({ ...g, children: (g.children ?? []).filter((c) => c.path !== '/chat') }))
-    .filter((g) => g.children.length > 0);
-}
-
-function defaultMenus() {
-  const groups = [
-    {
-      id: 'fallback-content',
-      title: '内容',
-      children: [
-        { id: 'fallback-apps', title: '应用', path: '/apps', icon: 'Grid' },
-        { id: 'fallback-image', title: '图像', path: '/image', icon: 'Picture' },
-        { id: 'fallback-presets', title: '预设', path: '/presets', icon: 'MagicStick' },
-      ],
-    },
-  ];
-  if (auth.user?.role === 'ADMIN') {
-    groups.push({
-      id: 'fallback-admin',
-      title: '管理',
-      children: [
-        { id: 'fallback-mail', title: '邮件投递台', path: '/mail', icon: 'Message' },
-        { id: 'fallback-agents', title: '搭档控制室', path: '/agents/manage', icon: 'Connection' },
-        { id: 'fallback-voice', title: '声音控制台', path: '/voice/manage', icon: 'Microphone' },
-        { id:'fallback-extensions',title:'扩展工具箱',path:'/extensions/manage',icon:'Grid' },
-        { id: 'fallback-mj', title: 'MJ 控制台', path: '/mj/manage', icon: 'Picture' },
-        { id: 'fallback-video', title: '视频控制台', path: '/video/manage', icon: 'VideoCamera' },
-        { id: 'fallback-welcome', title: '启航清单', path: '/welcome', icon: 'Position' },
-        { id: 'fallback-stat', title: '统计', path: '/statistic', icon: 'TrendCharts' },
-        { id: 'fallback-chatlogs', title: '聊天记录', path: '/chat-logs', icon: 'Document' },
-        { id: 'fallback-moderation', title: '敏感词', path: '/moderation', icon: 'Warning' },
-        { id: 'fallback-users', title: '用户', path: '/users', icon: 'User' },
-        { id: 'fallback-settings', title: '系统配置', path: '/settings', icon: 'Tools' },
-      ],
-    });
-  }
-  return groups;
-}
-
-async function loadMenus() {
-  if (!auth.isLoggedIn) return;
-  try {
-    const list = await api.get('/menus');
-    const groups=Array.isArray(list) && list.length > 0 ? list : defaultMenus();
-    if(auth.isAdmin&&!groups.some(group=>group.path==='/agents/manage'||group.children?.some(child=>child.path==='/agents/manage')))groups.push({id:'agent-studio-entry',title:'行动搭档',children:[{id:'agent-studio',title:'搭档控制室',path:'/agents/manage',icon:'Connection'}]});
-    if(auth.isAdmin&&!groups.some(group=>group.path==='/mj/manage'||group.children?.some(child=>child.path==='/mj/manage')))groups.push({id:'mj-studio-entry',title:'进阶创作',children:[{id:'mj-studio',title:'MJ 控制台',path:'/mj/manage',icon:'Picture'}]});
-    if(auth.isAdmin&&!groups.some(group=>group.path==='/video/manage'||group.children?.some(child=>child.path==='/video/manage')))groups.push({id:'video-studio-entry',title:'视频创作',children:[{id:'video-studio',title:'视频控制台',path:'/video/manage',icon:'VideoCamera'}]});
-    if(auth.isAdmin&&!groups.some(group=>group.path==='/voice/manage'||group.children?.some(child=>child.path==='/voice/manage')))groups.push({id:'voice-studio-entry',title:'声音工作区',children:[{id:'voice-studio',title:'声音控制台',path:'/voice/manage',icon:'Microphone'}]});
-    if(auth.isAdmin&&!groups.some(group=>group.path==='/extensions/manage'||group.children?.some(child=>child.path==='/extensions/manage')))groups.push({id:'extension-studio-entry',title:'扩展工作区',children:[{id:'extension-studio',title:'扩展工具箱',path:'/extensions/manage',icon:'Grid'}]});
-    menus.value = withoutChat(groups);
-  } catch {
-    menus.value = withoutChat(defaultMenus());
-  }
-}
-
 let publicSettingsEpoch=0;
 async function loadPublicSettings() {
   const epoch=++publicSettingsEpoch;
@@ -389,7 +267,6 @@ watch(
   (userId) => {
     resetBalance();
     if (userId) {
-      loadMenus();
       refreshBalance();
     } else {
       resetBalance();
@@ -406,7 +283,6 @@ watch(
   },
 );
 onMounted(async () => {
-  loadMenus();
   // 先拿到商业化开关再决定要不要查余额
   await loadPublicSettings();
   if (auth.isLoggedIn) refreshBalance();

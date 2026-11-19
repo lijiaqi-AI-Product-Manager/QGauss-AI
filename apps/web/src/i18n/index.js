@@ -1,3 +1,4 @@
+import {NAVIGATION_CATALOG} from '../lib/navigation.js';
 import {applicationText} from './application-messages.js';
 import { computed, ref } from 'vue';
 import {createLanguagePreferences} from './language-preferences.js';
@@ -87,8 +88,8 @@ export function t(key, values) {
   return values ? message.replace(/\{(\w+)\}/g, (token, name) => Object.hasOwn(values, name) ? String(values[name]) : token) : message;
 }
 export function routeTitle(path, {compact=false}={}) {
-  const key=ROUTE_LANGUAGE_KEYS[path];
-  return key ? compact && INTERFACE_MESSAGES[currentLang.value]?.[key+'.short'] || t(key) : '';
+  const key=ROUTE_LANGUAGE_KEYS[path],entry=NAVIGATION_CATALOG.routes.find(row=>row.path===path);
+  return key ? compact && INTERFACE_MESSAGES[currentLang.value]?.[key+'.short'] || t(key) : entry ? currentLang.value==='en'?entry.titleEn:currentLang.value==='zh-TW'?entry.titleTw:entry.title : '';
 }
 
 export function appText(original,values){return applicationText(currentLang.value,original,values);}

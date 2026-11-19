@@ -3,6 +3,11 @@
 import { computed } from 'vue';
 const props = defineProps({ name: String });
 const icons = {
+  chevronUp:['m5 15 7-7 7 7'],
+  chart:['M4 20V4M4 20h17M8 16v-5M13 16V7M18 16v-8'],
+  link:['m10 14 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0'],
+  bolt:['m13 2-9 12h7l-1 8 10-13h-7l0-7'],
+  chevronDown:['m5 9 7 7 7-7'],
   check:['M5 12l4 4L19 6'],
   close:['M6 6l12 12M6 18L18 6'],
   eye:['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z','M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z'],

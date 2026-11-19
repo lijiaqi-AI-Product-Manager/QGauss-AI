@@ -1,3 +1,4 @@
+import {navigationCatalogSource} from '../../../scripts/web/json-source.mjs';
 import {test,after} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
@@ -7,7 +8,7 @@ import {pathToFileURL,fileURLToPath} from 'node:url';
 import {rollup} from 'rollup';
 import {JSDOM} from 'jsdom';
 const directory=await mkdtemp(join(tmpdir(),'qgauss-map-export-'));
-const bundle=await rollup({input:fileURLToPath(new URL('../src/lib/mindmap-export.js',import.meta.url)),plugins:[{name:'local-export-fixture',resolveId(source){if(source.startsWith('qgauss:'))return'\0'+source;},load(id){if(id==='\0qgauss:mindmap-pdf-runtime')return'export default {jspdf:"/pdf.js","svg2pdf.js":"/svg.js"};';if(id.startsWith('\0qgauss:'))return'export default "/local-export-component.js";';}}]});
+const bundle=await rollup({input:fileURLToPath(new URL('../src/lib/mindmap-export.js',import.meta.url)),plugins:[navigationCatalogSource(),{name:'local-export-fixture',resolveId(source){if(source.startsWith('qgauss:'))return'\0'+source;},load(id){if(id==='\0qgauss:mindmap-pdf-runtime')return'export default {jspdf:"/pdf.js","svg2pdf.js":"/svg.js"};';if(id.startsWith('\0qgauss:'))return'export default "/local-export-component.js";';}}]});
 await bundle.write({dir:directory,format:'es',entryFileNames:'export.mjs',chunkFileNames:'[name].mjs'});await bundle.close();
 const dom=new JSDOM('<!doctype html><html><head></head><body></body></html>',{url:'http://qgauss.test/mindmap'});
 Object.assign(globalThis,{window:dom.window,document:dom.window.document,location:dom.window.location});

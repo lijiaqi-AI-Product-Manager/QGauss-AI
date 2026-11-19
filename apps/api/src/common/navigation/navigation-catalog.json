@@ -1,0 +1,589 @@
+{
+  "version": 1,
+  "routes": [
+    {
+      "key": "chat",
+      "path": "/chat",
+      "title": "对话",
+      "titleTw": "對話聊天",
+      "titleEn": "Chat",
+      "icon": "chat",
+      "admin": false,
+      "public": true,
+      "commerce": false
+    },
+    {
+      "key": "apps",
+      "path": "/apps",
+      "title": "应用",
+      "titleTw": "應用廣場",
+      "titleEn": "App gallery",
+      "icon": "apps",
+      "admin": false,
+      "public": true,
+      "commerce": false
+    },
+    {
+      "key": "agent",
+      "path": "/agent",
+      "title": "行动搭档",
+      "titleTw": "行動夥伴",
+      "titleEn": "Agent partners",
+      "icon": "agent",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "painting",
+      "path": "/painting",
+      "title": "智能绘画",
+      "titleTw": "智慧繪圖",
+      "titleEn": "Image studio",
+      "icon": "image",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "editor",
+      "path": "/inpaint",
+      "title": "图像编辑台",
+      "titleTw": "圖像編輯台",
+      "titleEn": "Image editor",
+      "icon": "palette",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "gallery",
+      "path": "/market",
+      "title": "创意广场",
+      "titleTw": "創意廣場",
+      "titleEn": "Creative gallery",
+      "icon": "gallery",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "mindmap",
+      "path": "/mindmap",
+      "title": "思维导图",
+      "titleTw": "心智圖",
+      "titleEn": "Mind maps",
+      "icon": "mindmap",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "extensions",
+      "path": "/extend",
+      "title": "扩展工作台",
+      "titleTw": "擴充工作台",
+      "titleEn": "Extensions",
+      "icon": "apps",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "voice",
+      "path": "/voice/create",
+      "title": "声音工作室",
+      "titleTw": "聲音工作室",
+      "titleEn": "Voice studio",
+      "icon": "microphone",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "voiceHistory",
+      "path": "/voice",
+      "title": "声音收藏室",
+      "titleTw": "聲音收藏室",
+      "titleEn": "Voice library",
+      "icon": "microphone",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "video",
+      "path": "/video",
+      "title": "视频创作",
+      "titleTw": "影片創作",
+      "titleEn": "Video studio",
+      "icon": "video",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "models",
+      "path": "/plaza",
+      "title": "模型广场",
+      "titleTw": "模型廣場",
+      "titleEn": "Model gallery",
+      "icon": "model",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "membership",
+      "path": "/recharge",
+      "title": "会员中心",
+      "titleTw": "會員中心",
+      "titleEn": "Membership",
+      "icon": "wallet",
+      "admin": false,
+      "public": false,
+      "commerce": true
+    },
+    {
+      "key": "wallet",
+      "path": "/wallet",
+      "title": "我的钱包",
+      "titleTw": "我的錢包",
+      "titleEn": "My wallet",
+      "icon": "wallet",
+      "admin": false,
+      "public": false,
+      "commerce": true
+    },
+    {
+      "key": "referral",
+      "path": "/sales",
+      "title": "推广计划",
+      "titleTw": "推廣計畫",
+      "titleEn": "Referral program",
+      "icon": "user",
+      "admin": false,
+      "public": false,
+      "commerce": true
+    },
+    {
+      "key": "account",
+      "path": "/account",
+      "title": "个人空间",
+      "titleTw": "個人空間",
+      "titleEn": "My space",
+      "icon": "user",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "creator",
+      "path": "/role",
+      "title": "我的创建",
+      "titleTw": "我的創作",
+      "titleEn": "My creations",
+      "icon": "apps",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "agentProfile",
+      "path": "/agent/app",
+      "title": "搭档档案",
+      "titleTw": "搭檔檔案",
+      "titleEn": "Partner profile",
+      "icon": "agent",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "mj",
+      "path": "/mj",
+      "title": "MJ 进阶创作",
+      "titleTw": "MJ 進階創作",
+      "titleEn": "MJ studio",
+      "icon": "image",
+      "admin": false,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "overview",
+      "path": "/statistic",
+      "title": "统计",
+      "titleTw": "管理後台",
+      "titleEn": "Administration",
+      "icon": "chart",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "channels",
+      "path": "/models/channels",
+      "title": "渠道管理",
+      "titleTw": "渠道管理",
+      "titleEn": "Channels",
+      "icon": "globe",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "modelControls",
+      "path": "/models/list",
+      "title": "模型管理",
+      "titleTw": "模型管理",
+      "titleEn": "Model settings",
+      "icon": "model",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "settings",
+      "path": "/settings",
+      "title": "系统配置",
+      "titleTw": "系統設定",
+      "titleEn": "Site settings",
+      "icon": "settings",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "users",
+      "path": "/users",
+      "title": "用户",
+      "titleTw": "使用者管理",
+      "titleEn": "User management",
+      "icon": "user",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "moderation",
+      "path": "/moderation",
+      "title": "敏感词",
+      "titleTw": "敏感詞",
+      "titleEn": "Moderation",
+      "icon": "lock",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "records",
+      "path": "/chat-logs",
+      "title": "聊天记录",
+      "titleTw": "聊天記錄",
+      "titleEn": "Conversation records",
+      "icon": "chat",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "presets",
+      "path": "/presets",
+      "title": "预设",
+      "titleTw": "預設",
+      "titleEn": "Presets",
+      "icon": "star",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "review",
+      "path": "/apps/manage",
+      "title": "应用审核",
+      "titleTw": "應用審核",
+      "titleEn": "App review",
+      "icon": "check",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "imageLibrary",
+      "path": "/image",
+      "title": "图像",
+      "titleTw": "圖像",
+      "titleEn": "Images",
+      "icon": "image",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "mail",
+      "path": "/mail",
+      "title": "邮件投递台",
+      "titleTw": "郵件投遞台",
+      "titleEn": "Mail center",
+      "icon": "mail",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "welcome",
+      "path": "/welcome",
+      "title": "启航清单",
+      "titleTw": "啟航清單",
+      "titleEn": "Launch checklist",
+      "icon": "star",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "agentsManage",
+      "path": "/agents/manage",
+      "title": "搭档控制室",
+      "titleTw": "搭檔控制室",
+      "titleEn": "Partner controls",
+      "icon": "agent",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "voiceManage",
+      "path": "/voice/manage",
+      "title": "声音控制台",
+      "titleTw": "聲音控制台",
+      "titleEn": "Voice controls",
+      "icon": "microphone",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "videoManage",
+      "path": "/video/manage",
+      "title": "视频控制台",
+      "titleTw": "影片控制台",
+      "titleEn": "Video controls",
+      "icon": "video",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "extensionsManage",
+      "path": "/extensions/manage",
+      "title": "扩展工具箱",
+      "titleTw": "擴充工具箱",
+      "titleEn": "Extension controls",
+      "icon": "apps",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "mjManage",
+      "path": "/mj/manage",
+      "title": "MJ 控制台",
+      "titleTw": "MJ 控制台",
+      "titleEn": "MJ controls",
+      "icon": "image",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
+      "key": "plans",
+      "path": "/admin/crami",
+      "title": "卡密与套餐",
+      "titleTw": "卡密與方案",
+      "titleEn": "Plans & codes",
+      "icon": "wallet",
+      "admin": true,
+      "public": false,
+      "commerce": true
+    },
+    {
+      "key": "orders",
+      "path": "/admin/orders",
+      "title": "订单管理",
+      "titleTw": "訂單管理",
+      "titleEn": "Orders",
+      "icon": "wallet",
+      "admin": true,
+      "public": false,
+      "commerce": true
+    },
+    {
+      "key": "commissions",
+      "path": "/admin/sales",
+      "title": "分销与提现",
+      "titleTw": "分銷與提領",
+      "titleEn": "Payouts",
+      "icon": "user",
+      "admin": true,
+      "public": false,
+      "commerce": true
+    },
+    {
+      "key": "navigation",
+      "path": "/menus/manage",
+      "title": "导航工作台",
+      "titleTw": "導覽工作台",
+      "titleEn": "Navigation studio",
+      "icon": "layout",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    }
+  ],
+  "groups": [
+    {
+      "key": "creative",
+      "path": "/creative",
+      "title": "创作空间",
+      "titleTw": "創作空間",
+      "titleEn": "Create",
+      "icon": "palette",
+      "surface": "client"
+    },
+    {
+      "key": "content",
+      "path": "/content",
+      "title": "内容",
+      "titleTw": "內容",
+      "titleEn": "Content",
+      "icon": "apps",
+      "surface": "manage"
+    },
+    {
+      "key": "modelsGroup",
+      "path": "/models",
+      "title": "模型",
+      "titleTw": "模型",
+      "titleEn": "Models",
+      "icon": "model",
+      "surface": "manage"
+    },
+    {
+      "key": "ops",
+      "path": "/ops",
+      "title": "运营",
+      "titleTw": "營運",
+      "titleEn": "Operations",
+      "icon": "chart",
+      "surface": "manage"
+    },
+    {
+      "key": "system",
+      "path": "/system",
+      "title": "系统",
+      "titleTw": "系統",
+      "titleEn": "Workspace",
+      "icon": "settings",
+      "surface": "manage"
+    },
+    {
+      "key": "commerce",
+      "path": "/commerce",
+      "title": "商业化",
+      "titleTw": "商業化",
+      "titleEn": "Business",
+      "icon": "wallet",
+      "surface": "manage"
+    }
+  ],
+  "defaults": {
+    "creative": [
+      "chat",
+      "apps",
+      "agent",
+      "painting",
+      "editor",
+      "gallery",
+      "mindmap",
+      "extensions",
+      "voice",
+      "video",
+      "models",
+      "membership",
+      "referral"
+    ],
+    "content": [
+      "apps",
+      "imageLibrary",
+      "presets",
+      "review"
+    ],
+    "modelsGroup": [
+      "channels",
+      "modelControls",
+      "agentsManage",
+      "voiceManage",
+      "videoManage",
+      "extensionsManage",
+      "mjManage"
+    ],
+    "ops": [
+      "overview",
+      "records",
+      "moderation"
+    ],
+    "system": [
+      "welcome",
+      "users",
+      "settings",
+      "navigation",
+      "mail"
+    ],
+    "commerce": [
+      "membership",
+      "wallet",
+      "referral",
+      "plans",
+      "orders",
+      "commissions"
+    ]
+  },
+  "icons": [
+    "chat",
+    "apps",
+    "agent",
+    "image",
+    "palette",
+    "gallery",
+    "mindmap",
+    "microphone",
+    "video",
+    "model",
+    "wallet",
+    "user",
+    "settings",
+    "layout",
+    "globe",
+    "chart",
+    "mail",
+    "star",
+    "lock",
+    "check",
+    "folder",
+    "file",
+    "link",
+    "bolt"
+  ],
+  "aliases": {
+    "/mind": "/mindmap",
+    "/repaint": "/inpaint",
+    "/chatai": "/chat",
+    "/agent/chat": "/chat",
+    "/agentcoze/config": "/agents/manage",
+    "/agentcoze/manage": "/agents/manage",
+    "/agentcoze/import": "/agents/manage",
+    "/agentcoze/chatlog": "/agents/manage"
+  }
+}

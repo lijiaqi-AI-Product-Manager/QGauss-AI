@@ -1,3 +1,4 @@
+import {navigationCatalogSource} from '../../../scripts/web/json-source.mjs';
 /** Actual Vue lifecycle and controls. Diagram layout is checked in the native browser. */
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,7 +29,7 @@ assert.ok(resolve(temp).startsWith(resolve(tmpdir()) + sep + 'qgauss-rich-test-'
 const bundle = await rollup({
   input: 'qgauss-rich-test',
   external: id => ['vue', 'dompurify', 'highlight.js'].some(name => id === name || id.startsWith(name + '/')),
-  plugins: [
+  plugins:[navigationCatalogSource(),
     {
       name: 'rich-test-entry',
       resolveId(id) {

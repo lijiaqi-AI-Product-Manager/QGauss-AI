@@ -1,3 +1,4 @@
+import {navigationCatalogSource} from '../../scripts/web/json-source.mjs';
 import vue from 'rollup-plugin-vue';
 import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
@@ -100,7 +101,7 @@ export function createWebConfig({ webRoot = here, outputRoot, development = fals
         return undefined;
       },
     },
-    plugins: [
+    plugins: [navigationCatalogSource(),
       replace({
         preventAssignment: true,
         'process.env.NODE_ENV': JSON.stringify(dev ? 'development' : 'production'),
