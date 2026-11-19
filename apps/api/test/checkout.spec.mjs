@@ -14,7 +14,7 @@ import { CramiService } from '../dist/modules/commerce/crami.service.js';
 import { LedgerService } from '../dist/modules/commerce/ledger.service.js';
 import { RateLimitService } from '../dist/common/ratelimit/rate-limit.service.js';
 import { PaymentStatementService } from '../dist/modules/commerce/payment-statement.service.js';
-import { paymentStatementInput } from '../dist/modules/commerce/payment-statement-input.js';
+import { paymentStatementInput, paymentStatementPreview } from '../dist/modules/commerce/payment-statement-input.js';
 
 const folder = mkdtempSync(join(tmpdir(), 'qgauss-checkout-'));
 execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), '../prisma/migrate.mjs')], { env: { ...process.env, DATABASE_FILE: join(folder, 'test.db') }, stdio: 'pipe' });
@@ -371,6 +371,84 @@ test('merchant statements retain both sides of differences and preserve order an
   assert.equal(zeroRecord.missingCount, 3);
   assert.deepEqual(await prisma.order.findMany({ where: orderWhere, orderBy: { id: 'asc' } }), before);
   assert.equal(await prisma.accountLog.count({ where: orderWhere }), ledgerBefore);
+});
+
+test('native transaction CSV keeps merchant order references and converts gross amounts exactly', () => {
+  const header = [
+    '交易时间', '微信订单号', '商户订单号', '交易状态', '货币种类', '应结订单金额', '退款金额',
+    '微信退款单号', '退款状态', '退款成功时间', '订单金额', '申请退款金额', '手续费',
+  ].join(',');
+  const stamped = '2026-06-13 09:30:00';
+  const day = '2026-06-14 01:10:04';
+  const row = (...values) => values.map(value => '\u0060' + value).join(',');
+  const text = [
+    header,
+    row(stamped, '4200000008201712143733500001', 'QG-order-1', 'SUCCESS', 'CNY', '18.20', '0.00', '0', '', '', '19.90', '0.00', '0.12'),
+    row(stamped, '4200000008201712143733500001', 'QG-order-1', 'REFUND', 'CNY', '0.00', '3.20', '50401010122021000000038202001', 'SUCCESS', day, '0.00', '3.50', '-0.02'),
+    row(stamped, '4200000008201712143733500002', 'QG-order-2', 'REFUND', 'CNY', '0.00', '2.10', '50401010122021000000038202002', 'PROCESSING', '', '0.00', '2.10', '0.00'),
+    row(stamped, '4200000008201712143733500003', 'QG-order-3', 'REVOKED', 'CNY', '0.00', '2.00', '50401010122021000000038202003', 'SUCCESS', '', '0.00', '2.00', '0.00'),
+    '总交易单数,手续费总金额',
+    row('4', '0.10'),
+  ].join('\r\n');
+  const file = Buffer.from(text);
+  const fields = { provider: 'epay' };
+  const preview = paymentStatementPreview(file, fields);
+  assert.equal(preview.format, 'wechat');
+  assert.deepEqual(preview.totals, { paymentCents: 1990, refundCents: 350, feeCents: 10, paymentCount: 1, refundCount: 1 });
+  assert.deepEqual(preview.excluded, { revoked: 1, unfinishedRefunds: 1 });
+  assert.deepEqual(preview.examples.map(entry => [entry.orderRef, entry.tradeRef, entry.sourceLine]), [['QG-order-1', '', 2], ['QG-order-1', '', 3]]);
+  assert.equal(preview.examples[1].occurredAt.toISOString(), '2026-06-13T17:10:04.000Z');
+  assert.throws(() => paymentStatementInput(file, fields), /重新预览/);
+  assert.throws(() => paymentStatementInput(Buffer.from(text + '\n'), { ...fields, previewToken: preview.previewToken }), /重新预览/);
+  assert.throws(() => paymentStatementInput(file, { ...fields, fromDay: '2026-06-13', throughDay: '2026-06-13' }), /标准模板/);
+  const confirmed = paymentStatementInput(file, { ...fields, previewToken: preview.previewToken });
+  const equivalent = statementFile(
+    '收款,4200000008201712143733500001,QG-order-1,,' + stamped + ',1990,12',
+    '退款,50401010122021000000038202001,QG-order-1,,' + day + ',350,-2',
+  );
+  assert.equal(confirmed.contentHash, paymentStatementInput(equivalent, fields).contentHash);
+  assert.match(paymentStatementPreview(Buffer.from(text.replace(row('4', '0.10'), row('3', '0.10'))), fields).issues[0].message, /汇总/);
+  const extra = paymentStatementPreview(Buffer.from(text + '\n' + row(stamped, 'unexpected')), fields);
+  assert.equal(extra.previewToken, null);
+  assert.match(extra.issues[0].message, /多余/);
+});
+
+test('custom CSV preview handles encoded headers, quoted line breaks and line-level corrections', () => {
+  const fields = { provider: 'hupi' };
+  const file = Buffer.concat([
+    Buffer.from('# export\r\nout_trade_no,event_id,occurred_at,'),
+    Buffer.from('bdf0b6ee', 'hex'),
+    Buffer.from(',currency,description\r\nQG-one,event-001,2026-06-13 07:06:05,-0.29,CNY,"sample,\r\ntext"\r\n' +
+      'QG-two,event-002,2026-06-13 07:06:05,-0.10,USD,foreign\r\n' +
+      'QG-three,event-003,2026-06-13 07:06:05,0.001,CNY,precision\r\n' +
+      'QG-four,event-001,2026-06-13 07:06:05,-1,CNY,duplicate\r\n'),
+  ]);
+  const first = paymentStatementPreview(file, fields);
+  assert.equal(first.format, 'columns');
+  assert.equal(first.mappingRequired, true);
+  assert.equal(first.columns[3], '金额');
+  assert.deepEqual(first.suggested, { eventRef: 1, orderRef: 0, occurredAt: 2, amount: 3, currency: 4 });
+  const mapping = { ...first.suggested, unit: 'yuan', rowKind: 'refund' };
+  const mapped = { ...fields, columns: JSON.stringify(mapping) };
+  const preview = paymentStatementPreview(file, mapped);
+  assert.equal(preview.previewToken, null);
+  assert.equal(preview.issueCount, 3);
+  assert.deepEqual(preview.issues.map(issue => issue.line), [5, 6, 7]);
+  assert.match(preview.issues[0].message, /人民币/);
+  assert.match(preview.issues[1].message, /两位小数/);
+  assert.match(preview.issues[2].message, /重复/);
+  assert.equal(preview.examples[0].amountCents, 29);
+  assert.throws(() => paymentStatementInput(file, mapped), /第 5 行/);
+  assert.throws(() => paymentStatementPreview(file, { ...mapped, columns: JSON.stringify({ ...mapping, fee: 3 }) }), /同一列/);
+  const clean = file.subarray(0, file.indexOf('QG-two'));
+  const ready = paymentStatementPreview(clean, mapped);
+  assert.ok(ready.previewToken);
+  assert.equal(ready.totals.feeCents, null);
+  assert.throws(() => paymentStatementInput(clean, { ...mapped, provider: 'epay', previewToken: ready.previewToken }), /重新预览/);
+  assert.throws(() => paymentStatementInput(clean, {
+    ...mapped, previewToken: ready.previewToken, columns: JSON.stringify({ ...mapping, currency: undefined }),
+  }), /重新预览/);
+  assert.equal(paymentStatementInput(clean, { ...mapped, previewToken: ready.previewToken }).rows[0].amountCents, 29);
 });
 
 test('statement totals stay exact beyond the maximum amount of a single order', async () => {

@@ -80,6 +80,9 @@ export async function uploadPaymentStatement(file, fields, { signal } = {}) {
     signal, fields: { ...fields, fileName: Array.from(file.name).slice(0, 120).join('') },
   });
 }
+export async function previewPaymentStatement(file, fields, { signal } = {}) {
+  return uploadMultipart('/admin/payment-statements/preview', file, { signal, fields });
+}
 export async function uploadChatFile(file,requestKey,expectedVersion,{signal}={}){
   return uploadMultipart('/upload/requests/'+encodeURIComponent(requestKey),file,{signal,fields:{expectedVersion:String(expectedVersion)}});
 }

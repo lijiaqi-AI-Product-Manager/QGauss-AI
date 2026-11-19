@@ -4,7 +4,9 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { BusinessException, ErrorCode } from '../../common/exceptions/business.exception';
 import { PaymentStatementService } from './payment-statement.service';
-import { STATEMENT_MAX_BYTES } from './payment-statement-input';
+import { paymentStatementPreview, STATEMENT_MAX_BYTES } from './payment-statement-input';
+
+const uploadLimits = { files: 1, fileSize: STATEMENT_MAX_BYTES, fields: 6, fieldSize: 512, parts: 8 };
 
 @Controller('admin/payment-statements')
 @Roles('ADMIN')
@@ -17,8 +19,16 @@ export class PaymentStatementController {
     return this.statements.list(query);
   }
 
+  @Post('preview')
+  @Header('Cache-Control', 'private, no-store')
+  @UseInterceptors(FileInterceptor('file', { limits: uploadLimits }))
+  preview(@UploadedFile() file: { buffer: Buffer } | undefined, @Body() fields: Record<string, unknown>) {
+    if (!file) throw new BusinessException(ErrorCode.PARAM_INVALID, '请选择 CSV 账单文件', 400);
+    return paymentStatementPreview(file.buffer, fields);
+  }
+
   @Post()
-  @UseInterceptors(FileInterceptor('file', { limits: { files: 1, fileSize: STATEMENT_MAX_BYTES, fields: 4, fieldSize: 512, parts: 6 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: uploadLimits }))
   importStatement(
     @CurrentUser('id') actorId: string,
     @UploadedFile() file: { buffer: Buffer; originalname: string } | undefined,

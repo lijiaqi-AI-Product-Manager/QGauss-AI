@@ -11,41 +11,7 @@
 
     <div class="qst-layout">
       <div class="qst-stack">
-        <section class="qor-board qst-import" aria-labelledby="statement-import-heading">
-          <div class="qor-board-heading">
-            <h2 id="statement-import-heading">导入账单</h2>
-            <button class="qor-button" type="button" @click="downloadTemplate"><ClientIcon name="download" />下载模板</button>
-          </div>
-          <form class="qst-form" @submit.prevent="importFile">
-            <label>
-              所属通道
-              <select v-model="provider" required>
-                <option value="" disabled>选择收款通道</option>
-                <option value="epay">{{ platformLabel('epay') }}</option>
-                <option value="hupi">{{ platformLabel('hupi') }}</option>
-              </select>
-            </label>
-            <label>
-              账单文件
-              <input ref="fileInput" type="file" accept=".csv,text/csv" required @change="selectFile" />
-              <small>UTF-8 CSV，最多 3000 条，1 MB</small>
-            </label>
-            <label class="qst-checkbox">
-              <input v-model="completePeriod" type="checkbox" />
-              按完整账期核对缺行
-            </label>
-            <div v-if="completePeriod" class="qst-dates">
-              <label>开始日期<input v-model="fromDay" type="date" required :max="throughDay || undefined" /></label>
-              <label>结束日期<input v-model="throughDay" type="date" required :min="fromDay || undefined" /></label>
-              <small>按北京时间计算，最多 31 天。</small>
-            </div>
-            <button class="qor-button qor-button--primary" type="submit" :disabled="importing">
-              <ClientIcon name="file" />{{ importing ? '正在核对…' : '导入并核对' }}
-            </button>
-            <p v-if="importError" class="qst-error" role="alert">{{ importError }}</p>
-            <p v-if="importNotice" class="qst-notice" role="status">{{ importNotice }}</p>
-          </form>
-        </section>
+        <PaymentStatementImport @imported="openImported" />
 
         <section class="qor-board qst-archive" aria-labelledby="statement-history-heading">
           <div class="qor-board-heading">
@@ -150,9 +116,10 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
-import { api, uploadPaymentStatement } from '../../api/client.js';
+import { api } from '../../api/client.js';
 import ClientIcon from '../../components/reference/ClientIcon.vue';
 import PaymentStatementDialog from '../../components/admin/PaymentStatementDialog.vue';
+import PaymentStatementImport from '../../components/admin/PaymentStatementImport.vue';
 import { currency, downloadOrderCsv, orderDate, platformLabel, whole } from '../../components/admin/order-review-format.js';
 import { importColumns, periodLabel, rowType, stateName } from '../../components/admin/payment-statement-format.js';
 import './order-review.css';
@@ -166,15 +133,6 @@ const statusFilters = [
   { value: 'reviewed', label: '已复核', count: 'reviewedCount' },
   { value: 'matched', label: '已匹配', count: 'matchedCount' },
 ];
-const provider = ref('');
-const file = shallowRef(null);
-const fileInput = ref(null);
-const completePeriod = ref(false);
-const fromDay = ref('');
-const throughDay = ref('');
-const importing = ref(false);
-const importError = ref('');
-const importNotice = ref('');
 const archive = ref([]);
 const archivePage = ref(1);
 const archiveTotal = ref(0);
@@ -190,46 +148,11 @@ const selectedRow = shallowRef(null);
 const exporting = ref(false);
 const exportError = ref('');
 const detailPages = computed(() => Math.max(1, Math.ceil((result.value?.total || 0) / 20)));
-let archiveRequest, detailRequest, importRequest, exportRequest;
+let archiveRequest, detailRequest, exportRequest;
 
-function downloadTemplate() {
-  downloadOrderCsv('QGauss-商户账单模板', [importColumns]);
-}
-
-function selectFile(event) {
-  file.value = event.target.files?.[0] ?? null;
-  importError.value = '';
-  importNotice.value = '';
-}
-
-async function importFile() {
-  if (importing.value) return;
-  if (!file.value || !/\.csv$/i.test(file.value.name) || file.value.size > 1024 * 1024) {
-    importError.value = '请选择不超过 1 MB 的 CSV 文件。';
-    return;
-  }
-  const request = new AbortController();
-  importRequest = request;
-  importing.value = true;
-  importError.value = '';
-  importNotice.value = '';
-  const fields = {
-    provider: provider.value,
-    ...(completePeriod.value ? { fromDay: fromDay.value, throughDay: throughDay.value } : {}),
-  };
-  try {
-    const saved = await uploadPaymentStatement(file.value, fields, { signal: request.signal });
-    if (request.signal.aborted) return;
-    importNotice.value = saved.reused ? '相同账单已导入，已打开原核对结果。' : '已导入 ' + whole(saved.importedCount) + ' 笔渠道记录。';
-    file.value = null;
-    fileInput.value.value = '';
-    void openStatement(saved.id, true);
-    void loadArchive(1);
-  } catch (error) {
-    if (!request.signal.aborted) importError.value = error.message || '账单导入失败';
-  } finally {
-    if (importRequest === request) importing.value = false;
-  }
+function openImported(statement) {
+  void openStatement(statement.id, true);
+  void loadArchive(1);
 }
 
 async function loadArchive(target = 1) {
@@ -328,6 +251,6 @@ async function exportResult() {
 
 onMounted(loadArchive);
 onBeforeUnmount(() => {
-  for (const request of [archiveRequest, detailRequest, importRequest, exportRequest]) request?.abort();
+  for (const request of [archiveRequest, detailRequest, exportRequest]) request?.abort();
 });
 </script>

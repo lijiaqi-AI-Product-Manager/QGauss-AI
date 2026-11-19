@@ -4,7 +4,7 @@ import { BusinessException, ErrorCode } from '../../common/exceptions/business.e
 import { toInt } from '../../common/params';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { ORDER_STATUS } from './order.service';
-import { paymentStatementInput, StatementInputRow, STATEMENT_MAX_SITE_ONLY } from './payment-statement-input';
+import { paymentStatementInput, statementTotals, StatementInputRow, STATEMENT_MAX_SITE_ONLY } from './payment-statement-input';
 import { findingLabels, reconcileStatementRows, statementOrderSelect } from './payment-statement-match';
 
 const summaryInclude = {
@@ -70,21 +70,12 @@ export class PaymentStatementService {
         }
         const found = await this.findOrders(tx, provider, rows);
         const reconciled = reconcileStatementRows(rows, found, covered, provider);
-        let paymentCents = 0;
-        let refundCents = 0;
-        let feeCents = 0;
-        let missingFees = false;
-        for (const row of rows) {
-          if (row.kind === 'payment') paymentCents += row.amountCents;
-          else refundCents += row.amountCents;
-          if (row.feeCents === null) missingFees = true;
-          else feeCents += row.feeCents;
-        }
+        const { paymentCents, refundCents, feeCents } = statementTotals(rows);
         const batch = await tx.paymentStatement.create({
           data: {
             provider, contentHash, fileName: label, importedBy: actorId,
             fromDay: period?.fromDay, throughDay: period?.throughDay,
-            paymentCents: BigInt(paymentCents), refundCents: BigInt(refundCents), feeCents: missingFees ? null : BigInt(feeCents),
+            paymentCents: BigInt(paymentCents), refundCents: BigInt(refundCents), feeCents: feeCents === null ? null : BigInt(feeCents),
             importedCount: rows.length, missingCount: reconciled.length - rows.length,
             matchedCount: reconciled.filter(row => row.findings.length === 0).length,
           },
