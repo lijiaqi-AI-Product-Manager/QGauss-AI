@@ -6,9 +6,12 @@
         <h1>订单与核对</h1>
         <p>按订单核对支付通知、权益到账和推广佣金。</p>
       </div>
-      <button v-if="!disabled" class="qor-button" type="button" :disabled="loading" @click="load(page)">
-        <ClientIcon name="refresh" />刷新
-      </button>
+      <div class="qor-hero-actions">
+        <router-link class="qor-button" :to="{ name: 'paymentStatements' }"><ClientIcon name="file" />商户账单</router-link>
+        <button v-if="!disabled" class="qor-button" type="button" :disabled="loading" @click="load(page)">
+          <ClientIcon name="refresh" />刷新
+        </button>
+      </div>
     </header>
 
     <div v-if="disabled" class="qor-message" role="status">

@@ -15,13 +15,15 @@ import { PayController } from './pay.controller';
 import { PayService } from './pay.service';
 import { SalesController } from './sales.controller';
 import { SalesService } from './sales.service';
+import { PaymentStatementController } from './payment-statement.controller';
+import { PaymentStatementService } from './payment-statement.service';
 
 /**
  * 商业化模块
  *
  * 设计要点：
  *   - 与主站解耦：不引入循环依赖，只依赖 SettingsModule 与全局 PrismaModule
- *   - 全部路由挂 CommerceGuard，commerce.enabled=false 时对外表现为"不存在"
+ *   - 收费路由由 CommerceGuard 控制，离线账单工作台只面向管理员
  *   - LedgerService 是余额的唯一写入入口，对外导出供 chat / image 复用
  *   - 付费回调（/pay/notify/:provider）是唯一 @Public 的写接口，靠签名验证身份
  */
@@ -34,6 +36,7 @@ import { SalesService } from './sales.service';
     OrderController,
     PayController,
     SalesController,
+    PaymentStatementController,
   ],
   providers: [
     CommerceGuard,
@@ -44,6 +47,7 @@ import { SalesService } from './sales.service';
     OrderService,
     PayService,
     SalesService,
+    PaymentStatementService,
   ],
   exports: [CommerceGuard, LedgerService, WalletService, SigninService, PayService],
 })

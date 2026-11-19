@@ -13,6 +13,8 @@ import { PayService } from '../dist/modules/commerce/pay.service.js';
 import { CramiService } from '../dist/modules/commerce/crami.service.js';
 import { LedgerService } from '../dist/modules/commerce/ledger.service.js';
 import { RateLimitService } from '../dist/common/ratelimit/rate-limit.service.js';
+import { PaymentStatementService } from '../dist/modules/commerce/payment-statement.service.js';
+import { paymentStatementInput } from '../dist/modules/commerce/payment-statement-input.js';
 
 const folder = mkdtempSync(join(tmpdir(), 'qgauss-checkout-'));
 execFileSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), '../prisma/migrate.mjs')], { env: { ...process.env, DATABASE_FILE: join(folder, 'test.db') }, stdio: 'pipe' });
@@ -22,6 +24,8 @@ const settings = { get: async key => values[key] }, rate = new RateLimitService(
 const user = () => prisma.user.create({ data: { email: randomUUID() + '@qgauss.test', username: randomUUID(), passwordHash: 'isolated fixture' } });
 const pkg = (extra = {}) => crami.createPackage({ name: '灵感补给 ' + randomUUID(), priceYuan: '19.90', days: 30, model3Count: 10, model4Count: 5, drawMjCount: 3, agentCount: 2, ...extra });
 const intent = offer => ({ goodsType: 'package', goodsId: offer.id, expectedOfferRevision: offer.offerRevision, requestKey: randomUUID() });
+const statementHeader = '记录类型,渠道流水号,订单号,交易号,发生时间,金额（分）,手续费（分）';
+const statementFile = (...rows) => Buffer.from('\uFEFF' + [statementHeader, ...rows].join('\r\n') + '\r\n');
 after(async () => { await prisma.$disconnect(); assert.ok(resolve(folder).startsWith(resolve(tmpdir()) + sep + 'qgauss-checkout-')); rmSync(folder, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
 
 test('upgrade from migration twenty preserves legacy order amounts and leaves missing snapshots explicit', () => {
@@ -265,4 +269,116 @@ test('gateway URLs preserve signed Unicode and ampersands, return to the exact o
     assert.equal(url.searchParams.get('sign'), createHash('md5').update(pairs + process.env.PAY_EPAY_KEY).digest('hex'));
     process.env.PAY_EPAY_GATEWAY = 'javascript:alert(1)'; await assert.rejects(() => pay.prepare(a.id, order.orderId), e => e.getStatus() === 503);
   } finally { values['commerce.payProviders'] = 'mock'; for (const [key,value] of Object.entries(old)) if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+});
+
+test('merchant statement parsing preserves exact reference strings and Beijing calendar boundaries', () => {
+  const fields = { provider: 'epay', fromDay: '2026-06-13', throughDay: '2026-06-13' };
+  const first = '收款,receipt-1,order-1,"12345678901234567890","2026-06-13 00:00:00",1990,20';
+  const final = '退款,refund-1,order-1,12345678901234567890,2026-06-13 23:59:59,190,-2';
+  const input = paymentStatementInput(statementFile(first, final), fields);
+  assert.equal(input.rows[0].tradeRef, '12345678901234567890');
+  assert.equal(input.rows[0].occurredAt.toISOString(), '2026-06-12T16:00:00.000Z');
+  assert.equal(input.rows[1].occurredAt.toISOString(), '2026-06-13T15:59:59.000Z');
+  assert.equal(input.rows[1].feeCents, -2);
+  assert.equal(input.contentHash, paymentStatementInput(statementFile(final, first), fields).contentHash);
+  assert.equal(paymentStatementInput(statementFile(), fields).rows.length, 0);
+  assert.throws(() => paymentStatementInput(statementFile(first, first), fields), /重复/);
+  assert.throws(() => paymentStatementInput(statementFile(first.replace('1990', '19.90')), fields), /整数分/);
+  assert.throws(() => paymentStatementInput(statementFile(first.replace('00:00:00', '24:00:00')), fields), /北京时间/);
+  assert.throws(() => paymentStatementInput(statementFile(first.replace('2026-06-13', '2026-06-14')), fields), /超出/);
+  assert.throws(() => paymentStatementInput(statementFile(first.replace('receipt-1', '"receipt-1')), fields), /引号/);
+  assert.throws(() => paymentStatementInput(Buffer.from([0xff]), fields), /编码/);
+  assert.throws(() => paymentStatementInput(statementFile(first), { ...fields, throughDay: '2026-07-14' }), /31 天/);
+  assert.throws(() => paymentStatementInput(statementFile(first), { ...fields, provider: 'mock' }), /通道/);
+  assert.throws(() => paymentStatementInput(statementFile(), { provider: 'epay' }), /没有交易记录/);
+});
+
+test('merchant statements retain both sides of differences and preserve order and ledger data during review', async () => {
+  const operator = await user();
+  const buyer = await user();
+  const statement = new PaymentStatementService(prisma);
+  const period = { provider: 'epay', fromDay: '2026-06-13', throughDay: '2026-06-13' };
+  const local = [
+    ['bill-matched', 'trade-1', 'epay', 1, 1990, '2026-06-12T16:02:00Z'],
+    ['bill-different', 'trade-2', 'epay', 1, 2600, '2026-06-12T16:04:00Z'],
+    ['bill-site-only', 'trade-3', 'epay', 4, 3100, '2026-06-13T15:59:59Z'],
+    ['bill-out-of-period', 'trade-4', 'epay', 1, 4490, '2026-06-13T16:00:00Z'],
+    ['bill-fixture', 'trade-5', 'mock', 1, 6990, '2026-06-12T16:06:00Z'],
+    ['bill-ambiguous-a', 'trade-6', 'hupi', 1, 5200, '2026-06-12T16:06:00Z'],
+    ['bill-ambiguous-b', 'trade-6', 'hupi', 1, 5200, '2026-06-12T16:07:00Z'],
+  ];
+  await prisma.order.createMany({ data: local.map(([orderId, tradeId, payPlatform, status, totalCents, date]) => ({
+    orderId, tradeId, payPlatform, status, totalCents, priceCents: totalCents, userId: buyer.id,
+    goodsId: 'sample', goodsType: 'money', paydAt: new Date(date),
+  })) });
+  const orderWhere = { userId: buyer.id };
+  const before = await prisma.order.findMany({ where: orderWhere, orderBy: { id: 'asc' } });
+  const ledgerBefore = await prisma.accountLog.count({ where: orderWhere });
+  const records = [
+    '收款,channel-1,,trade-1,2026-06-13 00:02:00,1990,20',
+    '收款,channel-2,bill-different,trade-2,2026-06-13 00:04:00,2700,',
+    '收款,channel-unique,missing-order,,2026-06-13 00:05:00,1630,15',
+    '退款,channel-refund,bill-matched,trade-1,2026-06-13 01:00:00,900,-5',
+    '退款,channel-refund-2,bill-matched,trade-1,2026-06-13 01:05:00,1200,-7',
+  ];
+  const [batch, retry] = await Promise.all([
+    statement.importStatement(operator.id, '六月账单.csv', statementFile(...records), period),
+    statement.importStatement(operator.id, '重复文件.csv', statementFile(...records.toReversed()), period),
+  ]);
+  assert.equal(batch.id, retry.id);
+  assert.notEqual(batch.reused, retry.reused);
+  assert.equal(batch.importedCount, 5);
+  assert.equal(batch.matchedCount, 1);
+  assert.equal(batch.missingCount, 1);
+  assert.equal(batch.openCount, 5);
+  assert.equal(batch.paymentCents, 6320);
+  assert.equal(batch.refundCents, 2100);
+  assert.equal(batch.feeCents, null);
+
+  const details = await statement.detail(batch.id, { pageSize: 1, state: 'open' });
+  assert.equal(details.total, 5);
+  const first = details.items[0];
+  assert.equal(first.orderRef, 'bill-different');
+  assert.match(first.findings.join(' '), /账单金额/);
+  const all = await statement.detail(batch.id, { pageSize: 1 }, true);
+  assert.equal(all.items.length, 6);
+  assert.equal(all.items.filter(row => row.kind === 'site-only')[0].localOrderId, 'bill-site-only');
+  assert.match(all.items.find(row => row.eventRef === 'channel-unique').findings.join(' '), /未找到/);
+  assert.ok(all.items.filter(row => row.kind === 'refund').every(row => row.findings.join(' ').includes('累计退款')));
+
+  const decision = { state: 'reviewed', note: '已查阅渠道凭证，登记金额差异。', revision: first.revision };
+  const [applied, replay] = await Promise.all([
+    statement.decide(batch.id, first.id, operator.id, decision),
+    statement.decide(batch.id, first.id, operator.id, decision),
+  ]);
+  assert.equal(applied.revision, 1);
+  assert.equal(replay.revision, 1);
+  await assert.rejects(() => statement.decide(batch.id, first.id, buyer.id, decision), e => e.getStatus() === 409);
+  assert.equal((await statement.list({})).items.find(item => item.id === batch.id).reviewedCount, 1);
+  const reopened = await statement.decide(batch.id, first.id, operator.id, { state: 'open', note: '补充渠道记录后再次复核。', revision: 1 });
+  assert.equal(reopened.revision, 2);
+  assert.deepEqual(reopened.decisions.map(row => row.state), ['open', 'reviewed']);
+  assert.deepEqual(reopened.findings, first.findings);
+
+  const ambiguous = await statement.importStatement(operator.id, '另一通道.csv',
+    statementFile('收款,ambiguous,,trade-6,2026-06-13 00:06:00,5200,0'), { provider: 'hupi' });
+  const ambiguousRow = (await statement.detail(ambiguous.id, {})).items[0];
+  assert.match(ambiguousRow.findings.join(' '), /多笔订单/);
+  assert.equal(ambiguousRow.localOrderId, '');
+
+  const zeroRecord = await statement.importStatement(operator.id, '零交易账单.csv', statementFile(), period);
+  assert.equal(zeroRecord.importedCount, 0);
+  assert.equal(zeroRecord.missingCount, 3);
+  assert.deepEqual(await prisma.order.findMany({ where: orderWhere, orderBy: { id: 'asc' } }), before);
+  assert.equal(await prisma.accountLog.count({ where: orderWhere }), ledgerBefore);
+});
+
+test('statement totals stay exact beyond the maximum amount of a single order', async () => {
+  const operator = await user();
+  const statement = new PaymentStatementService(prisma);
+  const lines = [1, 2].map(index => '收款,total-' + index + ',total-order-' + index + ',,2026-06-13 00:08:00,2000000000,100');
+  const result = await statement.importStatement(operator.id, '大额汇总.csv', statementFile(...lines), { provider: 'epay' });
+  assert.equal(result.paymentCents, 4_000_000_000);
+  assert.equal(result.feeCents, 200);
+  assert.equal(result.openCount, 2);
 });

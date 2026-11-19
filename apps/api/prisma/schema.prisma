@@ -1633,8 +1633,70 @@ model Order {
   @@index([userId, createdAt])
   @@index([status, createdAt])
   @@index([tradeId])
+  @@index([payPlatform, paydAt])
   @@unique([userId, requestKey])
   @@map("orders")
+}
+
+model PaymentStatement {
+  id             String   @id @default(cuid())
+  provider       String
+  fileName       String
+  contentHash    String
+  importedBy     String
+  fromDay        String   @default("")
+  throughDay     String   @default("")
+  paymentCents   BigInt
+  refundCents    BigInt
+  feeCents       BigInt?
+  importedCount  Int
+  matchedCount   Int
+  missingCount   Int
+  createdAt      DateTime @default(now())
+  rows           PaymentStatementRow[]
+
+  @@unique([provider, contentHash])
+  @@index([createdAt])
+  @@map("payment_statements")
+}
+
+model PaymentStatementRow {
+  id               String   @id @default(cuid())
+  statementId      String
+  ordinal          Int
+  sourceLine       Int?
+  kind             String
+  eventRef         String   @default("")
+  orderRef         String   @default("")
+  tradeRef         String   @default("")
+  occurredAt       DateTime
+  amountCents      Int?
+  feeCents         Int?
+  localOrderId     String   @default("")
+  localAmountCents Int?
+  findingCodes     String
+  state            String
+  revision         Int      @default(0)
+  statement        PaymentStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  decisions        PaymentStatementDecision[]
+
+  @@unique([statementId, ordinal])
+  @@index([statementId, state, ordinal])
+  @@map("payment_statement_rows")
+}
+
+model PaymentStatementDecision {
+  id        String   @id @default(cuid())
+  rowId     String
+  revision  Int
+  state     String
+  note      String
+  actorId   String
+  createdAt DateTime @default(now())
+  row       PaymentStatementRow @relation(fields: [rowId], references: [id], onDelete: Cascade)
+
+  @@unique([rowId, revision])
+  @@map("payment_statement_decisions")
 }
 
 /// 支付回调原始记录：出问题时可重放、可对账
