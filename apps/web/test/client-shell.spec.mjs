@@ -233,6 +233,48 @@ test('异步首屏路由：历史面板挂载进侧栏，匿名首页不请求�
   } finally { await fixture.close(); }
 });
 
+test('手机侧栏：切换入口与历史并调整窗口时复用已挂载的会话面板', async () => {
+  const matchMedia = window.matchMedia;
+  let narrow = true;
+  const resizeListeners = new Set();
+  window.matchMedia = query => query === '(max-width:639px)' ? {
+    get matches() { return narrow; },
+    addEventListener(_, listener) { resizeListeners.add(listener); },
+    removeEventListener(_, listener) { resizeListeners.delete(listener); },
+  } : matchMedia(query);
+  let fixture;
+  try {
+    fixture = await mount({ loggedIn: true });
+    const drawer = document.querySelector('#qgc-mobile-drawer');
+    const history = drawer.querySelector('#qg-chat-history');
+    const row = history.querySelector('.cv-conv');
+    document.querySelector('.qgc-dock-more').click();
+    await settle();
+    assert.equal(drawer.open, true);
+    assert.equal(drawer.querySelectorAll('.qgc-drawer-tabs button')[0].getAttribute('aria-pressed'), 'true');
+    assert.ok(drawer.querySelector('a[href="/painting"]'));
+    assert.equal(history.style.display, 'none');
+    drawer.querySelectorAll('.qgc-drawer-tabs button')[1].click();
+    await settle();
+    assert.equal(history.style.display, '');
+    assert.equal(history.querySelector('.cv-conv'), row);
+    narrow = false;
+    for (const listener of resizeListeners) listener({ matches: false });
+    await settle();
+    assert.equal(drawer.open, false);
+    assert.equal(document.querySelector('#qgc-desktop-sidebar #qg-chat-history'), history);
+    narrow = true;
+    for (const listener of resizeListeners) listener({ matches: true });
+    await settle();
+    assert.equal(drawer.open, false);
+    assert.equal(drawer.querySelector('#qg-chat-history .cv-conv'), row);
+    assert.deepEqual(fixture.errors, []);
+  } finally {
+    await fixture?.close();
+    window.matchMedia = matchMedia;
+  }
+});
+
 test('已登录界面：会话类型筛选、打开历史与新建编辑器保持可用', async () => {
   const fixture = await mount({ loggedIn: true });
   try {

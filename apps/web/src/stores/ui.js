@@ -3,9 +3,16 @@ import { ref } from 'vue';
 
 const immersive = ref(false);
 const clientNavigationOpen = ref(false);
+const clientNavigationPane = ref('pages');
 const clientChatTitle = ref('');
 const chatActivity = ref('idle');
 
+function openClientNavigation(pane, trigger) {
+  trigger?.focus({ preventScroll: true });
+  clientNavigationPane.value = pane;
+  clientNavigationOpen.value = true;
+}
+
 export function useUi() {
-  return { immersive, clientNavigationOpen, clientChatTitle, chatActivity };
+  return { immersive, clientNavigationOpen, clientNavigationPane, openClientNavigation, clientChatTitle, chatActivity };
 }

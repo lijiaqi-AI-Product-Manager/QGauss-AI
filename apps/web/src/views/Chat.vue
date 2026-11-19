@@ -1,6 +1,6 @@
 <template>
   <Teleport defer to="#qg-chat-history">
-    <ConversationShelf :key="auth.identityRevision" :open="convOpen" :authenticated="auth.isLoggedIn" :trash="historyTrash" :groups="convGroups" :folders="folders" :folder-counts="history.folderCounts.value" :kind-counts="history.kindCounts.value" :folder="folderFilter" :query="convKeyword" :kind="conversationKind" :active-id="conversationId" :selected="selected" :selecting="selecting" :all-selected="allVisibleSelected" :loading="loadingConvs" :loading-more="history.loadingMore.value" :busy="history.busy.value" :error="history.notice.value" :total="history.total.value" :loaded="conversations.length" :unpinned-total="history.unpinnedTotal.value" :has-more="history.hasMore.value"
+    <ConversationShelf :key="auth.identityRevision" :open="convOpen" :overlay-target="historyOverlayTarget" :authenticated="auth.isLoggedIn" :trash="historyTrash" :groups="convGroups" :folders="folders" :folder-counts="history.folderCounts.value" :kind-counts="history.kindCounts.value" :folder="folderFilter" :query="convKeyword" :kind="conversationKind" :active-id="conversationId" :selected="selected" :selecting="selecting" :all-selected="allVisibleSelected" :loading="loadingConvs" :loading-more="history.loadingMore.value" :busy="history.busy.value" :error="history.notice.value" :total="history.total.value" :loaded="conversations.length" :unpinned-total="history.unpinnedTotal.value" :has-more="history.hasMore.value"
       @start="newChat" @query="value=>convKeyword=value" @kind="value=>conversationKind=value" @folder="value=>folderFilter=value" @trash="value=>historyTrash=value" @folder-command="onFolderCommand" @refresh="refreshHistory" @more="history.more" @choose="onConvClick" @command="onConvCommand" @restore="restoreConversation" @manage="toggleSelecting" @select-all="toggleSelectAll" @remove-selected="bulkDelete({ids:selected})" @clear-unpinned="bulkDelete({unpinnedOnly:true})" @add-folder="createFolder" @apps="router.push('/apps')"/>
   </Teleport>
   <EmptyChat v-if="!draftStarted && !conversationId" :models="models" :recent="historyTrash ? [] : conversations" @start="newChat" @open="openConversation" @voice="openHomeVoice" />
@@ -11,7 +11,9 @@
       <div class="cv-aurora" :class="`is-${auroraState}`" aria-hidden="true"><i></i><i></i><i></i></div>
       <div class="qgc-chat-stage">
       <header class="cv-top">
-        <button type="button" class="qg-icon-btn cv-only-narrow" :aria-label="t('conversation.openHistory')" @click="clientNavigationOpen = true">
+        <button v-if="compactComposer" type="button" class="qg-icon-btn cv-history-toggle" :aria-label="t('conversation.openHistory')"
+          :aria-expanded="clientNavigationOpen"
+          aria-haspopup="dialog" aria-controls="qgc-mobile-drawer" @click="openClientNavigation('history', $event.currentTarget)">
           <el-icon><Fold /></el-icon>
         </button>
         <button type="button" class="qg-icon-btn" :aria-label="t('appearance.open')" :title="t('shell.appearance')" @click="appearance.open = true"><ClientIcon name="palette" /></button>
@@ -311,7 +313,7 @@ const appearance = useAppearance();
 const route = useRoute();
 const router = useRouter();
 const { refresh: refreshBalance } = useBalance();
-const { immersive, clientNavigationOpen, clientChatTitle, chatActivity } = useUi();
+const { immersive, clientNavigationOpen, openClientNavigation, clientChatTitle, chatActivity } = useUi();
 
 const auth = useAuth();
 const conversationKind = ref('chat'), convKeyword = ref(''), folderFilter = ref(''), historyTrash = ref(false);
@@ -330,6 +332,7 @@ const historicalModel = ref(null);
 const input = ref('');
 const editorMedia = window.matchMedia('(max-width:639px)');
 const compactComposer = ref(editorMedia.matches);
+const historyOverlayTarget = computed(() => compactComposer.value && clientNavigationOpen.value ? '#qg-chat-history-overlays' : undefined);
 function updateEditorSize(event) { compactComposer.value = event.matches; nextTick(autosize); }
 const composerPlaceholder = computed(() => dragging.value ? ct('松开即可添加附件') : compactComposer.value ? currentLang.value === 'en' ? 'Say something...' : currentLang.value === 'zh-TW' ? '來說點什麼...' : '来说点什么...' : currentLang.value === 'en' ? 'Say something... (Shift + Enter = newline; Enter = send)' : currentLang.value === 'zh-TW' ? '來說點什麼吧...（Shift + Enter = 換行； Enter = 發送）' : '来说点什么吧...（Shift + Enter = 换行； Enter = 发送）');
 const streaming = ref(false);
@@ -551,18 +554,21 @@ async function refreshHistory(){
   }catch{if(viewActive&&auth.identityRevision===identity&&conversationViewRevision===view)history.actionError.value='操作结果暂未确认，请刷新查看。';}
   return refreshed;
 }
+function notifyHistory(type, message) {
+  ElMessage({type,message,appendTo:historyOverlayTarget.value});
+}
 async function withHistoryAction(work){
   if(!auth.isLoggedIn)return newChat();
   const action=history.beginAction();if(!action)return;
   try{return await work(action);}catch(error){
     if(action.current()&&!['cancel','close'].includes(error)){
       if(!history.actionError.value)history.actionError.value='操作结果暂未确认，请刷新查看。';
-      ElMessage.error(ct(history.actionError.value));
+      notifyHistory('error',ct(history.actionError.value));
     }
   }finally{history.finishAction(action);}
 }
 async function askFolderName(title, initial=''){
-  const {value}=await ElMessageBox.prompt(ct('分组名称'),ct(title),{inputValue:initial,inputValidator:value=>(typeof value==='string'&&value.trim().length>0&&value.trim().length<=32)||ct('名称 1–32 个字'),confirmButtonText:ct('保存'),cancelButtonText:ct('取消')});
+  const {value}=await ElMessageBox.prompt(ct('分组名称'),ct(title),{appendTo:historyOverlayTarget.value,inputValue:initial,inputValidator:value=>(typeof value==='string'&&value.trim().length>0&&value.trim().length<=32)||ct('名称 1–32 个字'),confirmButtonText:ct('保存'),cancelButtonText:ct('取消')});
   return value.trim();
 }
 async function createFolder(moveConversation){
@@ -580,7 +586,7 @@ async function onFolderCommand(folder,command){
       const name=await askFolderName('重命名分组',folder.name);if(!action.current())return;
       const result=await history.request(action,'patch','/folders/'+encodeURIComponent(folder.id),{name,expectedVersion:folder.version});if(!result||!action.current())return;
     }else{
-      await ElMessageBox.confirm(ct('删除分组「{p0}」？其中的会话会回到未分组，不会被删除。',{p0:folder.name}),ct('删除分组'),{type:'warning',confirmButtonText:ct('删除'),cancelButtonText:ct('取消')});
+      await ElMessageBox.confirm(ct('删除分组「{p0}」？其中的会话会回到未分组，不会被删除。',{p0:folder.name}),ct('删除分组'),{appendTo:historyOverlayTarget.value,type:'warning',confirmButtonText:ct('删除'),cancelButtonText:ct('取消')});
       if(!action.current())return;
       const result=await history.request(action,'del','/folders/'+encodeURIComponent(folder.id),{expectedVersion:folder.version});if(!result||!action.current())return;
       if(folderFilter.value===folder.id)folderFilter.value='';
@@ -598,7 +604,7 @@ async function onConvCommand(row,command){
   if(command==='newfolder')return createFolder(row);
   return withHistoryAction(async action=>{
     if(command==='rename'){
-      const {value}=await ElMessageBox.prompt(ct('新的会话标题'),ct('重命名'),{inputValue:row.title,inputValidator:value=>(typeof value==='string'&&value.trim().length>0&&value.trim().length<=60)||ct('标题 1–60 个字'),confirmButtonText:ct('保存'),cancelButtonText:ct('取消')});
+      const {value}=await ElMessageBox.prompt(ct('新的会话标题'),ct('重命名'),{appendTo:historyOverlayTarget.value,inputValue:row.title,inputValidator:value=>(typeof value==='string'&&value.trim().length>0&&value.trim().length<=60)||ct('标题 1–60 个字'),confirmButtonText:ct('保存'),cancelButtonText:ct('取消')});
       if(action.current())await updateConversation(row,{title:value.trim()},action);
     }else if(command==='pin')await updateConversation(row,{pinned:!row.pinned},action);
     else if(command==='unfolder'||command.startsWith('move:'))await updateConversation(row,{folderId:command==='unfolder'?null:command.slice(5)},action);
@@ -608,10 +614,10 @@ function toggleSelecting(){if(!auth.isLoggedIn)return newChat();selecting.value=
 function onConvClick(row){
   if(historyTrash.value)return restoreConversation(row);
   if(!selecting.value)return openConversation(row.id);
-  if(!selected.value.includes(row.id)&&selected.value.length>=500)return ElMessage.info(ct('一次最多选择 500 段对话，请分批整理。'));
+  if(!selected.value.includes(row.id)&&selected.value.length>=500)return notifyHistory('info',ct('一次最多选择 500 段对话，请分批整理。'));
   selected.value=selected.value.includes(row.id)?selected.value.filter(id=>id!==row.id):[...selected.value,row.id];
 }
-function toggleSelectAll(){const ids=visibleConvIds.value;if(ids.length>500)return ElMessage.info(ct('一次最多选择 500 段对话，请分批整理。'));selected.value=allVisibleSelected.value?[]:[...ids];}
+function toggleSelectAll(){const ids=visibleConvIds.value;if(ids.length>500)return notifyHistory('info',ct('一次最多选择 500 段对话，请分批整理。'));selected.value=allVisibleSelected.value?[]:[...ids];}
 function leaveArchivedConversation(){
   changeConversationView({keepDraft:true});conversationId.value=null;currentConversationTitle.value='';currentConversationVersion.value=null;messages.value=[];historicalModel.value=null;branchChoice.value={};draftStarted.value=true;loadingDetail.value=false;
   nextTick(autosize);
@@ -623,19 +629,19 @@ async function bulkDelete(body){
     if(!body.unpinnedOnly){input.targets=selected.value.map(id=>conversations.value.find(row=>row.id===id)).filter(Boolean).map(row=>({id:row.id,expectedVersion:row.version}));if(!input.targets.length)return;}
     const preview=await history.request(action,'post','/conversations/bulk-preview',input);if(!preview||!action.current())return;
     if(!Number.isInteger(preview.count)||preview.count<0||!Number.isInteger(preview.activeCount)||typeof preview.confirmation!=='string')throw Error('preview-response');
-    if(!preview.count)return ElMessage.info(ct('当前条件下没有可整理的对话。'));
+    if(!preview.count)return notifyHistory('info',ct('当前条件下没有可整理的对话。'));
     const text=ct('将 {count} 段对话移到回收站？可以在回收站恢复，原消息和记录会保留。',{count:preview.count})+(body.unpinnedOnly?' '+ct('本次覆盖当前筛选的全部页数，置顶对话会保留。'):'')+(preview.pinnedCount?' '+ct('其中包含 {count} 段置顶对话。',{count:preview.pinnedCount}):'')+(preview.activeCount?' '+ct('其中 {count} 段仍在生成，移入后会停止。',{count:preview.activeCount}):'');
-    await ElMessageBox.confirm(text,ct('移到对话回收站'),{type:'warning',confirmButtonText:ct('移入回收站'),cancelButtonText:ct('取消')});if(!action.current())return;
+    await ElMessageBox.confirm(text,ct('移到对话回收站'),{appendTo:historyOverlayTarget.value,type:'warning',confirmButtonText:ct('移入回收站'),cancelButtonText:ct('取消')});if(!action.current())return;
     const result=await history.request(action,'post','/conversations/bulk-delete',{preview:{...input,confirmation:preview.confirmation}});if(!result||!action.current())return;
     if(!Array.isArray(result.removedIds)||result.count!==result.removedIds.length||new Set(result.removedIds).size!==result.count)throw Error('removal-response');
     if(result.removedIds.includes(conversationId.value))leaveArchivedConversation();
-    selected.value=[];selecting.value=false;ElMessage.success(ct('已将 {count} 段对话移入回收站。',{count:result.count}));await refreshHistory();
+    selected.value=[];selecting.value=false;notifyHistory('success',ct('已将 {count} 段对话移入回收站。',{count:result.count}));await refreshHistory();
   });
 }
 async function restoreConversation(row){
   return withHistoryAction(async action=>{
     const result=await history.request(action,'post','/conversations/'+encodeURIComponent(row.id)+'/restore',{expectedVersion:row.version});if(!result||!action.current())return;
-    ElMessage.success(ct('对话已恢复，可在原分类继续阅读。'));await refreshHistory();
+    notifyHistory('success',ct('对话已恢复，可在原分类继续阅读。'));await refreshHistory();
   });
 }
 
@@ -662,10 +668,10 @@ function exportMarkdown() {
 async function removeConversation(row){
   return withHistoryAction(async action=>{
     const text=ct('把「{name}」移到回收站？原消息和记录会保留，可随时恢复。',{name:row.title||t('chat.new')})+(row.activeMessageId?' '+ct('这段对话仍在生成，移入后会停止。'):'');
-    await ElMessageBox.confirm(text,ct('移到对话回收站'),{type:'warning',confirmButtonText:ct('移入回收站'),cancelButtonText:ct('取消')});if(!action.current())return;
+    await ElMessageBox.confirm(text,ct('移到对话回收站'),{appendTo:historyOverlayTarget.value,type:'warning',confirmButtonText:ct('移入回收站'),cancelButtonText:ct('取消')});if(!action.current())return;
     const result=await history.request(action,'post','/conversations/'+encodeURIComponent(row.id)+'/trash',{expectedVersion:row.version});if(!result||!action.current())return;
     if(row.id===conversationId.value)leaveArchivedConversation();
-    ElMessage.success(ct('对话已移入回收站，未发送的草稿会保留。'));await refreshHistory();
+    notifyHistory('success',ct('对话已移入回收站，未发送的草稿会保留。'));await refreshHistory();
   });
 }
 
@@ -1668,10 +1674,6 @@ onUnmounted(() => {
   color: var(--qg-brand);
   background: var(--qg-brand-soft);
 }
-.cv-only-narrow {
-  display: none;
-}
-
 .cv-scroll {
   flex: 1;
   min-height: 0;
@@ -2634,9 +2636,6 @@ html.dark .cv-hero-preset-tag {
     inset: 0;
     z-index: 2000;
     background: rgba(0, 0, 0, 0.4);
-  }
-  .cv-only-narrow {
-    display: inline-grid;
   }
   .cv-conv-ops,
   .cv-actions {
