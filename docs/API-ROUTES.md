@@ -1,7 +1,7 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **367** 条路由，分布在 **38** 个控制器。
+> 共 **368** 条路由，分布在 **38** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
@@ -30,7 +30,7 @@
 | `/moderation` | 5 | `src/modules/moderation/moderation.controller.ts` |
 | `/order` | 5 | `src/modules/commerce/order.controller.ts` |
 | `/pay` | 4 | `src/modules/commerce/pay.controller.ts` |
-| `/presets` | 9 | `src/modules/presets/presets.controller.ts` |
+| `/presets` | 10 | `src/modules/presets/presets.controller.ts` |
 | `/sales` | 9 | `src/modules/commerce/sales.controller.ts` |
 | `/settings` | 4 | `src/modules/settings/settings-workspace.controller.ts` |
 | `/settings` | 3 | `src/modules/settings/settings.controller.ts` |
@@ -431,6 +431,7 @@
 | POST | `/presets` | ADMIN |
 | PATCH | `/presets/:id` | ADMIN |
 | DELETE | `/presets/:id` | ADMIN |
+| POST | `/presets/:id/restore` | ADMIN |
 
 ## /sales
 

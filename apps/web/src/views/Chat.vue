@@ -210,16 +210,19 @@
               <el-icon><Cpu /></el-icon>
               <span class="cv-chip-text">{{ compactComposer && currentModel?.displayName?.length > 6 ? currentModel.displayName.slice(0, 5) + '..' : currentModel ? currentModel.displayName : t('chat.model') }}</span><el-icon class="qgc-model-caret"><ArrowDown /></el-icon>
             </button>
-            <el-dropdown v-if="!agentId && flatPresets.length" size="small" trigger="click" @command="usePreset">
-              <button type="button" class="cv-chip qgc-compact-tool" :aria-label="t('chat.preset')" :title="t('chat.preset')">
-                <el-icon><MagicStick /></el-icon><span class="cv-chip-text">{{ t('chat.preset') }}</span>
-              </button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item v-for="p in flatPresets" :key="p.id" :command="p">{{ p.title }}</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
+            <button
+              v-if="auth.isLoggedIn && !agentId"
+              type="button"
+              class="cv-chip qgc-compact-tool"
+              :aria-label="t('chat.preset')"
+              :title="t('chat.preset')"
+              aria-haspopup="dialog"
+              :aria-expanded="promptLibraryOpen"
+              :disabled="!canBrowsePrompts"
+              @click="promptLibraryOpen = true"
+            >
+              <ClientIcon name="star" /><span class="cv-chip-text">{{ t('chat.preset') }}</span>
+            </button>
             <span class="cv-grow"></span>
             <button v-if="!agentId" type="button" class="cv-chip qgc-compact-tool cv-web-search-chip" :class="{on:webSearchOn}" :disabled="!webSearchOn&&!currentModel?.webSearchAvailable" :aria-pressed="webSearchOn" :aria-label="ct(&quot;允许联网检索&quot;)" :title="currentModel?.webSearchAvailable ? ct(&quot;按需要检索资料；本轮不带历史消息&quot;) : ct(&quot;当前模型尚未接入联网&quot;)" @click="webSearchOn=!webSearchOn"><ClientIcon name="globe" /><span class="cv-chip-text">{{ ct("联网") }}</span></button>
             <button
@@ -246,6 +249,13 @@
     </section>
 
     <ModelPicker :open="panelOpen" :models="models" :selected="model" :busy="modelSaving" @close="panelOpen = false" @select="selectModel" />
+    <PromptLibrary
+      :open="promptLibraryOpen"
+      :has-draft="input.length > 0"
+      :disabled="!canBrowsePrompts"
+      @close="promptLibraryOpen = false"
+      @apply="insertPrompt"
+    />
     <PersonalFileLibrary :open="personalFiles.open.value" :items="personalFiles.items.value" :loading="personalFiles.loading.value" :error="personalFiles.error.value" :tab="personalFiles.tab.value" :kind="personalFiles.kind.value" :page="personalFiles.page.value" :total="personalFiles.total.value" :busy-id="personalFiles.busyId.value" :disabled="streaming||loadingDetail||entryPending" @close="personalFiles.close" @tab="value=>personalFiles.filter('tab',value)" @kind="value=>personalFiles.filter('kind',value)" @search="value=>personalFiles.filter('search',value)" @page="value=>personalFiles.filter('page',value)" @refresh="personalFiles.refresh" @download="personalFiles.download" @select="reusePersonalFile" @trash="file=>personalFiles.change(file,'trash')" @restore="file=>personalFiles.change(file,'restore')"/>
   </div>
 </template>
@@ -255,7 +265,7 @@ import {chatText as ct,chatLocale} from "../i18n/chat.js";
 import AppAvatar from '../components/design/AppAvatar.vue';
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElButton, ElDropdown, ElDropdownItem, ElDropdownMenu, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
+import { ElButton, ElIcon, ElMessage, ElMessageBox } from 'element-plus';
 import { api, fetchBlobUrl, streamChat, resumeChat, waitMessageSettled } from '../api/client.js';
 import { saveGuestDraft, takeGuestDraft } from '../lib/chat-draft.js';
 import {chatAppFailure,chatBilling,chatUsage} from '../lib/chat-presentation.js';
@@ -264,6 +274,7 @@ import { citationMarkdown,webSearchReport } from '../lib/web-search.js';
 import WebSearchSources from '../components/design/WebSearchSources.vue';
 import AgentRunPanel from '../components/design/AgentRunPanel.vue';
 import PersonalFileLibrary from '../components/design/PersonalFileLibrary.vue';
+import PromptLibrary from '../components/design/PromptLibrary.vue';
 import {usePersonalFiles} from '../composables/usePersonalFiles.js';
 import {useChatAttachments} from '../composables/useChatAttachments.js';
 import {useConversationWorkspace} from '../composables/useConversationWorkspace.js';
@@ -313,7 +324,7 @@ const draftStarted = ref(!!route.query.agent);
 
 const messages = ref([]);
 const models = ref([]);
-const presets = ref([]);
+const promptLibraryOpen = ref(false);
 const model = ref('');
 const historicalModel = ref(null);
 const input = ref('');
@@ -479,11 +490,11 @@ function parseAttachments(parts) {
   }
 }
 
-const flatPresets = computed(() =>
-  presets.value.flatMap((g) => (g.items || []).map((it) => ({ ...it, group: g.name }))),
-);
-
-
+const canBrowsePrompts = computed(() => auth.isLoggedIn && !agentId.value && !streaming.value
+  && !loadingDetail.value && !entryPending.value && !appLoading.value);
+watch(canBrowsePrompts, allowed => {
+  if (!allowed) promptLibraryOpen.value = false;
+});
 
 /* ---------------- 情绪化：极光随状态变色，角色随状态换表情 ---------------- */
 const finishedAt = ref(0);
@@ -703,6 +714,7 @@ function changeConversationView({keepDraft=false}={}) {
   modelSelectionRevision += 1;
   modelSaving.value = false;
   panelOpen.value = false;
+  promptLibraryOpen.value = false;
 }
 
 /* ---------------- 滚动：只在用户停在底部时自动跟随 ---------------- */
@@ -750,14 +762,12 @@ async function loadConversations(){return history.refresh({force:true});}
 
 async function loadMeta() {
   const identity=auth.identityRevision;
-  const [m, p, q] = await Promise.all([
+  const [m, q] = await Promise.all([
     api.get('/models/available'),
-    api.get('/presets'),
     api.get('/chat/quota').catch(() => ({ limit: 0, used: 0 })),
   ]);
   if(!viewActive||!auth.isLoggedIn||identity!==auth.identityRevision)return;
   models.value = m.filter(model => !imageOnly(model));
-  presets.value = p;
   quota.value = q;
   if (!model.value && models.value.length > 0) model.value = (models.value.find((x) => x.ready) || models.value[0]).name;
 }
@@ -1005,8 +1015,12 @@ async function removeMessage(message) {
   }
 }
 
-function usePreset(preset) {
-  input.value = (preset.prompt || '') + input.value;
+function insertPrompt(prompt) {
+  if (!promptLibraryOpen.value || !canBrowsePrompts.value || typeof prompt !== 'string' || !prompt) return;
+  const draft = input.value;
+  const separator = draft && !prompt.endsWith('\n') && !draft.startsWith('\n') ? '\n\n' : '';
+  input.value = prompt + separator + draft;
+  promptLibraryOpen.value = false;
   nextTick(() => {
     autosize();
     inputEl.value?.focus();
@@ -1248,7 +1262,7 @@ let viewActive = true;
 watch(()=>auth.identityRevision,()=>{
   ElMessageBox.close();history.clear();changeConversationView();webSearchOn.value=false;
   conversationId.value=null;currentConversationTitle.value='';currentConversationVersion.value=null;messages.value=[];historicalModel.value=null;branchChoice.value={};
-  models.value=[];presets.value=[];selected.value=[];selecting.value=false;
+  models.value=[];selected.value=[];selecting.value=false;
   model.value='';input.value='';pendingFiles.value=[];clearApp();agentRead?.abort();agentId.value='';currentAgent.value=null;agentError.value='';agentLoading.value=false;draftStarted.value=false;
   loadingConvs.value=false;loadingDetail.value=false;quota.value={limit:0,used:0};
   for(const url of objectUrls)URL.revokeObjectURL(url);objectUrls.clear();for(const key of Object.keys(thumbs))delete thumbs[key];
@@ -1290,6 +1304,7 @@ watch(()=>entryKeys.map(key=>route.query[key]),(values,previous)=>{
 });
 
 function onKeydown(e) {
+  if (promptLibraryOpen.value) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault();
     newChat();
