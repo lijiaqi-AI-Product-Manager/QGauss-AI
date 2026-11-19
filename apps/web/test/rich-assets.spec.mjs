@@ -1,3 +1,4 @@
+import {navigationCatalogSource} from '../../../scripts/web/json-source.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { posix } from 'node:path';
@@ -7,7 +8,7 @@ import { richAssets } from '../../../scripts/web/rich-assets.mjs';
 async function build() {
   const bundle = await rollup({
     input: 'entry',
-    plugins: [
+    plugins:[navigationCatalogSource(),
       { name: 'test-entry', resolveId(id) { if (id === 'entry' || id === 'math') return '\0' + id; }, load(id) { if (id === '\0entry') return "export const loadMath = () => import('math');"; if (id === '\0math') return "export { default } from 'qgauss:math-style';"; } },
       richAssets(),
     ],

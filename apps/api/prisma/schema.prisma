@@ -792,11 +792,51 @@ model Menu {
   sort      Int      @default(0)
   visible   Boolean  @default(true)
   roles     String   @default("ADMIN") // 逗号分隔，如 "ADMIN" 或 "ADMIN"
+  version   Int      @default(1)
+  titleEn   String   @default("")
+  titleTw   String   @default("")
+  hint      String   @default("")
+  hintEn    String   @default("")
+  hintTw    String   @default("")
+  standardKey String @default("")
+  kind      String   @default("internal")
+  surface   String   @default("manage")
+  platform  String   @default("all")
+  targetUrl String   @default("")
+  openInNewTab Boolean @default(false)
+  requireLogin Boolean @default(true)
+  iconMode  String   @default("symbol")
+  activeIcon String  @default("")
+  iconUrl   String   @default("")
+  activeIconUrl String @default("")
+  deletedAt DateTime?
+  archiveBatchId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([parentId, sort])
+  @@index([deletedAt, parentId, sort])
   @@map("menus")
+}
+
+model MenuOperation {
+  id           String   @id
+  ownerId      String
+  familyId     String
+  tokenVersion Int
+  inputHash    String   @default("")
+  action       String   @default("")
+  status       String
+  version      Int      @default(1)
+  reason       String   @default("")
+  detail       String   @default("")
+  payloadEnc   String?
+  appliedAt    DateTime?
+  closedAt     DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([ownerId, createdAt])
+  @@map("menu_operations")
 }
 
 model ConversationFolder {

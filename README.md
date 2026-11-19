@@ -60,6 +60,7 @@ npm run verify:compose
 问题与功能改动通过 Issue 跟踪，改动分支通过 Pull Request 合入。提交要求见 [贡献规范](CONTRIBUTING.md)。
 
 - [产品状态](docs/STATUS.md)
+- [导航工作台](docs/NAVIGATION-WORKSPACE.md)
 - [设置工作台](docs/SETTINGS-WORKSPACE.md)
 - [应用图片形象](docs/APP-IMAGES.md)
 - [界面语言与设备偏好](docs/LANGUAGE-PREFERENCES.md)

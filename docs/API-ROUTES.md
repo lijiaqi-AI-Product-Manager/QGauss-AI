@@ -1,7 +1,7 @@
 # API 路由清单
 
 > 由 `apps/api/scripts/route-inventory.mjs` 静态生成，不要手改。
-> 共 **361** 条路由，分布在 **38** 个控制器。
+> 共 **367** 条路由，分布在 **38** 个控制器。
 
 | 模块 | 路由数 | 控制器 |
 |---|---|---|
@@ -23,7 +23,7 @@
 | `/image/editor` | 2 | `src/modules/image/image-editor.controller.ts` |
 | `/installation` | 4 | `src/modules/installation/installation.controller.ts` |
 | `/mail` | 6 | `src/modules/mail/mail.controller.ts` |
-| `/menus` | 5 | `src/modules/menu/menu.controller.ts` |
+| `/menus` | 11 | `src/modules/menu/menu.controller.ts` |
 | `/mindmap` | 13 | `src/modules/mindmap/mindmap.controller.ts` |
 | `/mj` | 23 | `src/modules/midjourney/mj.controller.ts` |
 | `/models` | 21 | `src/modules/models/models.controller.ts` |
@@ -306,6 +306,12 @@
 | 方法 | 路径 | 权限 |
 |---|---|---|
 | GET | `/menus` | 登录 |
+| GET | `/menus/navigation` | 访客可读，携带凭据时校验身份 |
+| GET | `/menus/entries/:id` | 访客可读，携带凭据时校验身份 |
+| GET | `/menus/workspace` | ADMIN |
+| GET | `/menus/operations/:key` | ADMIN |
+| POST | `/menus/operations/:key` | ADMIN |
+| POST | `/menus/operations/:key/close` | ADMIN |
 | GET | `/menus/admin` | ADMIN |
 | POST | `/menus` | ADMIN |
 | PATCH | `/menus/:id` | ADMIN |
