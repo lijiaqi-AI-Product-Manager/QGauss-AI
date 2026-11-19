@@ -322,7 +322,7 @@ export const CONFIG_REGISTRY: ConfigDef[] = [
     type: 'string',
     default: '',
     group: 'commerce',
-    description: '支付回调对外地址（留空则用 site.baseUrl），必须公网可达',
+    description: '支付通知使用的公开地址。正式收款需配置公网可达的 HTTPS 地址',
   },
   {
     key: 'commerce.exchangeRateLimit',

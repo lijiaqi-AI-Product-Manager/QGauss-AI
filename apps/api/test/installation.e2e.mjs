@@ -92,12 +92,16 @@ try {
   check('初始清单如实显示没有对话模型', checks.status === 200 && checks.data.canEnableDemo === true && checks.data.chatModel === null);
   check('没有创作时不伪报首份作品完成', checks.data.checks.find(item => item.id === 'creation').state === 'action');
   check('没有邮件配置时不伪报投递就绪', checks.data.checks.find(item => item.id === 'mail').state === 'optional');
+  check('新站点明确区分注册关闭、短信未配置和收款未开放',
+    checks.data.launch.registration.mode === 'admin' && checks.data.launch.phone.deliveryConfigured === false &&
+    checks.data.launch.payments.state === 'closed');
   check('管理员设置页同样不公开内部安装记录', !(await call('/settings')).data.some(row => row.key === 'installation.state'));
   check('明确开启本地体验成功', (await call('/installation/demo', 'POST', {})).status === 201);
   check('重复开启本地体验不增加渠道或模型', (await call('/installation/demo', 'POST', {})).status === 201 && await prisma.channel.count() === 1 && await prisma.aiModel.count() === 1);
   check('开启体验不会自动创建对话', await prisma.message.count() === 0);
   const ready = await call('/installation/readiness');
   check('本地体验明确标记演示与实际计费规则', ready.data.chatModel.demo === true && ready.data.chatModel.billing.mode === 'none');
+  check('启用本地体验后仍保持注册和收款关闭', ready.data.launch.registration.mode === 'admin' && ready.data.launch.payments.state === 'closed');
   const response = await fetch(base + '/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ model: 'qgauss-demo-chat', clientMsgId: randomUUID(), messages: [{ role: 'user', content: '仅验证本地首次创作，不连接外部服务。' }] }), signal: AbortSignal.timeout(20000) });
   const wire = await response.text();
   check('无种子新站点可完成首次本地对话', response.ok && /event: done/.test(wire) && !/event: error/.test(wire));

@@ -1823,6 +1823,43 @@ test('首次安装：提交拒绝回到空密码表单，离开后重新进入�
 test('启航清单：实际配置与可选项分开，打开设置不把任务标为已完成',async()=>{
  const f=await mount({loggedIn:true,admin:true,initialPath:'/welcome',realGuard:true,intercept:c=>c.url==='/api/installation/readiness'?relayJson(readinessFixture):null});try{assert.equal(document.querySelectorAll('.qsi-readiness-card').length,2);assert.match(document.body.textContent,/等待布置/);document.querySelector('.qsi-check-link').click();await settle();assert.equal(f.router.currentRoute.value.path,'/models/channels');assert.equal(f.calls.some(c=>c.url==='/api/chat/completions'),false);assert.deepEqual(f.errors,[]);}finally{await f.close();}
 });
+test('launch checklist displays local, trial, and paid states separately without activating services', async () => {
+ const readiness = {
+   ...readinessFixture,
+   chatModel: {name: 'qgauss-local-test', displayName: 'QGauss 本地演示', demo: true},
+   launch: {
+     registration: {mode: 'invite', emailVerificationRequired: true},
+     phone: null,
+     external: {state: 'closed', registrationEnabled: false},
+     payments: {state: 'configured'},
+   },
+ };
+ const fixture = await mount({loggedIn:true,admin:true,initialPath:'/welcome',intercept:call =>
+   call.url === '/api/installation/readiness' ? relayJson(readiness) : null});
+ try {
+   const rows = [...document.querySelectorAll('.qsi-launch-stages article')].map(row => row.textContent);
+   assert.equal(rows.length, 3);
+   assert.match(rows[0], /本地演示可用/);
+   assert.match(rows[1], /先连接模型/);
+   assert.match(rows[2], /已配置 · 待实测/);
+   assert.match(document.querySelector('.qsi-launch-checks').textContent, /邀请码注册.*状态未读取/s);
+   assert.ok(document.querySelector('.qsi-launch-checks a[href="/settings?group=security"]'));
+   assert.ok(document.querySelector('.qsi-launch-checks a[href="/settings?group=commerce"]'));
+   setLang('zh-TW');
+   await settle();
+   assert.match(document.querySelector('.qsi-launch-checks').textContent, /邀請碼註冊/);
+   setLang('en');
+   await settle();
+   assert.match(document.querySelector('.qsi-welcome h1').textContent, /Set up your workspace/);
+   assert.match(document.querySelector('.qsi-launch-checks').textContent, /Invite-only registration/);
+   assert.match(document.querySelector('.qsi-launch-stages').textContent, /Configured · test pending/);
+   assert.equal(fixture.calls.some(call => call.method === 'POST' && /installation|chat|pay|auth/.test(call.url)), false);
+   assert.deepEqual(fixture.errors, []);
+ } finally {
+   await fixture.close();
+   setLang('zh');
+ }
+});
 test('启航清单：本地体验需要两次明确点击，未知结果只能先核对',async()=>{
  const f=await mount({loggedIn:true,admin:true,initialPath:'/welcome',intercept:c=>c.url==='/api/installation/readiness'?relayJson(readinessFixture):c.url==='/api/installation/demo'?relayJson('合成未知结果',503):null});try{document.querySelector('.qsi-demo-card>.qsi-secondary').click();await settle();assert.equal(f.calls.some(c=>c.url==='/api/installation/demo'),false);document.querySelector('.qsi-demo-confirm .qsi-primary').click();await settle();assert.match(document.body.textContent,/开启结果尚未确认/);assert.equal(f.calls.filter(c=>c.url==='/api/installation/demo').length,1);document.querySelector('.qsi-demo-card>.qsi-secondary').click();await settle();assert.equal(f.calls.filter(c=>c.url==='/api/installation/demo').length,1);}finally{await f.close();}
 });

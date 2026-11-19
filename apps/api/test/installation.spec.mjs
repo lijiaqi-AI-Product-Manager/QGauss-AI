@@ -25,6 +25,8 @@ import { RateLimitService } from '../dist/common/ratelimit/rate-limit.service.js
 import { MailService } from '../dist/modules/mail/mail.service.js';
 import { MailOperationsService } from '../dist/modules/mail/mail-operations.service.js';
 import { AuthService } from '../dist/modules/auth/auth.service.js';
+import { LaunchReadinessService } from '../dist/modules/installation/launch-readiness.service.js';
+import { PayService } from '../dist/modules/commerce/pay.service.js';
 import { RegisterDto } from '../dist/modules/auth/dto/register.dto.js';
 import { UsersService } from '../dist/modules/users/users.service.js';
 import { validateEnvironment } from '../dist/common/config/env.check.js';
@@ -43,12 +45,67 @@ async function fixture(extra = {}) {
   const config = { get: key => values[key] }, settings = new SettingsService(prisma);
   const catalog = new ModelCatalogService(new ModelsService(prisma, null), settings);
   const mail = new MailOperationsService(prisma, new MailService(prisma, settings), settings, new RateLimitService());
-  return { prisma, settings, config, values, catalog, mail, service: new InstallationService(prisma, config, settings, catalog, mail), dbPath };
+  const phone = {policy: async () => ({deliveryReady: false, passwordEnabled: true, registrationEnabled: false})};
+  const external = {policy: async () => ({ready: false, registrationEnabled: false})};
+  const pay = new PayService(prisma, settings, null, new RateLimitService());
+  const launch = new LaunchReadinessService(settings, phone, external, pay);
+  return { prisma, settings, config, values, catalog, mail, phone, external, launch, service: new InstallationService(prisma, config, settings, catalog, mail, launch), dbPath };
 }
 const rawUser = async (db, extra = {}) => db.user.create({ data: { email: randomUUID() + '@qgauss.test', username: randomUUID(), passwordHash: await bcrypt.hash(password, 4), ...extra } });
 const rejection = status => error => error.getStatus?.() === status;
 const context = (handler, req = {}) => ({ getHandler: () => handler, getClass: () => InstallationController, switchToHttp: () => ({ getRequest: () => req }) });
 after(async () => { await Promise.all(clients.map(client => client.$disconnect())); const absolute = resolve(folder); if (!absolute.startsWith(resolve(tmpdir()) + sep + 'qgauss-installation-')) throw Error('cleanup escaped'); rmSync(absolute, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
+
+test('launch checklist separates invite registration, unavailable identity and configured payments without exposing settings', async () => {
+  const f = await fixture();
+  assert.equal((await f.launch.snapshot()).payments.state, 'closed');
+  await f.settings.set('security.registerEnabled', true);
+  await f.settings.set('security.registerInviteCode', 'synthetic-invite-only');
+  await f.settings.set('security.externalLoginEnabled', true);
+  f.external.policy = async () => { throw new Error('Synthetic read outage'); };
+  await f.settings.set('commerce.enabled', true);
+  await f.settings.set('commerce.rechargeEnabled', true);
+  await f.settings.set('commerce.payProviders', 'mock');
+  let report = await f.launch.snapshot();
+  assert.deepEqual(report.registration, {mode: 'invite', emailVerificationRequired: false});
+  assert.equal(report.phone.deliveryConfigured, false);
+  assert.equal(report.external, null);
+  assert.equal(report.payments.state, 'demo');
+
+  const synthetic = {
+    MAIL_SMTP_HOST: 'mail.qgauss.test',
+    MAIL_FROM: 'sender@qgauss.test',
+    MAIL_SMTP_USER: '',
+    MAIL_SMTP_PASS: '',
+    PAY_EPAY_GATEWAY: 'https://merchant.qgauss.test/pay',
+    PAY_EPAY_PID: 'synthetic-merchant-id',
+    PAY_EPAY_KEY: 'synthetic-credential',
+  };
+  const previous = Object.fromEntries(Object.keys(synthetic).map(key => [key, process.env[key]]));
+  try {
+    Object.assign(process.env, synthetic);
+    await f.settings.set('security.emailVerificationRequired', true);
+    await f.settings.set('commerce.payProviders', 'epay');
+    assert.equal((await f.launch.snapshot()).payments.state, 'missing');
+    await f.settings.set('commerce.payNotifyBaseUrl', 'https://callback.qgauss.test?tenant=123');
+    assert.equal((await f.launch.snapshot()).payments.state, 'missing');
+    await f.settings.set('commerce.payNotifyBaseUrl', 'https://callback.qgauss.test');
+    assert.equal((await f.launch.snapshot()).payments.state, 'missing');
+    await f.settings.set('site.baseUrl', 'https://space.qgauss.test');
+    report = await f.launch.snapshot();
+    assert.deepEqual(report.registration, {mode: 'invite', emailVerificationRequired: true});
+    assert.deepEqual(report.payments, {state: 'configured'});
+    for (const value of Object.values(synthetic).filter(Boolean)) assert.equal(JSON.stringify(report).includes(value), false);
+    assert.equal(JSON.stringify(report).includes('synthetic-invite-only'), false);
+    await f.settings.set('demo.payDisabled', true);
+    assert.equal((await f.launch.snapshot()).payments.state, 'closed');
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
 
 test('fresh installation has no implicit administrator and production requires an owner credential', async () => {
   const f = await fixture({ NODE_ENV: 'production', QGAUSS_SETUP_TOKEN: undefined });
@@ -167,9 +224,15 @@ test('readiness reports facts without claiming delivery or real provider verific
   assert.equal(before.checks.find(item => item.id === 'creation').state, 'action');
   await f.service.enableDemo(); const after = await f.service.readiness(admin.id);
   assert.equal(after.chatModel.demo, true); assert.equal(after.chatModel.billing.mode, 'none');
+  assert.equal(after.launch.liveChatConfigured, false);
   assert.equal(after.checks.find(item => item.id === 'creation').state, 'action');
   await f.service.enableDemo(); assert.equal(await f.prisma.channel.count(), 1); assert.equal(await f.prisma.aiModel.count(), 1);
   assert.equal(await f.prisma.message.count(), 0);
+  const channel = await f.prisma.channel.create({ data: { name: 'Synthetic live config', type: 'CUSTOM', baseUrl: 'https://model.qgauss.test' } });
+  await f.prisma.aiModel.create({ data: { name: 'synthetic-live-chat', displayName: 'Synthetic live chat', sort: 500, capabilities: 'chat', channels: { create: { channelId: channel.id, upstreamName: 'chat' } } } });
+  const mixed = await f.service.readiness(admin.id);
+  assert.equal(mixed.chatModel.demo, true);
+  assert.equal(mixed.launch.liveChatConfigured, true);
 });
 
 test('local demo respects an existing mixed chat/image model and never replaces its configuration', async () => {

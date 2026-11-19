@@ -58,6 +58,16 @@ function env(name: string): string {
   return String(process.env[name] ?? '').trim();
 }
 
+function httpsAddress(value: string, base = false): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password &&
+      !url.hash && (!base || !url.search);
+  } catch {
+    return false;
+  }
+}
+
 /** 参数按 key 升序拼成 k=v&k=v（跳过空值与指定排除项） */
 function signString(params: Record<string, unknown>, exclude: string[]): string {
   return Object.keys(params)
@@ -92,6 +102,30 @@ export class PayService {
       }
     }
     return out;
+  }
+
+  async configurationSummary() {
+    const [enabled, recharge, disabledForDemo, providers, callback, site] = await Promise.all([
+      this.settings.get<boolean>('commerce.enabled'),
+      this.settings.get<boolean>('commerce.rechargeEnabled'),
+      this.settings.get<boolean>('demo.payDisabled'),
+      this.providers(),
+      this.settings.get<string>('commerce.payNotifyBaseUrl'),
+      this.settings.get<string>('site.baseUrl'),
+    ]);
+    if (!enabled || !recharge || disabledForDemo) return {state: 'closed' as const};
+    const external = providers.filter(provider => provider !== 'mock');
+    if (!external.length) return {state: providers.includes('mock') ? 'demo' as const : 'missing' as const};
+
+    const originsConfigured = httpsAddress(callback, true) && httpsAddress(site, true);
+    const configured = external.some(provider => {
+      const names = provider === 'epay'
+        ? [PAY_ENV.epayGateway, PAY_ENV.epayPid, PAY_ENV.epayKey]
+        : [PAY_ENV.hupiGateway, PAY_ENV.hupiAppId, PAY_ENV.hupiAppKey];
+      const [gateway, id, credential] = names.map(env);
+      return httpsAddress(gateway) && Boolean(id && credential);
+    });
+    return {state: configured && originsConfigured ? 'configured' as const : 'missing' as const};
   }
 
   // ---------------------------------------------------------------------------
