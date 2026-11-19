@@ -9,7 +9,7 @@ import { toStr } from '../../common/params';
 import { RateLimitService } from '../../common/ratelimit/rate-limit.service';
 import { LedgerService } from './ledger.service';
 import { ORDER_STATUS } from './order.service';
-import { acceptedOffer, orderTimeout, overdueOrders } from './order-offer';
+import { acceptedOffer, orderGrantRemark, packageOrderGrant, orderTimeout, overdueOrders } from './order-offer';
 
 /**
  * 支付
@@ -245,8 +245,7 @@ export class PayService {
   // ---------------------------------------------------------------------------
 
   /**
-   * 第三方支付回调。无论成败都会落一条 PayNotify（原始报文 + IP），
-   * 出问题时可以靠它重放和对账。
+   * 第三方支付回调。区分已经验证的通知和完成履约的通知，供运营核对。
    */
   async notify(provider: string, params: Record<string, unknown>, ip: string): Promise<NotifyResult> {
     // 回调是公开接口：先按 IP 限流，避免有人用垃圾请求把 pay_notifies 表刷满
@@ -283,44 +282,39 @@ export class PayService {
     }
 
     const verified = await this.verify(name as Provider, params);
-    if (!verified.ok) {
-      await this.prisma.payNotify.update({ where: { id: record.id }, data: { error: verified.error } });
-      this.logger.warn(`支付回调验签失败（${name}）：${verified.error}`);
-      return { ok: false, message: verified.error };
-    }
+    if (!verified.ok) return fail(verified.error);
 
-    const order = await this.prisma.order.findUnique({ where: { orderId: verified.orderId } });
+    const where = { id: record.id };
+    await this.prisma.payNotify.update({
+      where,
+      data: { verified: true, orderId: verified.orderId, tradeId: verified.tradeId, amountCents: verified.amountCents },
+    });
+    const orderWhere = { orderId: verified.orderId };
+    let order = await this.prisma.order.findUnique({ where: orderWhere });
     if (!order) return fail('订单不存在');
 
-    if (order.status === ORDER_STATUS.PAID) {
-      // 重复回调：幂等返回成功，不再发货
-      await this.prisma.payNotify.update({
-        where: { id: record.id },
-        data: { verified: true, handled: true, amountCents: verified.amountCents, orderId: order.orderId },
-      });
-      return { ok: true, message: 'ok', orderId: order.orderId, fulfilled: false };
-    }
-    if (order.status !== ORDER_STATUS.UNPAID) {
-      return fail(`订单状态不允许支付（当前 ${order.status}）`);
-    }
     if (verified.amountCents !== order.totalCents) {
-      const msg = `金额不一致：订单 ${order.totalCents} 分，回调 ${verified.amountCents} 分`;
-      await this.prisma.payNotify.update({ where: { id: record.id }, data: { error: msg } });
-      return { ok: false, message: msg };
+      return fail('支付通知金额与订单不符');
     }
 
-    const fulfilled = await this.fulfill(order, name as Provider, verified.tradeId);
-    await this.prisma.payNotify.update({
-      where: { id: record.id },
-      data: {
-        verified: true,
-        handled: fulfilled,
-        amountCents: verified.amountCents,
-        orderId: order.orderId,
-        tradeId: verified.tradeId,
-      },
-    });
-    return { ok: fulfilled, message: fulfilled ? 'ok' : '订单已被处理', orderId: order.orderId, fulfilled };
+    if (order.status === ORDER_STATUS.UNPAID) {
+      try {
+        if (await this.fulfill(order, name, verified.tradeId, record.id)) {
+          return { ok: true, message: 'ok', orderId: order.orderId, fulfilled: true };
+        }
+      } catch (error) {
+        await fail('权益到账未完成');
+        throw error;
+      }
+      order = await this.prisma.order.findUnique({ where: orderWhere });
+    }
+
+    if (!order || order.status !== ORDER_STATUS.PAID) return fail('订单状态不允许支付');
+    if (order.payPlatform !== name || order.tradeId !== verified.tradeId) {
+      return fail('支付通知与已登记的交易不符');
+    }
+    await this.prisma.payNotify.update({ where, data: { handled: true } });
+    return { ok: true, message: 'ok', orderId: order.orderId, fulfilled: false };
   }
 
   /** 验签 + 解析。返回订单号与金额（分） */
@@ -389,6 +383,7 @@ export class PayService {
     },
     provider: string,
     tradeId: string,
+    noticeId?: string,
   ): Promise<boolean> {
     const defaultBps = Number(await this.settings.get<number>('commerce.defaultCommissionBps')) || 0;
     const timeout = orderTimeout(await this.settings.get<number>('commerce.orderTimeoutMinutes'));
@@ -408,7 +403,7 @@ export class PayService {
           amountCents: accepted.totalCents,
           rechargeType: 'order',
           pkgName: accepted.goodsName,
-          remark: `订单 ${accepted.orderId} 支付成功`,
+          remark: orderGrantRemark(accepted.orderId),
         });
       } else {
         // New orders use accepted entitlements; only legacy orders without a snapshot use the original lookup.
@@ -417,22 +412,17 @@ export class PayService {
           // 抛错让整个事务回滚：订单保持未支付，回调记录里留下错误，由人工补发
           throw new BusinessException(ErrorCode.INTERNAL, '订单商品已不存在，请联系客服补发', 500);
         }
-        const times = Math.max(1, accepted.count);
-        const days = pkg.days < 0 ? -1 : pkg.days * times;
         await this.ledger.grantTx(tx, accepted.userId, {
-          model3Count: pkg.model3Count * times,
-          model4Count: pkg.model4Count * times,
-          drawMjCount: pkg.drawMjCount * times,
-          agentCount: pkg.agentCount * times,
-          days,
+          ...packageOrderGrant(pkg, accepted.count),
           packageId: pkg.id,
           pkgName: pkg.name,
           rechargeType: 'order',
-          remark: `订单 ${accepted.orderId} 支付成功`,
+          remark: orderGrantRemark(accepted.orderId),
         });
       }
 
       await this.settleCommission(tx, accepted, defaultBps);
+      if (noticeId) await tx.payNotify.update({ where: { id: noticeId }, data: { handled: true } });
       return true;
     });
   }

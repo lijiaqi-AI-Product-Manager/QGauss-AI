@@ -129,6 +129,129 @@ test('corrupt nonlegacy snapshots fail closed, while legacy orders are clearly i
   assert.equal(legacy.legacyEntitlements, true); assert.equal(legacy.entitlements, null);
   assert.equal((await pay.mockPay(a.id, order.orderId)).paid, true);
 });
+
+test('verified notices remain traceable and duplicate confirmations record one delivery', async () => {
+  const buyer = await user();
+  const created = await orders.create(buyer.id, { goodsType: 'money', amountYuan: '13.50' });
+  const { orderId } = created;
+  const event = { ok: true, orderId, tradeId: 'sample-receipt', amountCents: 1350 };
+  let incoming = event;
+  const service = new PayService(prisma, settings, ledger, rate);
+  service.verify = async () => incoming;
+
+  const send = () => service.notify('epay', { sample: 'internal fixture metadata' }, '192.0.2.15');
+  const results = await Promise.all([send(), send(), send()]);
+  assert.equal(results.filter(result => result.fulfilled).length, 1);
+  assert.ok(results.every(result => result.ok));
+  assert.equal((await ledger.view(buyer.id)).balanceCents, 1350);
+
+  let review = await orders.review(orderId);
+  assert.equal(review.state, 'matched');
+  assert.equal(review.matchedNotification, true);
+  assert.equal(review.grants.length, 1);
+  assert.deepEqual(review.expectedGrant, { amountCents: 1350 });
+  assert.ok(review.notices.every(notice => notice.verified && notice.handled));
+  assert.ok(review.notices.every(notice => !('raw' in notice) && !('ip' in notice) && !('error' in notice)));
+
+  incoming = { ...event, amountCents: 1500 };
+  assert.equal((await send()).ok, false);
+  assert.equal(await prisma.payNotify.count({ where: { orderId, amountCents: 1500, verified: true, handled: false } }), 1);
+  assert.equal((await ledger.view(buyer.id)).balanceCents, 1350);
+
+  // Archived events can disagree with the stored order, even outside the displayed window.
+  const source = { orderId, tradeId: 'archived-receipt', provider: 'epay', amountCents: 1350, verified: true };
+  await prisma.payNotify.create({ data: { ...source, createdAt: new Date('2024-01-01T00:00:00Z') } });
+  await prisma.payNotify.createMany({
+    data: Array.from({ length: 15 }, () => ({
+      ...source, verified: false, raw: 'private fixture', ip: '192.0.2.20', createdAt: new Date(Date.now() + 1000),
+    })),
+  });
+  review = await orders.review(orderId);
+  assert.equal(review.state, 'attention');
+  assert.match(review.findings.join(' '), /交易号不符/);
+  assert.equal(review.matchedNotification, true);
+  assert.equal(review.notices.length, 12);
+  assert.equal(review.moreNotices, true);
+  assert.ok(review.notices.every(notice => notice.amountCents === null && notice.tradeId === null));
+});
+
+test('verified notice for an expired order is available for review without granting anything', async () => {
+  const buyer = await user();
+  const { orderId } = await orders.create(buyer.id, { goodsType: 'money', amountYuan: '2.00' });
+  await prisma.order.update({ where: { orderId }, data: { expiresAt: new Date(Date.now() - 1000) } });
+  const service = new PayService(prisma, settings, ledger, rate);
+  service.verify = async () => ({ ok: true, orderId, tradeId: 'expired-receipt', amountCents: 200 });
+  const confirmation = await service.notify('epay', {}, '192.0.2.16');
+  assert.equal(confirmation.ok, false);
+  const review = await orders.review(orderId);
+  assert.equal(review.order.status, 3);
+  assert.equal(review.state, 'attention');
+  assert.equal(review.grants.length, 0);
+  assert.match(review.findings.join(' '), /尚未记为已支付/);
+  assert.deepEqual(review.notices.map(({ verified, handled, amountCents }) => ({ verified, handled, amountCents })), [
+    { verified: true, handled: false, amountCents: 200 },
+  ]);
+});
+
+test('order review detects missing historical evidence and does not hide a damaged snapshot', async () => {
+  const buyer = await user();
+  const product = await pkg();
+  const { orderId } = await orders.create(buyer.id, intent(product));
+  await pay.mockPay(buyer.id, orderId);
+  assert.equal((await orders.review(orderId)).state, 'demo');
+
+  await prisma.accountLog.updateMany({ where: { userId: buyer.id }, data: { model3Count: 1 } });
+  assert.match((await orders.review(orderId)).findings.join(' '), /实际到账与下单权益不符/);
+  await prisma.order.update({ where: { orderId }, data: { status: 4, goodsSnapshot: '' } });
+  const legacy = await orders.review(orderId);
+  assert.equal(legacy.order.legacyEntitlements, true);
+  assert.match(legacy.findings.join(' '), /旧订单缺少下单权益快照.*退款凭证/);
+
+  await prisma.order.update({ where: { orderId }, data: { goodsSnapshot: '{' } });
+  const damaged = await orders.review(orderId);
+  assert.match(damaged.findings.join(' '), /快照无法读取/);
+  const list = await orders.manage({ keyword: orderId });
+  assert.equal(list.items[0].orderId, orderId);
+  assert.equal(list.items[0].entitlements, null);
+});
+
+test('admin order totals use the complete date and platform filter and separate demo collections', async () => {
+  const buyer = await user();
+  const records = [
+    ['before', '2026-04-08T15:59:59Z', 'epay', 1, 1499],
+    ['opening', '2026-04-08T16:00:00Z', 'epay', 1, 2250],
+    ['end', '2026-04-09T15:59:59Z', 'hupi', 1, 3000],
+    ['demo', '2026-04-09T10:00:00Z', 'mock', 1, 731],
+    ['after', '2026-04-09T16:00:00Z', 'epay', 1, 999],
+  ];
+  const prefix = randomUUID();
+  await prisma.order.createMany({
+    data: records.map(([suffix, createdAt, payPlatform, status, totalCents]) => ({
+      orderId: prefix + '-' + suffix, userId: buyer.id, goodsId: 'fixture', goodsType: 'money',
+      createdAt: new Date(createdAt), payPlatform, status, totalCents, priceCents: totalCents,
+    })),
+  });
+  const filters = { fromDay: '2026-04-09', throughDay: '2026-04-09', userId: buyer.id };
+  const list = await orders.manage({ ...filters, pageSize: 1 });
+  assert.equal(list.items.length, 1);
+  assert.equal(list.items[0].orderId, prefix + '-end');
+  assert.equal(list.total, 3);
+  assert.deepEqual(list.overview, { paidCents: 5250, demoCents: 731, waitingCount: 0 });
+  const onlyDemo = await orders.manage({ ...filters, platform: 'mock', status: '1' });
+  assert.equal(onlyDemo.total, 1);
+  assert.deepEqual(onlyDemo.overview, { paidCents: 0, demoCents: 731, waitingCount: 0 });
+  await assert.rejects(() => orders.manage({ fromDay: '2026-02-30' }), error => error.getStatus() === 400);
+  await assert.rejects(() => orders.manage({ ...filters, throughDay: '2026-04-08' }), error => error.getStatus() === 400);
+
+  const highValue = await user();
+  await prisma.order.createMany({ data: [1, 2].map(number => ({
+    orderId: prefix + '-large-' + number, userId: highValue.id, goodsId: 'fixture', goodsType: 'money',
+    priceCents: 1_200_000_000, totalCents: 1_200_000_000, status: 1, payPlatform: 'epay',
+  })) });
+  const largeTotals = await orders.manage({ userId: highValue.id });
+  assert.equal(largeTotals.overview.paidCents, 2_400_000_000);
+});
+
 test('gateway URLs preserve signed Unicode and ampersands, return to the exact order, and reject unsafe schemes', async () => {
   const old = Object.fromEntries(['PAY_EPAY_GATEWAY','PAY_EPAY_PID','PAY_EPAY_KEY'].map(key => [key, process.env[key]]));
   const a = await user(), offer = await pkg({ name: '写作 & 绘画 + 灵感' }), order = await orders.create(a.id, intent(offer));

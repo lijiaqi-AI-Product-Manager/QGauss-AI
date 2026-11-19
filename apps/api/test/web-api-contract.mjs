@@ -42,6 +42,7 @@ const ROUTES = new Set([
   'POST /order/create',
   'GET /order/list',
   'GET /order/manage',
+  'GET /order/manage/x',
   'GET /order/detail/x',
   'POST /order/close/x',
   'POST /pay/prepare/x',
@@ -83,6 +84,7 @@ function extract(source) {
     let path = m[2];
     path = path.split('?')[0];
     path = path.replace(/\$\{[^}]*\}/g, 'x'); // 模板变量归一化
+    if (path.endsWith('/') && /^\s*\+\s*encodeURIComponent\(/.test(source.slice(re.lastIndex))) path += 'x';
     found.push({ method, path });
   }
   return found;

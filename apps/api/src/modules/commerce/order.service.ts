@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID, createHash } from 'node:crypto';
-import { acceptedOffer, captureOffer, offerRevision, validOffer, orderTimeout, overdueOrders } from './order-offer';
+import { acceptedOffer, captureOffer, offerRevision, orderGrantRemark, packageOrderGrant, validOffer, orderTimeout, overdueOrders } from './order-offer';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { BusinessException, ErrorCode } from '../../common/exceptions/business.exception';
-import { formatCents, yuanToCents } from '../../common/money/money';
+import { commissionCents, formatCents, yuanToCents } from '../../common/money/money';
 import { page, toInt, toStr } from '../../common/params';
 import { RateLimitService } from '../../common/ratelimit/rate-limit.service';
 
@@ -16,7 +16,7 @@ import { RateLimitService } from '../../common/ratelimit/rate-limit.service';
  *   0 未支付 ——create--> 1 已支付
  *   0 未支付 ——超时/手动关闭--> 3 已关闭
  *   0 未支付 ——渠道返回失败--> 2 支付失败
- *   1 已支付 ——后台退款--> 4 已退款
+ *   4 已退款是历史状态，退款凭证需另外核实。
  * 只有 0 可以迁移到 1，这个约束由 `updateMany({ status: 0 })` 的影响行数保证。
  */
 
@@ -35,6 +35,29 @@ const STATUS_TEXT: Record<number, string> = {
   3: '已关闭',
   4: '已退款',
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const REVIEW_NOTICE_LIMIT = 12;
+
+function orderReviewDay(value: unknown): Date | undefined {
+  if (value === undefined || value === '') return undefined;
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const utc = new Date(value + 'T00:00:00Z');
+    if (Number.isFinite(utc.getTime()) && utc.toISOString().slice(0, 10) === value) {
+      return new Date(utc.getTime() - 8 * 60 * 60 * 1000);
+    }
+  }
+  throw new BusinessException(ErrorCode.PARAM_INVALID, '下单日期格式不正确', 400);
+}
+
+function reviewOffer(order: { goodsType: string; goodsSnapshot: string }) {
+  if (order.goodsType !== 'package') return { offer: null, unreadable: false };
+  try {
+    return { offer: acceptedOffer(order.goodsSnapshot), unreadable: false };
+  } catch {
+    return { offer: null, unreadable: true };
+  }
+}
 
 @Injectable()
 export class OrderService {
@@ -140,8 +163,7 @@ export class OrderService {
   }
 
   /** 后台订单列表 */
-  async manage(q: { page?: unknown; pageSize?: unknown; status?: unknown; userId?: unknown; keyword?: unknown }) {
-    await this.expireStale();
+  async manage(q: Record<string, unknown>) {
     const { skip, take, page: p, pageSize } = page(q);
     const where: Prisma.OrderWhereInput = {};
     if (q.status !== undefined && q.status !== '') where.status = toInt(q.status, 0, 0, 4, '状态');
@@ -149,12 +171,124 @@ export class OrderService {
     if (userId) where.userId = userId;
     const keyword = toStr(q.keyword, '', 64).trim();
     if (keyword) where.OR = [{ orderId: { contains: keyword } }, { tradeId: { contains: keyword } }];
+    const platform = toStr(q.platform, '', 20).trim();
+    if (platform) where.payPlatform = platform;
+    const from = orderReviewDay(q.fromDay);
+    const through = orderReviewDay(q.throughDay);
+    if (from && through && through < from) {
+      throw new BusinessException(ErrorCode.PARAM_INVALID, '结束日期应晚于或等于开始日期', 400);
+    }
+    if (from || through) {
+      where.createdAt = { gte: from, lt: through && new Date(through.getTime() + DAY_MS) };
+    }
 
-    const [items, total] = await Promise.all([
-      this.prisma.order.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip, take }),
-      this.prisma.order.count({ where }),
-    ]);
-    return { items: items.map((o) => this.view(o)), total, page: p, pageSize };
+    await this.expireStale();
+    const [items, groups] = await this.prisma.$transaction(async tx => {
+      const groups = await tx.order.groupBy({
+        where, by: ['status', 'payPlatform'],
+        _count: { _all: true }, _sum: { totalCents: true },
+      });
+      const items = await tx.order.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip, take });
+      return [items, groups] as const;
+    });
+    let total = 0;
+    const overview = { paidCents: 0, demoCents: 0, waitingCount: 0 };
+    for (const group of groups) {
+      total += group._count._all;
+      if (group.status === ORDER_STATUS.UNPAID) overview.waitingCount += group._count._all;
+      if (group.status === ORDER_STATUS.PAID) {
+        const key = group.payPlatform === 'mock' ? 'demoCents' : 'paidCents';
+        overview[key] += group._sum.totalCents ?? 0;
+      }
+    }
+    return { items: items.map(o => this.view(o, reviewOffer(o).offer)), total, page: p, pageSize, overview };
+  }
+
+  /** 核对站内收款、权益及佣金凭证，按同一读快照比较。 */
+  async review(orderId: string) {
+    return this.prisma.$transaction(async tx => {
+      const order = await tx.order.findUnique({ where: { orderId: toStr(orderId, '', 64) } });
+      if (!order) throw new BusinessException(ErrorCode.ORDER_NOT_FOUND, '订单不存在', 404);
+
+      const paid = order.status === ORDER_STATUS.PAID;
+      const refunded = order.status === ORDER_STATUS.REFUNDED;
+      const completedPayment = paid || refunded;
+      const demo = order.payPlatform === 'mock';
+      const scope = { orderId: order.orderId };
+      const verified = { ...scope, verified: true };
+      const sort = [{ createdAt: 'desc' as const }, { id: 'desc' as const }];
+      const [notices, matchingNotice, conflict, grants, commissions] = await Promise.all([
+        tx.payNotify.findMany({
+          where: scope, orderBy: sort, take: REVIEW_NOTICE_LIMIT + 1,
+          select: { id: true, provider: true, tradeId: true, amountCents: true, verified: true, handled: true, createdAt: true },
+        }),
+        completedPayment && !demo && order.tradeId && order.payPlatform
+          ? tx.payNotify.findFirst({
+              where: { ...verified, handled: true, provider: order.payPlatform, tradeId: order.tradeId, amountCents: order.totalCents },
+              select: { id: true },
+            })
+          : null,
+        tx.payNotify.findFirst({
+          where: completedPayment ? {
+            ...verified,
+            OR: [
+              { amountCents: { not: order.totalCents } },
+              { provider: { not: order.payPlatform } },
+              { tradeId: { not: order.tradeId } },
+            ],
+          } : verified,
+          select: { id: true },
+        }),
+        tx.accountLog.findMany({
+          where: { userId: order.userId, rechargeType: 'order', remark: orderGrantRemark(order.orderId) },
+          orderBy: sort, take: 2,
+          select: { id: true, packageId: true, amountCents: true, model3Count: true, model4Count: true, drawMjCount: true, agentCount: true, days: true, createdAt: true },
+        }),
+        tx.salesRecord.findMany({
+          where: scope, orderBy: sort, take: 2,
+          select: { id: true, inviteeUserId: true, orderCents: true, commissionCents: true, commissionBps: true, settled: true, createdAt: true },
+        }),
+      ]);
+
+      const { offer, unreadable } = reviewOffer(order);
+      const expectedGrant = order.goodsType === 'money' ? { amountCents: order.totalCents } : offer ? packageOrderGrant(offer, order.count) : null;
+      const findings: string[] = [];
+      if (conflict) findings.push(completedPayment ? '已验证通知与订单的金额、渠道或交易号不符' : '存在已验证的支付通知，订单尚未记为已支付');
+      if (completedPayment && !demo && !matchingNotice) findings.push('缺少与订单匹配且已处理的支付通知');
+      if (unreadable) findings.push('下单权益快照无法读取');
+      else if (completedPayment && order.goodsType === 'package' && !offer) findings.push('旧订单缺少下单权益快照');
+
+      if (completedPayment && grants.length === 0) findings.push('缺少权益到账凭证');
+      if (!completedPayment && grants.length > 0) findings.push('未确认收款的订单存在权益到账凭证');
+      if (grants.length > 1) findings.push('同一订单存在多条权益到账凭证');
+      if (expectedGrant && grants.some(grant =>
+        Object.entries(expectedGrant).some(([key, value]) => grant[key as keyof typeof grant] !== value) ||
+        (offer && (grant.packageId !== offer.id || grant.amountCents !== 0))
+      )) findings.push('实际到账与下单权益不符');
+      if (commissions.length > 1) findings.push('同一订单存在多条佣金凭证');
+      if (commissions.some(commission =>
+        !completedPayment || !commission.settled || commission.inviteeUserId !== order.userId ||
+        commission.orderCents !== order.totalCents ||
+        commission.commissionCents <= 0 || commission.commissionBps > 10_000 ||
+        commission.commissionCents !== commissionCents(order.totalCents, commission.commissionBps)
+      )) findings.push('佣金凭证需人工核对');
+      if (refunded) findings.push('退款凭证需在线下核对');
+
+      return {
+        order: this.view(order, offer),
+        state: findings.length ? 'attention' : paid ? (demo ? 'demo' : 'matched') : 'open',
+        findings, expectedGrant,
+        matchedNotification: !!matchingNotice,
+        notices: notices.slice(0, REVIEW_NOTICE_LIMIT).map(notice => ({
+          ...notice,
+          tradeId: notice.verified ? notice.tradeId : null,
+          amountCents: notice.verified ? notice.amountCents : null,
+        })),
+        moreNotices: notices.length > REVIEW_NOTICE_LIMIT,
+        grants: grants.map(({ packageId, ...grant }) => grant),
+        commissions: commissions.map(({ inviteeUserId, ...commission }) => commission),
+      };
+    });
   }
 
   /** 关闭未支付订单（用户主动取消） */
@@ -192,7 +326,7 @@ export class OrderService {
     createdAt: Date;
     goodsSnapshot?: string;
     expiresAt?: Date | null;
-  }) {
+  }, entitlements = o.goodsType === 'package' ? acceptedOffer(o.goodsSnapshot) : null) {
     return {
       orderId: o.orderId,
       goodsType: o.goodsType,
@@ -210,7 +344,7 @@ export class OrderService {
       paydAt: o.paydAt,
       createdAt: o.createdAt,
       expiresAt: o.expiresAt ?? null,
-      entitlements: o.goodsType === 'package' ? acceptedOffer(o.goodsSnapshot) : null,
+      entitlements,
       legacyEntitlements: o.goodsType === 'package' && !o.goodsSnapshot,
     };
   }
