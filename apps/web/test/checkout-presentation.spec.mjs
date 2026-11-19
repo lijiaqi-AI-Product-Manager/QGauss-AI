@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkoutCents, checkoutMoney, paymentHref, cardCode, pendingCheckout, orderState, packageDuration, orderBenefits } from '../src/lib/checkout-presentation.js';
+import { orderCsv, orderDate } from '../src/components/admin/order-review-format.js';
 test('checkout parses exact cents and enforces persisted integer limits', () => {
   assert.equal(checkoutCents(' 1.09 '), 109); assert.equal(checkoutCents('21474836.47'), 2147483647);
   for (const value of ['0','-1','1.001','1e2','21474836.48','',null]) assert.equal(checkoutCents(value), null);
@@ -27,4 +28,16 @@ test('order receipts multiply the accepted unit entitlements, retaining perpetua
   const offer = {days:30,model3Count:10,model4Count:5,drawMjCount:2,agentCount:1};
   assert.deepEqual(orderBenefits(offer,2),{days:60,model3Count:20,model4Count:10,drawMjCount:4,agentCount:2});
   assert.equal(orderBenefits({...offer,days:-1},3).days,-1);assert.equal(offer.model3Count,10);
+});
+
+test('order exports preserve currency units, long references and local business dates', () => {
+  const csv = orderCsv([
+    ['名称', '交易号', '金额（分）', '时间'],
+    ['+会员，包含"权益"', '12345678901234567890', 1850, orderDate('2026-04-08T16:00:00Z')],
+  ]);
+  assert.ok(csv.startsWith('\uFEFF'));
+  assert.ok(csv.includes("\"'+会员"));
+  assert.ok(csv.includes('""权益""'));
+  assert.ok(csv.includes('"\'12345678901234567890","1850","2026-04-09 00:00:00"'));
+  assert.equal(orderDate(null), '—');
 });

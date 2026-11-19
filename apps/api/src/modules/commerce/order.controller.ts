@@ -28,6 +28,12 @@ export class OrderController {
     return this.order.manage(q);
   }
 
+  @Roles('ADMIN')
+  @Get('manage/:orderId')
+  review(@Param('orderId') orderId: string) {
+    return this.order.review(orderId);
+  }
+
   @Get('detail/:orderId')
   detail(@CurrentUser() me: AuthUser, @Param('orderId') orderId: string) {
     return this.order.detail(me.id, orderId, me.role === 'ADMIN');

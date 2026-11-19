@@ -72,6 +72,7 @@ const COMMERCE_ROUTES = [
   ['POST', '/order/create'],
   ['GET', '/order/list'],
   ['GET', '/order/manage'],
+  ['GET', '/order/manage/x'],
   ['GET', '/order/detail/x'],
   ['POST', '/order/close/x'],
   // 支付
@@ -351,6 +352,18 @@ async function main() {
 
   const after = (await api('/balance/query')).body?.counts?.model3 ?? 0;
   ok('支付后次数到账 10 次', after - before === 10, `before=${before} after=${after}`);
+
+  const reviewPath = '/order/manage/' + orderId;
+  ok('订单本人无法读取管理员核对单', (await api(reviewPath)).status === 403);
+  token = savedToken;
+  const review = await api(reviewPath);
+  ok('管理员核对单标明模拟付款并匹配实际发放', isOk(review.status) && review.body?.state === 'demo' &&
+    review.body?.expectedGrant?.model3Count === 10 && review.body?.grants?.[0]?.model3Count === 10);
+  const backoffice = await api('/order/manage?keyword=' + orderId + '&platform=mock&status=1');
+  ok('后台筛选汇总将模拟付款独立呈现', backoffice.body?.total === 1 && backoffice.body?.overview?.paidCents === 0 &&
+    backoffice.body?.overview?.demoCents === 1990);
+  ok('管理员核对不存在的订单得到业务 404', (await api('/order/manage/no-such-order')).status === 404);
+  token = checkoutBuyerToken;
 
   const payTwice = await api(`/pay/mock/${orderId}`, { method: 'POST' });
   ok('重复支付被拒（409）', payTwice.status === 409, `status=${payTwice.status}`);

@@ -21,6 +21,21 @@ export function validOffer(value: OrderOffer): boolean {
     Number.isSafeInteger(value.days) && value.days >= -1 && value.days <= 36500;
 }
 export function offerRevision(offer: OrderOffer): string { return createHash('sha256').update(JSON.stringify(offer)).digest('hex'); }
+export function orderGrantRemark(orderId: string): string {
+  return `订单 ${orderId} 支付成功`;
+}
+
+export function packageOrderGrant(offer: Pick<OrderOffer, 'days' | 'model3Count' | 'model4Count' | 'drawMjCount' | 'agentCount'>, count: number) {
+  const quantity = Math.max(1, count);
+  return {
+    model3Count: offer.model3Count * quantity,
+    model4Count: offer.model4Count * quantity,
+    drawMjCount: offer.drawMjCount * quantity,
+    agentCount: offer.agentCount * quantity,
+    days: offer.days < 0 ? -1 : offer.days * quantity,
+  };
+}
+
 export function acceptedOffer(value: string | undefined): OrderOffer | null {
   if (!value) return null;
   try { const offer = JSON.parse(value); if (validOffer(offer)) return offer; } catch {}
