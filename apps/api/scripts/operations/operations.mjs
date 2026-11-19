@@ -1,6 +1,6 @@
 import { DatabaseSync, backup } from 'node:sqlite';
 import { randomUUID, createHash, createDecipheriv } from 'node:crypto';
-import { lstat, realpath, mkdir, mkdtemp, rm, copyFile, readFile, readdir, writeFile, rename, chmod } from 'node:fs/promises';
+import { lstat, realpath, mkdir, mkdtemp, rm, copyFile, readFile, readdir, writeFile, rename, chmod, link } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, join, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +10,7 @@ import leases from '../../prisma/data-lease.cjs';
 import policies from '../../dist/common/security/password-policy.js';
 import environment from '../../dist/common/config/env.check.js';
 import mailReceipts from '../../dist/modules/mail/mail-receipt.js';
-import { backupKey, fileDigest, portablePath, encryptBundle, decryptBundle } from './archive.mjs';
+import { backupKey, fileDigest, portablePath, encryptBundle, decryptBundle, validateManifest } from './archive.mjs';
 
 const apiRoot = fileURLToPath(new URL('../../',import.meta.url));
 const inside = (parent,child) => { const value=relative(parent,child);return value==='' || value!== '..' && !value.startsWith('..'+sep) && !/^[A-Za-z]:|^[/\\]/.test(value); };
@@ -167,6 +167,90 @@ export async function restoreEncryptedBackup({input,keyFile,destination}) {
     await writeFile(join(target,'RESTORE-READY.json'),JSON.stringify(receipt,null,2)+'\n',{flag:'wx',mode:0o600});
     return receipt;
   });
+}
+
+function localConfigAssignment(name, value) {
+  for (const quote of ['"', "'", '`']) {
+    if (value.includes(quote)) continue;
+    const line = name + '=' + quote + value + quote;
+    if (parseEnv(line)[name] === value) return line;
+  }
+  throw Error('恢复目录路径无法写入启动配置');
+}
+
+export async function prepareRestoredEnvironment({ destination }) {
+  if (!destination) throw Error('请提供已恢复的 destination 路径');
+  const root = await realpath(destination);
+  const bundle = join(root, 'bundle');
+  const receiptFile = join(root, 'RESTORE-READY.json');
+  const manifestFile = join(bundle, 'manifest.json');
+  const sourceEnv = join(bundle, 'environment/original.env');
+  const database = join(bundle, 'database/qgauss.db');
+  const storage = join(bundle, 'storage');
+  const output = join(root, '.env.recovered');
+  await absent(output);
+
+  for (const folder of [bundle, dirname(sourceEnv), dirname(database), storage]) {
+    if (!(await lstat(folder)).isDirectory() || await realpath(folder) !== folder) {
+      throw Error('恢复目录结构无效');
+    }
+  }
+  for (const file of [receiptFile, manifestFile, sourceEnv, database]) await regular(file);
+  const receipt = JSON.parse(await readFile(receiptFile, 'utf8'));
+  const manifest = validateManifest(JSON.parse(await readFile(manifestFile, 'utf8')));
+  if (receipt.restored !== true || receipt.id !== manifest.id || receipt.files !== manifest.files.length) {
+    throw Error('恢复凭证与文件清单不一致');
+  }
+
+  const originalBytes = await readFile(sourceEnv);
+  const sourceEntry = manifest.files.find(entry => entry.path === 'environment/original.env');
+  if (originalBytes.length !== sourceEntry.bytes || createHash('sha256').update(originalBytes).digest('hex') !== sourceEntry.sha256) {
+    throw Error('恢复文件内容已变化');
+  }
+  const original = originalBytes.toString('utf8');
+  const previous = parseEnv(original);
+  const webDist = resolve(apiRoot, '../web/dist');
+  const publicRoots = [resolve(apiRoot, '../web/public'), webDist];
+  if (previous.WEB_DIST) publicRoots.push(resolve(apiRoot, previous.WEB_DIST));
+  if (publicRoots.some(folder => inside(folder, output))) throw Error('启动配置不能保存在网页公共目录');
+  const paths = {
+    DATABASE_URL: 'file:' + database.replace(/\\/g, '/'),
+    DATABASE_FILE: database,
+    STORAGE_DRIVER: 'local',
+    STORAGE_DIR: storage,
+    WEB_DIST: webDist,
+  };
+  leases.sqliteFileFromUrl(paths.DATABASE_URL);
+  const config = original + '\n\n' + Object.entries(paths).map(([name, value]) => localConfigAssignment(name, value)).join('\n') + '\n';
+  const parsed = parseEnv(config);
+  const expected = { ...previous, ...paths };
+  if (Object.keys(parsed).length !== Object.keys(expected).length ||
+      Object.entries(expected).some(([name, value]) => parsed[name] !== value)) {
+    throw Error('原运行配置无法完整写入启动副本');
+  }
+  environment.validateEnvironment(parsed);
+
+  const lease = leases.acquireDataLease(database);
+  try {
+    for (const entry of manifest.files) {
+      const file = join(bundle, entry.path);
+      if (await realpath(dirname(file)) !== dirname(file)) throw Error('恢复文件路径含链接');
+      await regular(file);
+      const digest = await fileDigest(file);
+      if (digest.bytes !== entry.bytes || digest.sha256 !== entry.sha256) throw Error('恢复文件内容已变化');
+    }
+    const checked = checkDatabase(database, parsed);
+    if (JSON.stringify(checked.migrations) !== JSON.stringify(manifest.migrations)) throw Error('恢复迁移历史与文件清单不一致');
+    await checkFiles(bundle, checked, manifest.files);
+    await privateStage(root, async stage => {
+      const generated = join(stage, '.env.recovered');
+      await writeFile(generated, config, { flag: 'wx', mode: 0o600 });
+      await link(generated, output);
+    });
+  } finally {
+    lease.close();
+  }
+  return { prepared: true, id: manifest.id, file: '.env.recovered', automaticStartup: false };
 }
 
 export async function recoverAdministrator(options) {

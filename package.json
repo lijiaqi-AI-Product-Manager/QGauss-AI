@@ -39,6 +39,7 @@
     "ops:backup": "node apps/api/scripts/operations/cli.mjs backup",
     "ops:verify": "node apps/api/scripts/operations/cli.mjs verify",
     "ops:restore": "node apps/api/scripts/operations/cli.mjs restore",
+    "ops:prepare-restore": "node apps/api/scripts/operations/cli.mjs prepare-restore",
     "ops:recover-admin": "node apps/api/scripts/operations/cli.mjs recover-admin",
     "ops:inspect": "node apps/api/scripts/operations/cli.mjs inspect",
     "preview": "node scripts/preview/serve-preview.mjs",

@@ -42,16 +42,19 @@ Windows 需要先停止占用 Prisma 客户端的服务再生成客户端。迁�
 
 ## 加密备份与恢复
 
-维护命令应在服务停止后运行。备份密钥与备份文件分开保管，并复制到其他设备。
+先构建应用，再在相应服务停止后运行维护命令。备份密钥与备份文件分开保管，并复制到其他设备。
 
 ```bash
 npm run ops:keygen -- --key-file <新密钥文件>
 npm run ops:backup -- --database <数据库> --storage <存储目录> --env-file <运行配置> --key-file <密钥文件> --output <新备份文件.qgb>
 npm run ops:verify -- --input <备份文件.qgb> --key-file <密钥文件>
 npm run ops:restore -- --input <备份文件.qgb> --key-file <密钥文件> --destination <新恢复目录>
+npm run ops:prepare-restore -- --destination <已恢复目录>
 ```
 
-备份包含一致性数据库快照、存储与运行配置，采用独立密钥加密。恢复只输出到新目录，不覆盖现有站点，也不自动启动。切换时必须调整数据库和存储路径，检查域名、外部服务及未结束任务。当前支持 SQLite 与本地存储。
+备份包含一致性数据库快照、存储与运行配置，采用独立密钥加密。恢复输出到新目录。准备启动配置时会核对恢复文件并生成 `.env.recovered`，保留原配置及密钥，数据库和附件路径指向该恢复目录。生成操作只创建新文件。当前支持 SQLite 与本地存储。
+
+在目标机器构建应用，从独立工作目录启动时用 `node --env-file=<恢复目录>/.env.recovered <应用目录>/apps/api/dist/main.js` 读取新配置。切换前核对域名、外部服务和未结束任务。发布检查会在两个独立运行环境中搬迁合成备份，并验证原账户、对话与附件。
 
 管理员恢复使用 `ops:inspect` 与 `ops:recover-admin`，仅支持既有管理员，不提升普通账户权限。恢复前自动建立加密备份；密码由私有文件提供，不通过命令行明文传递。
 
