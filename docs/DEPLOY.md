@@ -28,7 +28,7 @@ API 和静态页面由同一进程托管，默认端口为 9520。公开部署�
 
 ## 数据升级
 
-当前提供 41 个 SQLite 迁移。升级前确认生成、上传、结算和维护任务已经结束，停止服务并保全数据库、存储与运行配置；再执行：
+迁移顺序以 `apps/api/prisma/migrations` 为准。升级前确认生成、上传、结算和维护任务已经结束，停止服务并保全数据库、存储与运行配置，再执行：
 
 ```bash
 npm run prisma:generate -w @qgauss/api
@@ -64,4 +64,4 @@ docker compose -f docker-compose.deploy.yml config --quiet
 docker compose -f docker-compose.deploy.yml up -d --build
 ```
 
-Compose 配置检查与容器实际启动是不同的验收项。镜像构建、真实启动、负载与离机恢复应在目标环境分别验证。
+`npm run verify:compose` 检查 Compose 配置。`npm run verify:container` 需要可用的 Docker 引擎，会构建镜像，并在一个无外部网络、独立数据卷的容器中验证首次安装、登录、首份离线对话及重启后的历史保留。公开域名、真实服务、负载与离机恢复在目标环境验收。

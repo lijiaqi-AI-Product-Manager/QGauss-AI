@@ -30,8 +30,11 @@ try {
 
   // Follow actual relative imports from seed.ts and verify every source is present in the runner.
   const dockerfile = readFileSync(join(root, 'Dockerfile'), 'utf8');
+  const ignore = readFileSync(join(root, '.dockerignore'), 'utf8').split(/\r?\n/);
+  ensure(!/^(?:COPY|ADD)\s+\.\s+/im.test(dockerfile) && ignore.includes('artifacts/'), '容器构建应只复制所需源码，并排除本地产物目录');
   const copies = [...dockerfile.matchAll(/^COPY --from=builder \/app\/(\S+) \.\/(\S+)$/gm)].map(match => ({ source: resolve(root, match[1]), target: resolve(root, match[2]) }));
-  const available = file => copies.some(copy => copy.source === copy.target && (file === copy.target || statSync(copy.source).isDirectory() && file.startsWith(copy.target + sep)));
+  const available = file => copies.some(copy => copy.source === copy.target &&
+    (file === copy.target || file.startsWith(copy.target + sep) && existsSync(copy.source) && statSync(copy.source).isDirectory()));
   const visited = new Set();
   function inspect(file) {
     if (visited.has(file)) return;
