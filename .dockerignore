@@ -21,7 +21,7 @@ apps/api/storage
 apps/web/.qgauss-build-*
 apps/web/.qgauss-build.lock
 research/
+artifacts/
 apps/api/prisma/backups/
-.qgauss-installation-*
+.qgauss-*
 apps/api/prisma/*.qgauss-lock.sqlite*
-.qgauss-operations-*/

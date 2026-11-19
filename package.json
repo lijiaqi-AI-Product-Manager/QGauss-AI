@@ -17,6 +17,7 @@
     "web:measure": "node scripts/web/measure-initial-route.mjs",
     "verify:publication": "node scripts/web/verify-live-publication.mjs",
     "verify:compose": "node scripts/setup/verify-compose.mjs",
+    "verify:container": "node scripts/setup/verify-container.mjs",
     "setup": "npm run prisma:generate -w @qgauss/api && npm run db:init -w @qgauss/api && npm run seed -w @qgauss/api",
     "setup:guided": "node scripts/setup/guided.mjs",
     "serve:prod": "npm run build && npm run start -w @qgauss/api",

@@ -8,7 +8,15 @@ COPY apps/api/package.json apps/api/package.json
 COPY apps/web/package.json apps/web/package.json
 RUN npm ci --ignore-scripts
 
-COPY . .
+COPY apps/api/nest-cli.json apps/api/tsconfig.json apps/api/
+COPY apps/api/prisma/schema.prisma apps/api/prisma/migrate.mjs apps/api/prisma/data-lease.cjs apps/api/prisma/seed.ts apps/api/prisma/
+COPY apps/api/prisma/migrations apps/api/prisma/migrations
+COPY apps/api/src apps/api/src
+COPY apps/api/scripts/operations apps/api/scripts/operations
+COPY apps/web/index.html apps/web/rollup.config.mjs apps/web/
+COPY apps/web/src apps/web/src
+COPY apps/web/public apps/web/public
+COPY scripts/web scripts/web
 RUN DATABASE_URL=file:./build-schema.db npx prisma generate --schema apps/api/prisma/schema.prisma \
  && npm run build -w @qgauss/api \
  && npm run build -w @qgauss/web
