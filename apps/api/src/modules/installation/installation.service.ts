@@ -6,6 +6,7 @@ import { isIP } from 'node:net';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { passwordProblem } from '../../common/security/password-policy';
+import { LOCAL_CHAT_DEMO_MODEL } from '../../common/llm/local-chat-demo';
 import { SettingsService } from '../settings/settings.service';
 import { ModelCatalogService } from '../models/model-catalog.service';
 import { modelCapabilities } from '../models/model-capabilities';
@@ -15,7 +16,6 @@ import { MailOperationsService } from '../mail/mail-operations.service';
 import { LaunchReadinessService } from './launch-readiness.service';
 
 const STATE_KEY = 'installation.state';
-const DEMO_MODEL = 'qgauss-demo-chat';
 const DEMO_CHANNEL = 'QGauss 本地体验';
 type InstallationState = { version: 1; phase: 'required' | 'complete' | 'legacy'; completedAt?: string; adminId?: string; requestKey?: string; requestFingerprint?: string };
 
@@ -145,7 +145,7 @@ export class InstallationService implements OnModuleInit {
     await this.prisma.$transaction(async tx => {
       const state = await this.lockedState(tx);
       if (state.phase === 'required') throw new ConflictException('请先完成初始化');
-      const existing = await tx.aiModel.findUnique({ where: { name: DEMO_MODEL }, include: { channels: { include: { channel: true } } } });
+      const existing = await tx.aiModel.findUnique({ where: { name: LOCAL_CHAT_DEMO_MODEL }, include: { channels: { include: { channel: true } } } });
       if (existing) {
         if (existing.status === 'ENABLED' && !existing.deletedAt && existing.channels.some(binding => binding.enabled && binding.channel.name === DEMO_CHANNEL && binding.channel.type === 'MOCK' && binding.channel.status === 'ENABLED' && !binding.channel.deletedAt)) return;
         throw new ConflictException('本地体验名称已存在，请在模型管理中核对，不会覆盖原配置');
@@ -154,9 +154,9 @@ export class InstallationService implements OnModuleInit {
       if (models.some(model => !(modelCapabilities(model.capabilities).includes('image') && !modelCapabilities(model.capabilities).includes('chat')))) throw new ConflictException('已有可用对话模型，请直接在工作区选择');
       if (await tx.channel.findUnique({ where: { name: DEMO_CHANNEL } })) throw new ConflictException('本地体验渠道名称已存在，请先核对原配置');
       const channel = await tx.channel.create({ data: { name: DEMO_CHANNEL, type: 'MOCK', baseUrl: 'mock://local' } });
-      const model = await tx.aiModel.create({ data: { name: DEMO_MODEL, displayName: DEMO_CHANNEL, vendor: 'QGauss', description: '离线操作演示，不代表真实模型能力。', capabilities: 'chat', countPool: '', countCost: 0 } });
-      await tx.modelChannel.create({ data: { modelId: model.id, channelId: channel.id, upstreamName: DEMO_MODEL } });
+      const model = await tx.aiModel.create({ data: { name: LOCAL_CHAT_DEMO_MODEL, displayName: DEMO_CHANNEL, vendor: 'QGauss', description: '离线操作演示，不代表真实模型能力。', capabilities: 'chat', countPool: '', countCost: 0 } });
+      await tx.modelChannel.create({ data: { modelId: model.id, channelId: channel.id, upstreamName: LOCAL_CHAT_DEMO_MODEL } });
     });
-    return { enabled: true, model: DEMO_MODEL };
+    return { enabled: true, model: LOCAL_CHAT_DEMO_MODEL };
   }
 }

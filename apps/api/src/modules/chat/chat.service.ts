@@ -10,6 +10,7 @@ import { SettingsService } from '../settings/settings.service';
 import { BusinessException, ErrorCode } from '../../common/exceptions/business.exception';
 import { safeFetch } from '../../common/net/safe-fetch';
 import { classifyFailure } from '../../common/llm/classify';
+import { LOCAL_CHAT_DEMO_MODEL } from '../../common/llm/local-chat-demo';
 import { BreakerRegistry } from '../../common/llm/breaker';
 import { truncateContext } from '../../common/llm/context';
 import { QuotaService } from './quota.service';
@@ -556,12 +557,14 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
             full = out.text;
             finishReason = 'stop';
           } else if (channel.type === 'MOCK') {
+            const diagnostics = process.env.NODE_ENV === 'test' && model.name !== LOCAL_CHAT_DEMO_MODEL;
             const out = await this.streamMock(
               lastUser.content,
-              chatMessages.find((m) => m.role === 'system')?.content ?? '',
+              diagnostics ? chatMessages.find((m) => m.role === 'system')?.content ?? '' : '',
               run,
               controller.signal,
               onFirstToken,
+              diagnostics,
             );
             full = out.text;
             finishReason = 'stop';
@@ -769,14 +772,18 @@ export class ChatService implements OnModuleInit, OnModuleDestroy {
     res: ChatRun,
     signal: AbortSignal,
     onFirstToken: () => void,
+    diagnostics: boolean,
   ) {
-    // 回显 system prompt 前 30 字，便于验证"应用注入"是否真的生效
-    const reply =
+    const localReply = /\p{Script=Han}/u.test(userText)
+      ? '收到你的消息。这里是 QGauss 本地体验。你可以继续对话，或稍后从历史记录重新打开这次对话。'
+      : 'Message received. This is the QGauss local demo. You can keep chatting or reopen this conversation from your history.';
+    const reply = diagnostics ? (
       `SYS:${systemText ? systemText.slice(0, 30) : 'none'}|` +
       `（Mock 渠道）我已收到你的消息：「${userText.slice(0, 40)}」。\n\n` +
       '这是一条本地模拟回复，用于在没有真实 API Key 的情况下验证整条链路：' +
       'SSE 事件顺序、逐字流式、消息落库、用量记录、会话标题自动生成。\n\n' +
-      '在后台配置真实渠道后，同一段代码会转发到上游模型，前端无需改动。';
+      '在后台配置真实渠道后，同一段代码会转发到上游模型，前端无需改动。'
+    ) : localReply;
 
     let out = '';
     for (let i = 0; i < reply.length; i += 3) {
