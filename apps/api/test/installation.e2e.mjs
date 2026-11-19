@@ -105,6 +105,10 @@ try {
   const response = await fetch(base + '/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body: JSON.stringify({ model: 'qgauss-demo-chat', clientMsgId: randomUUID(), messages: [{ role: 'user', content: '仅验证本地首次创作，不连接外部服务。' }] }), signal: AbortSignal.timeout(20000) });
   const wire = await response.text();
   check('无种子新站点可完成首次本地对话', response.ok && /event: done/.test(wire) && !/event: error/.test(wire));
+  const saved = await prisma.message.findFirst({ where: { role: 'ASSISTANT', status: 'COMPLETED' } });
+  check('本地体验只展示对话操作提示', saved?.content === '收到你的消息。这里是 QGauss 本地体验。你可以继续对话，或稍后从历史记录重新打开这次对话。');
+  const reopened = await call('/conversations/' + saved.conversationId);
+  check('重新打开历史可读到原体验回复', reopened.data.messages.some(message => message.id === saved.id && message.content === saved.content));
   check('完成结果保存后才更新首份创作清单', (await call('/installation/readiness')).data.checks.find(item => item.id === 'creation').state === 'ready');
   const memberPassword = 'SyntheticMember-813', member = await prisma.user.create({ data: { email: 'member@qgauss.test', username: 'member_synthetic', passwordHash: await bcrypt.hash(memberPassword, 4) } });
   token = (await call('/auth/login', 'POST', { account: member.username, password: memberPassword }, { authorization: false })).data.accessToken;
