@@ -17,6 +17,7 @@ const routes = [
   { path: '/video/manage', name: 'videoStudio', component: () => import('./views/admin/VideoControl.vue'), meta: { admin: true, ownTitle: true } },
   { path: '/agents/manage', alias:['/agentcoze/config','/agentcoze/manage','/agentcoze/import','/agentcoze/chatlog'], name: 'agentStudio', component: () => import('./views/admin/AgentStudio.vue'), meta: { admin: true, ownTitle: true } },
   { path: '/login', name: 'login', component: () => import('./views/Login.vue'), meta: { public: true, authSurface: true } },
+  { path: '/verify-admin', name: 'verifyAdmin', component: () => import('./views/Login.vue'), meta: { public: true, authSurface: true, adminVerification: true } },
   { path: '/reset-password', name: 'resetPassword', component: () => import('./views/ResetPassword.vue'), meta: { public: true, authSurface: true } },
   { path: '/', redirect: '/chat' },
   { path: '/chat', alias: ['/chatai','/agent/chat'], name: 'chat', component: () => import('./views/Chat.vue'), meta: { public: true, client: true } },

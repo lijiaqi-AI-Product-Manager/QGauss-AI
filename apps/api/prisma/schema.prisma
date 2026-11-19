@@ -46,6 +46,7 @@ model User {
   deletedAt    DateTime?
 
   refreshTokens RefreshToken[]
+  adminAuthenticator AdminAuthenticator?
   agentFavorites AgentFavorite[]
   agentFiles     AgentFileMapping[]
   agentRuns      AgentRun[]
@@ -346,6 +347,7 @@ model RefreshToken {
   replacedById String?
   usedAt       DateTime?
   revokedAt    DateTime?
+  adminVerifiedAt DateTime?
   expiresAt    DateTime
   ip           String?
   userAgent    String?
@@ -356,6 +358,22 @@ model RefreshToken {
   @@index([userId])
   @@index([familyId])
   @@map("refresh_tokens")
+}
+
+model AdminAuthenticator {
+  userId              String    @id
+  secretEnc           String?
+  enabledAt           DateTime?
+  lastCounter         Int       @default(-1)
+  recoveryHashes      String    @default("[]")
+  enrollmentId        String?
+  enrollmentEnc       String?
+  enrollmentFamilyId  String?
+  enrollmentExpiresAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admin_authenticators")
 }
 
 /// Native voice uses the existing encrypted channel credentials; no copied secrets.

@@ -15,8 +15,25 @@ import { RegisterDto } from './dto/register.dto';
 import { CaptchaService } from './captcha.service';
 import { passwordProblem } from '../../common/security/password-policy';
 import { EmailVerificationService } from './email-verification.service';
+import {
+  ADMIN_VERIFICATION_PENDING_MS, adminVerificationRequired, canUseAdminVerification,
+} from '../../common/security/admin-verification';
 
 const REFRESH_GRACE_MS = 10_000;
+type SessionUser = {
+  id: string;
+  email: string | null;
+  username: string;
+  role: string;
+  tokenVersion: number;
+  passwordConfigured?: boolean;
+  displayName?: string | null;
+  avatar?: string | null;
+  createdAt?: Date;
+  emailVerifiedAt?: Date | null;
+};
+type SessionMeta = { ip?: string; userAgent?: string };
+type AdminAssurance = { verifiedAt?: Date | null; pendingUntil?: Date };
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -67,18 +84,23 @@ export class AuthService implements OnModuleInit {
 
   /** 签发 access + 不透明 refresh（refresh 落库，只存 hash） */
   private async issue(
-    user: { id: string; email: string | null; username: string; role: string; tokenVersion: number; passwordConfigured?: boolean; displayName?: string | null; avatar?: string | null; createdAt?: Date; emailVerifiedAt?: Date | null },
+    user: SessionUser,
     familyId: string,
     meta: { ip?: string; userAgent?: string } = {},
     transaction?: Prisma.TransactionClient,
     identityPhone?: string,
+    assurance?: AdminAssurance,
   ) {
     if (!transaction) return this.prisma.$transaction(async tx => {
       const accepted = await tx.user.updateMany({where:{id:user.id,tokenVersion:user.tokenVersion,status:'ACTIVE',deletedAt:null},data:{tokenVersion:{increment:0}}});
       if (accepted.count !== 1) throw new UnauthorizedException({code:2002,message:'账号或密码已变更，请重新登录'});
       if(identityPhone&&!await tx.userPhoneIdentity.findFirst({where:{userId:user.id,phone:identityPhone},select:{userId:true}}))throw new UnauthorizedException({code:2005,message:'号码或密码已变更，请重新登录'});
-      return this.issue(user,familyId,meta,tx,identityPhone);
+      return this.issue(user,familyId,meta,tx,identityPhone,assurance);
     });
+    const factor = canUseAdminVerification(user.role) ? await transaction.adminAuthenticator.findUnique({
+      where: { userId: user.id }, select: { enabledAt: true },
+    }) : null;
+    const needsVerification = adminVerificationRequired(factor?.enabledAt, assurance?.verifiedAt);
     const accessToken = await this.jwt.signAsync(
       {
         sub: user.id,
@@ -93,7 +115,9 @@ export class AuthService implements OnModuleInit {
     );
 
     const refreshToken = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(Date.now() + parseTtlMs(this.refreshTtl, 30 * 86400_000));
+    const expiresAt = needsVerification ? new Date(Math.min(
+      Date.now() + ADMIN_VERIFICATION_PENDING_MS, assurance?.pendingUntil?.getTime() ?? Infinity,
+    )) : new Date(Date.now() + parseTtlMs(this.refreshTtl, 30 * 86400_000));
 
     const record = await transaction.refreshToken.create({
       data: {
@@ -101,6 +125,7 @@ export class AuthService implements OnModuleInit {
         familyId,
         tokenHash: this.sha256(refreshToken),
         expiresAt,
+        adminVerifiedAt: factor?.enabledAt && !needsVerification ? assurance?.verifiedAt : null,
         ip: meta.ip,
         userAgent: meta.userAgent,
       },
@@ -111,9 +136,23 @@ export class AuthService implements OnModuleInit {
       refreshToken,
       tokenType: 'Bearer',
       expiresIn: Math.floor(parseTtlMs(this.accessTtl) / 1000),
+      adminVerificationRequired: needsVerification,
       user: { id: user.id, email: user.email, username: user.username, role: user.role, displayName: user.displayName ?? null, avatar: user.avatar ?? null, createdAt: user.createdAt, emailVerifiedAt: user.emailVerifiedAt ?? null, passwordConfigured:user.passwordConfigured!==false },
       _recordId: record.id,
     };
+  }
+
+  async rotateAdminSession(
+    tx: Prisma.TransactionClient, user: SessionUser, previousFamily: string, meta: SessionMeta,
+    verifiedAt: Date | null, endOtherSessions: boolean,
+  ) {
+    const familyId = randomUUID();
+    const { _recordId, ...session } = await this.issue(user, familyId, meta, tx, undefined, { verifiedAt });
+    await tx.refreshToken.updateMany({
+      where: { userId: user.id, revokedAt: null, familyId: endOtherSessions ? { not: familyId } : previousFamily },
+      data: { revokedAt: new Date() },
+    });
+    return session;
   }
 
   async register(dto: RegisterDto, meta: { ip?: string; userAgent?: string } = {}) {
@@ -203,7 +242,9 @@ export class AuthService implements OnModuleInit {
     const user=await tx.user.findFirst({where:{id:userId,status:'ACTIVE',deletedAt:null}});
     if(!user||!await tx.externalIdentity.findFirst({where:{userId,provider:'weixin-official',appId,subjectHash},select:{id:true}}))throw new UnauthorizedException({code:2002,message:'当前登录已变化，请重新登录'});
     const familyId=randomUUID(),{_recordId,...session}=await this.issue(user,familyId,meta,tx);
-    await tx.userLoginLog.create({data:{userId,account:'QGauss 扫码账户',success:true,ip:meta.ip,userAgent:meta.userAgent}});
+    if (!session.adminVerificationRequired) {
+      await tx.userLoginLog.create({data:{userId,account:'QGauss 扫码账户',success:true,ip:meta.ip,userAgent:meta.userAgent}});
+    }
     return{session,familyId,refreshId:_recordId,tokenVersion:user.tokenVersion};
   }
 
@@ -247,6 +288,7 @@ export class AuthService implements OnModuleInit {
     }
 
     const { _recordId, ...tokens } = await this.issue(user!, randomUUID(), meta,undefined,byPhone?account:undefined);
+    if (tokens.adminVerificationRequired) return tokens;
     await this.prisma.userLoginLog
       .create({
         data: {
@@ -278,7 +320,9 @@ export class AuthService implements OnModuleInit {
         return {error:{code:2002,message:'登录状态异常，请重新登录'}};
       }
       const user = await tx.user.findUniqueOrThrow({where:{id:reference.userId}});
-      const {_recordId,...tokens} = await this.issue(user,record.familyId,meta,tx);
+      const {_recordId,...tokens} = await this.issue(user,record.familyId,meta,tx,undefined,{
+        verifiedAt: record.adminVerifiedAt, pendingUntil: record.expiresAt,
+      });
       if (!record.usedAt) await tx.refreshToken.update({where:{id:record.id},data:{usedAt:now,replacedById:_recordId}});
       return {tokens};
     });

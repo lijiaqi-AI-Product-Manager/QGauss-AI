@@ -121,6 +121,12 @@
 | POST | `/auth/reset-password` | 公开 |
 | POST | `/auth/logout` | 公开 |
 | GET | `/auth/me` | 登录 |
+| GET | `/auth/admin-verification` | 管理员 |
+| POST | `/auth/admin-verification/begin` | 管理员 |
+| POST | `/auth/admin-verification/enable` | 管理员 |
+| POST | `/auth/admin-verification/verify` | 待验证的管理员登录 |
+| POST | `/auth/admin-verification/recovery-codes` | 管理员 |
+| POST | `/auth/admin-verification/disable` | 管理员 |
 
 ## /auth/external
 

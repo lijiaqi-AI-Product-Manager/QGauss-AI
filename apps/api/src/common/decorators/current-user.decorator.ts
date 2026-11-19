@@ -7,7 +7,13 @@ export interface AuthUser {
   role: 'USER' | 'ADMIN';
 }
 
-export interface AuthSessionContext {tokenVersion:number;familyId:string;expiresAt:number|null;}
+export interface AuthSessionContext {
+  tokenVersion: number;
+  familyId: string;
+  expiresAt: number | null;
+  adminVerificationRequired?: boolean;
+  adminVerifiedAt?: number;
+}
 const sessionContext=Symbol('QGauss authenticated session');
 /** Authentication metadata stays on the request and is never serialized as profile data. */
 export function withAuthSession<T extends object>(user:T,context:AuthSessionContext):T{Object.defineProperty(user,sessionContext,{value:Object.freeze({...context})});return user;}

@@ -15,11 +15,13 @@ import {PhoneAuthController,PhoneIdentityController} from './phone.controller';
 import {ExternalAuthService} from './external-auth.service';
 import {ExternalProviderService} from './external-provider.service';
 import {ExternalAuthController,ExternalIdentityController} from './external.controller';
+import { AdminVerificationController } from './admin-verification.controller';
+import { AdminVerificationService } from './admin-verification.service';
 
 @Module({
   imports: [PassportModule, JwtModule.register({}), SettingsModule, MailModule],
-  controllers: [AuthController,PhoneAuthController,PhoneIdentityController,ExternalAuthController,ExternalIdentityController],
-  providers: [AuthService, CaptchaService, JwtStrategy, EmailVerificationService,PhoneDeliveryService,PhoneAccountService,ExternalAuthService,ExternalProviderService],
+  controllers: [AuthController,PhoneAuthController,PhoneIdentityController,ExternalAuthController,ExternalIdentityController,AdminVerificationController],
+  providers: [AuthService, CaptchaService, JwtStrategy, EmailVerificationService,PhoneDeliveryService,PhoneAccountService,ExternalAuthService,ExternalProviderService,AdminVerificationService],
   exports: [AuthService, PhoneDeliveryService, ExternalAuthService],
 })
 export class AuthModule implements NestModule{

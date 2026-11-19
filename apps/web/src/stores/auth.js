@@ -41,6 +41,7 @@ export const useAuth = defineStore('auth', {
     sessionRevision: 0,
     identityRevision: 0,
     sessionNotice: '',
+    adminVerificationRequired: false,
     booting: true,
   }),
 
@@ -65,8 +66,17 @@ export const useAuth = defineStore('auth', {
       this.accessToken = data.accessToken;
       this.refreshToken = data.refreshToken;
       this.user = data.user;
+      this.adminVerificationRequired = data.adminVerificationRequired === true;
       setAccessToken(data.accessToken, (data.user?.id || '') + ':' + this.identityRevision);
       if (data.refreshToken) writeStoredToken(data.refreshToken, this.remember);
+    },
+
+    acceptVerifiedSession(data, identity) {
+      if (this.identityRevision !== identity || !this.user || data?.user?.id !== this.user.id ||
+          data.adminVerificationRequired !== false || typeof data.accessToken !== 'string' || !data.accessToken ||
+          typeof data.refreshToken !== 'string' || !data.refreshToken) return false;
+      this.apply(data, { renewal: true });
+      return true;
     },
 
     async login(account, password, { remember = true } = {}) {
@@ -136,7 +146,7 @@ export const useAuth = defineStore('auth', {
             await this.refresh();
           }
         }
-        if (this.accessToken) {
+        if (this.accessToken && !this.adminVerificationRequired) {
           try {
             this.user = await api.get('/auth/me');
           } catch (e) {
@@ -169,6 +179,7 @@ export const useAuth = defineStore('auth', {
       this.identityRevision += 1;
       this.sessionNotice = ['password-changed', 'password-unknown'].includes(notice) ? notice : '';
       this.user = null;
+      this.adminVerificationRequired = false;
       this.accessToken = '';
       this.refreshToken = '';
       setAccessToken('', 'signed-out:' + this.identityRevision);
