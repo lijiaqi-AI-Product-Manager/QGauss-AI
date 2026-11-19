@@ -676,7 +676,47 @@ async function main() {
     notGuarded.slice(0, 5).join('; '),
   );
 
-  // 还原登录限流（默认 10），不要把开发库留在"不限流"状态
+  console.log('[11] 商户账单');
+  const statementsPath = '/admin/payment-statements';
+  token = '';
+  ok('访客不能查看商户账单', (await api(statementsPath)).status === 401);
+  token = userA.token;
+  ok('普通用户不能查看商户账单', (await api(statementsPath)).status === 403);
+  token = savedToken;
+  const file = new FormData();
+  file.set('provider', 'epay');
+  file.set('fileName', '商户样例账单.csv');
+  file.set('file', new Blob([
+    '记录类型,渠道流水号,订单号,交易号,发生时间,金额（分）,手续费（分）\r\n',
+    '收款,sample-row,sample-missing-order,,2026-06-13 00:00:00,1600,20\r\n',
+  ], { type: 'text/csv' }), 'merchant.csv');
+  const uploadStatement = async () => {
+    const response = await fetch(API + statementsPath, { method: 'POST', headers: { authorization: 'Bearer ' + token }, body: file });
+    const json = await response.json();
+    return { status: response.status, body: json.data ?? json };
+  };
+  token = userA.token;
+  ok('普通用户不能导入商户账单', (await uploadStatement()).status === 403);
+  token = savedToken;
+  const imported = await uploadStatement();
+  ok('商业入口关闭时管理员仍可导入账单', isOk(imported.status) && imported.body.fileName === '商户样例账单.csv' && imported.body.openCount === 1);
+  const importedAgain = await uploadStatement();
+  ok('同一账单重复导入取回原结果', importedAgain.body?.id === imported.body?.id && importedAgain.body?.reused === true);
+  const batchPath = statementsPath + '/' + imported.body?.id;
+  const detail = await api(batchPath + '?state=open');
+  ok('导入记录列出站内缺单差异', isOk(detail.status) && detail.body?.items?.[0]?.findings[0]?.includes('未找到'));
+  const entry = detail.body?.items?.[0];
+  const decisionPath = batchPath + '/rows/' + entry?.id;
+  token = userA.token;
+  ok('普通用户不能登记复核结论', (await api(decisionPath, { method: 'PATCH', body: { state: 'reviewed', revision: 0, note: '样例复核' } })).status === 403);
+  token = savedToken;
+  const reviewed = await api(decisionPath, { method: 'PATCH', body: { state: 'reviewed', revision: 0, note: '样例复核' } });
+  ok('管理员复核保留说明和原差异', isOk(reviewed.status) && reviewed.body?.state === 'reviewed' &&
+    reviewed.body?.decisions?.[0]?.note === '样例复核' && reviewed.body?.findings?.length === 1);
+  const exported = await api(batchPath + '/export?state=reviewed');
+  ok('导出结果包含所选复核状态', isOk(exported.status) && exported.body?.items?.[0]?.eventRef === 'sample-row');
+
+  // 还原登录限流（默认 10）
   await setSettings([{ key: 'security.loginRateLimit', value: 10 }]);
 
   console.log(`\n结果：${passed} 通过 / ${failed} 失败\n`);

@@ -74,6 +74,12 @@ async function request(path, { method = 'GET', body, headers = {}, retry = true,
 export async function uploadFile(file, { retry = true, signal } = {}) {
   return uploadMultipart('/upload', file, { retry, signal });
 }
+
+export async function uploadPaymentStatement(file, fields, { signal } = {}) {
+  return uploadMultipart('/admin/payment-statements', file, {
+    signal, fields: { ...fields, fileName: Array.from(file.name).slice(0, 120).join('') },
+  });
+}
 export async function uploadChatFile(file,requestKey,expectedVersion,{signal}={}){
   return uploadMultipart('/upload/requests/'+encodeURIComponent(requestKey),file,{signal,fields:{expectedVersion:String(expectedVersion)}});
 }

@@ -420,6 +420,17 @@
       "commerce": true
     },
     {
+      "key": "paymentStatements",
+      "path": "/admin/orders/statements",
+      "title": "商户账单",
+      "titleTw": "商戶帳單",
+      "titleEn": "Merchant statements",
+      "icon": "file",
+      "admin": true,
+      "public": false,
+      "commerce": false
+    },
+    {
       "key": "commissions",
       "path": "/admin/sales",
       "title": "分销与提现",
@@ -532,7 +543,8 @@
     "ops": [
       "overview",
       "records",
-      "moderation"
+      "moderation",
+      "paymentStatements"
     ],
     "system": [
       "welcome",

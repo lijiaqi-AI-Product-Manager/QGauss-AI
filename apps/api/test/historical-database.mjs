@@ -3,15 +3,33 @@ import {dirname,join,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import {DatabaseSync} from 'node:sqlite';
+import assert from 'node:assert/strict';
+
+const prismaDirectory = resolve(dirname(fileURLToPath(import.meta.url)), '../prisma');
+const migrationFiles = () => readdirSync(join(prismaDirectory, 'migrations')).filter(name => /^\d{4}.*\.sql$/.test(name)).sort();
+
+export function assertCurrentDatabaseLayout(database, freshPath) {
+  const applied = database.prepare('SELECT name FROM _migrations ORDER BY name').all().map(row => row.name);
+  assert.deepEqual(applied, migrationFiles());
+  const tables = db => db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'_migrations' ORDER BY name",
+  ).all().map(row => row.name);
+  const fresh = new DatabaseSync(freshPath, { readOnly: true });
+  try {
+    assert.deepEqual(tables(database), tables(fresh));
+  } finally {
+    fresh.close();
+  }
+}
 
 /** Execute a real prefix of the migration history rather than removing columns from today's schema. */
 export function historicalDatabase(target,through){
   if(!Number.isInteger(through)||through<1)throw Error('Invalid migration boundary');
-  const source=resolve(dirname(fileURLToPath(import.meta.url)),'../prisma'),parent=resolve(dirname(target)),folder=mkdtempSync(join(parent,'migration-history-'));
+  const source=prismaDirectory,parent=resolve(dirname(target)),folder=mkdtempSync(join(parent,'migration-history-'));
   try{
     mkdirSync(join(folder,'migrations'));
     for(const file of ['migrate.mjs','data-lease.cjs'])copyFileSync(join(source,file),join(folder,file));
-    for(const file of readdirSync(join(source,'migrations')).filter(name=>/^\d{4}.*\.sql$/.test(name)&&Number(name.slice(0,4))<=through))copyFileSync(join(source,'migrations',file),join(folder,'migrations',file));
+    for(const file of migrationFiles().filter(name=>Number(name.slice(0,4))<=through))copyFileSync(join(source,'migrations',file),join(folder,'migrations',file));
     execFileSync(process.execPath,[join(folder,'migrate.mjs')],{env:{...process.env,DATABASE_FILE:resolve(target)},stdio:'pipe',windowsHide:true});
   }finally{const checked=resolve(folder);if(!checked.startsWith(parent+sep)||!checked.slice(parent.length+1).startsWith('migration-history-'))throw Error('Unexpected history fixture path');rmSync(checked,{recursive:true,force:true});}
 }

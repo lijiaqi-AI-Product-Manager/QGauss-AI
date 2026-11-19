@@ -96,6 +96,13 @@
   line-height: 1.17;
 }
 
+.qor-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  justify-content: flex-end;
+}
+
 .qor-hero p, .qor-board-heading p, .qor-dialog-header p {
   margin-top: 5px;
   color: var(--qor-muted);
@@ -582,7 +589,7 @@
 
 @container qgauss-orders (max-width: 470px) {
   .qor-hero { grid-template-columns: auto minmax(0, 1fr); gap: 10px; }
-  .qor-hero .qor-button { grid-column: 2; justify-self: start; }
+  .qor-hero > .qor-button, .qor-hero-actions { grid-column: 2; justify-self: start; justify-content: flex-start; }
   .qor-emblem { width: 40px; height: 40px; border-radius: 13px; }
   .qor-card { padding: 10px; gap: 6px; }
   .qor-card-icon { width: 26px; height: 26px; }

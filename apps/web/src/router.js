@@ -52,6 +52,7 @@ const routes = [
   { path: '/presets', name: 'presets', component: () => import('./views/admin/Presets.vue'), meta: { admin: true } },
   { path: '/admin/crami', name: 'cramiAdmin', component: () => import('./views/admin/Crami.vue'), meta: { admin: true } },
   { path: '/admin/orders', name: 'ordersAdmin', component: () => import('./views/admin/Orders.vue'), meta: { admin: true } },
+  { path: '/admin/orders/statements', name: 'paymentStatements', component: () => import('./views/admin/PaymentStatements.vue'), meta: { admin: true } },
   { path: '/admin/sales', name: 'salesAdmin', component: () => import('./views/admin/SalesAudit.vue'), meta: { admin: true } },
   ...systemStatusRoutes(StatusPage),
 ];
