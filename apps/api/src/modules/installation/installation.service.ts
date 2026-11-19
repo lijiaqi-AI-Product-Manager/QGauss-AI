@@ -12,6 +12,7 @@ import { modelCapabilities } from '../models/model-capabilities';
 import { InitializeDto } from './installation.dto';
 import { bootstrapMenu } from './bootstrap-menu';
 import { MailOperationsService } from '../mail/mail-operations.service';
+import { LaunchReadinessService } from './launch-readiness.service';
 
 const STATE_KEY = 'installation.state';
 const DEMO_MODEL = 'qgauss-demo-chat';
@@ -27,7 +28,8 @@ export function isLoopbackAddress(address = '') {
 export class InstallationService implements OnModuleInit {
   private closed: InstallationState | null = null;
   constructor(private readonly prisma: PrismaService, private readonly config: ConfigService,
-    private readonly settings: SettingsService, private readonly catalog: ModelCatalogService, private readonly mail: MailOperationsService) {}
+    private readonly settings: SettingsService, private readonly catalog: ModelCatalogService,
+    private readonly mail: MailOperationsService, private readonly launch: LaunchReadinessService) {}
 
   async onModuleInit() {
     const state = await this.currentState();
@@ -108,19 +110,26 @@ export class InstallationService implements OnModuleInit {
   }
 
   async readiness(userId: string) {
-    const [user, catalog, commerce, mailStatus, firstChat, firstImage] = await Promise.all([
+    const [user, catalog, commerce, mailStatus, firstChat, firstImage, launch] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({ where: { id: userId } }), this.catalog.available(),
       this.settings.get<boolean>('commerce.enabled'), this.mail.status(userId),
       this.prisma.message.count({ where: { role: 'ASSISTANT', status: 'COMPLETED', conversation: { userId } } }),
       this.prisma.imageTask.count({ where: { userId, status: 'SUCCESS', deletedAt: null } }),
+      this.launch.snapshot(),
     ]);
     const readyChat = catalog.filter(model => model.ready && !(model.capabilities.includes('image') && !model.capabilities.includes('chat')));
     const chat = readyChat[0];
-    const demo = chat ? await this.prisma.modelChannel.count({ where: { modelId: chat.id, enabled: true, channel: { type: { not: 'MOCK' }, status: 'ENABLED', deletedAt: null } } }) === 0 : false;
+    const liveBindings = chat ? await this.prisma.modelChannel.findMany({
+      where: { modelId: { in: readyChat.map(model => model.id) }, enabled: true, channel: { type: { not: 'MOCK' }, status: 'ENABLED', deletedAt: null } },
+      select: { modelId: true },
+      distinct: ['modelId'],
+    }) : [];
+    const demo = !!chat && !liveBindings.some(binding => binding.modelId === chat.id);
     const defaultPassword = await bcrypt.compare('admin123456', user.passwordHash);
     const mailConfigured = mailStatus.transport.canTest;
     return {
       canEnableDemo: readyChat.length === 0,
+      launch: { ...launch, liveChatConfigured: liveBindings.length > 0 },
       chatModel: chat ? { name: chat.name, displayName: chat.displayName, demo, billing: chat.billing } : null,
       checks: [
         { id: 'account', state: defaultPassword ? 'action' : 'ready', title: '守好空间的第一把钥匙', description: defaultPassword ? '当前管理员仍使用开发演示默认密码，请先修改，再开放站点。' : '当前管理员未使用开发演示默认密码。历史密码强度无法从保存记录中判断，可随时更换独立密码。', action: { label: '查看账户与密码', path: '/account?section=security' } },

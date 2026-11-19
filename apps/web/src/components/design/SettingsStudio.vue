@@ -32,6 +32,7 @@
 </template>
 <script setup>
 import {nextTick,onBeforeUnmount,ref,watch} from 'vue';
+import {useRoute} from 'vue-router';
 import {useAuth} from '../../stores/auth.js';
 import {currentLang} from '../../i18n/index.js';
 import {settingsHint,settingsText,settingsTitle} from '../../i18n/settings-messages.js';
@@ -42,6 +43,8 @@ import BrandLoader from './BrandLoader.vue';
 import './settings-workspace.css';
 const auth=useAuth(),state=useSettingsWorkspace(),{items,draft,bases,conflicts,query,group,groups,visible,loading,saving,checking,busy,locked,loadError,error,notice,readAt,pending,receipt,review,closing,policies,changes,problems,conflictCount,refresh,chooseGroup,resolve,restoreDefault,openReview,confirm,checkPending,conclude}=state,dialog=ref(null),previewButton=ref(null),multiline=new Set(['site.welcome','site.announcement','upload.allowedMime','upstream.hostAllowlist']);
 const serviceLabels=[{key:'mail',label:'邮箱发件',icon:'mail'},{key:'phone',label:'手机验证',icon:'lock'},{key:'external',label:'扫码登录',icon:'user'}],st=(text,params)=>settingsText(currentLang.value,text,params),title=item=>settingsTitle(currentLang.value,item.key,item.description),hint=key=>settingsHint(currentLang.value,key),fieldId=item=>'qsw-setting-'+item.key.replaceAll('.','-'),isEdited=item=>draft[item.key]!==bases[item.key]?.value,dirtyInGroup=name=>changes.value.filter(row=>items.value.find(item=>item.key===row.key)?.group===name).length,emailLocked=item=>item.key==='security.emailVerificationRequired'&&draft[item.key]!==true&&(!policies.mail.known||!policies.mail.ready),formatDate=value=>new Date(value).toLocaleString(currentLang.value==='en'?'en-US':currentLang.value==='zh-TW'?'zh-TW':'zh-CN',{hour12:false});
+const route=useRoute();
+watch([()=>route.query.group,()=>items.value.length>0],([name,loaded])=>{if(loaded&&groups.value.includes(name))chooseGroup(name);},{immediate:true});
 function formatValue(item,value){if(item.sensitive)return st(value?'已填写':'未填写');if(typeof value==='boolean')return st(value?'开启':'关闭');return value===''?st('未填写'):String(value);}
 function cancelDialog(){if(busy.value)return;review.value=null;closing.value=false;}
 watch(()=>!!review.value||closing.value,async open=>{await nextTick();if(!dialog.value)return;if(open&&!dialog.value.open)dialog.value.showModal();else if(!open&&dialog.value.open){dialog.value.close();previewButton.value?.focus();}});

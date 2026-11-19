@@ -45,6 +45,6 @@ import { SalesService } from './sales.service';
     PayService,
     SalesService,
   ],
-  exports: [CommerceGuard, LedgerService, WalletService, SigninService],
+  exports: [CommerceGuard, LedgerService, WalletService, SigninService, PayService],
 })
 export class CommerceModule {}

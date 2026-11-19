@@ -20,7 +20,7 @@ import {ExternalAuthController,ExternalIdentityController} from './external.cont
   imports: [PassportModule, JwtModule.register({}), SettingsModule, MailModule],
   controllers: [AuthController,PhoneAuthController,PhoneIdentityController,ExternalAuthController,ExternalIdentityController],
   providers: [AuthService, CaptchaService, JwtStrategy, EmailVerificationService,PhoneDeliveryService,PhoneAccountService,ExternalAuthService,ExternalProviderService],
-  exports: [AuthService],
+  exports: [AuthService, PhoneDeliveryService, ExternalAuthService],
 })
 export class AuthModule implements NestModule{
  configure(consumer:MiddlewareConsumer){consumer.apply(text({type:['text/xml','application/xml'],limit:'64kb'})).forRoutes({path:'auth/external/notify',method:RequestMethod.POST});}
