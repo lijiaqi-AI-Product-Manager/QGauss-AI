@@ -690,12 +690,15 @@ async function main() {
     '记录类型,渠道流水号,订单号,交易号,发生时间,金额（分）,手续费（分）\r\n',
     '收款,sample-row,sample-missing-order,,2026-06-13 00:00:00,1600,20\r\n',
   ], { type: 'text/csv' }), 'merchant.csv');
-  const uploadStatement = async () => {
-    const response = await fetch(API + statementsPath, { method: 'POST', headers: { authorization: 'Bearer ' + token }, body: file });
+  const uploadStatement = async (body = file, suffix = '') => {
+    const response = await fetch(API + statementsPath + suffix, { method: 'POST', headers: { authorization: 'Bearer ' + token }, body });
     const json = await response.json();
-    return { status: response.status, body: json.data ?? json };
+    return { status: response.status, body: json.data ?? json, cache: response.headers.get('cache-control') };
   };
+  token = '';
+  ok('访客不能预览账单', (await uploadStatement(file, '/preview')).status === 401);
   token = userA.token;
+  ok('普通用户不能预览账单', (await uploadStatement(file, '/preview')).status === 403);
   ok('普通用户不能导入商户账单', (await uploadStatement()).status === 403);
   token = savedToken;
   const imported = await uploadStatement();
@@ -715,6 +718,34 @@ async function main() {
     reviewed.body?.decisions?.[0]?.note === '样例复核' && reviewed.body?.findings?.length === 1);
   const exported = await api(batchPath + '/export?state=reviewed');
   ok('导出结果包含所选复核状态', isOk(exported.status) && exported.body?.items?.[0]?.eventRef === 'sample-row');
+
+  console.log('[12] 原始账单导入预览');
+  const source = new FormData();
+  source.set('provider', 'epay');
+  source.set('file', new Blob([
+    'out_trade_no,event_id,occurred_at,money,fee\n',
+    'source-order-1,source-event-1,2026-06-13 08:00:00,5.01,0.03\n',
+  ], { type: 'text/csv' }), 'source.csv');
+  const countBefore = (await api(statementsPath)).body.total;
+  const inspected = await uploadStatement(source, '/preview');
+  ok('原始账单预览返回字段建议并禁止缓存', isOk(inspected.status) && inspected.body?.mappingRequired &&
+    inspected.body?.suggested.orderRef === 0 && inspected.cache === 'private, no-store');
+  const columns = { ...inspected.body.suggested, rowKind: 'payment', unit: 'yuan' };
+  source.set('columns', JSON.stringify(columns));
+  ok('原始账单需要确认对应的预览', (await uploadStatement(source)).status === 409);
+  const normalized = await uploadStatement(source, '/preview');
+  ok('预览按元折算并保持档案数量', normalized.body?.totals?.paymentCents === 501 &&
+    normalized.body?.totals?.feeCents === 3 && (await api(statementsPath)).body.total === countBefore);
+  source.set('previewToken', normalized.body.previewToken);
+  source.set('provider', 'hupi');
+  ok('通道改动使旧预览失效', (await uploadStatement(source)).status === 409);
+  source.set('provider', 'epay');
+  const sourceResult = await uploadStatement(source);
+  const sourceRows = (await api(statementsPath + '/' + sourceResult.body?.id)).body?.items;
+  ok('确认后保存预览金额及对应订单', isOk(sourceResult.status) && sourceResult.body?.paymentCents === 501 &&
+    sourceRows?.[0]?.eventRef === 'source-event-1' && sourceRows[0].localOrderId === '');
+  ok('确认重试只保留一份核对单', (await uploadStatement(source)).body?.id === sourceResult.body?.id &&
+    (await api(statementsPath)).body.total === countBefore + 1);
 
   // 还原登录限流（默认 10）
   await setSettings([{ key: 'security.loginRateLimit', value: 10 }]);
