@@ -247,7 +247,7 @@
 
 .qor-filters {
   display: grid;
-  grid-template-columns: minmax(138px, 1.65fr) repeat(4, minmax(106px, 1fr)) auto;
+  grid-template-columns: minmax(138px, 1.65fr) repeat(4, minmax(96px, 1fr)) auto;
   align-items: end;
   gap: 10px;
   margin-block: 16px;
@@ -557,9 +557,12 @@
   backdrop-filter: var(--qg-glass-blur);
 }
 
-@container qgauss-orders (max-width: 880px) {
-  .qor-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container qgauss-orders (max-width: 780px) {
   .qor-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@container qgauss-orders (max-width: 700px) {
+  .qor-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @container qgauss-orders (max-width: 620px) {
