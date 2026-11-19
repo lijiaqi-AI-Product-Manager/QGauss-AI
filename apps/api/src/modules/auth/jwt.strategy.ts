@@ -4,6 +4,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import {withAuthSession} from '../../common/decorators/current-user.decorator';
+import { adminVerificationRequired, canUseAdminVerification } from '../../common/security/admin-verification';
 
 export interface JwtPayload {
   sub: string;
@@ -53,14 +54,24 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException({ code: 2002, message: '登录状态已失效，请重新登录' });
     }
 
-    const family = typeof payload.sid === 'string' && payload.sid ? await this.prisma.refreshToken.findFirst({where:{userId:user.id,familyId:payload.sid,revokedAt:null,expiresAt:{gt:new Date()}},select:{id:true}}) : null;
+    const family = typeof payload.sid === 'string' && payload.sid ? await this.prisma.refreshToken.findFirst({
+      where: { userId: user.id, familyId: payload.sid, revokedAt: null, expiresAt: { gt: new Date() } },
+      select: { adminVerifiedAt: true },
+    }) : null;
     if (!family) throw new UnauthorizedException({ code: 2002, message: '此登录已退出，请重新登录' });
+    const factor = canUseAdminVerification(user.role) ? await this.prisma.adminAuthenticator.findUnique({
+      where: { userId: user.id }, select: { enabledAt: true },
+    }) : null;
 
     return withAuthSession({
       id: user.id,
       email: user.email,
       username: user.username,
       role: user.role,
-    },{tokenVersion:payload.tv,familyId:payload.sid,expiresAt:typeof payload.exp==='number'?payload.exp*1000:null});
+    }, {
+      tokenVersion: payload.tv, familyId: payload.sid, expiresAt: typeof payload.exp === 'number' ? payload.exp * 1000 : null,
+      adminVerificationRequired: adminVerificationRequired(factor?.enabledAt, family.adminVerifiedAt),
+      adminVerifiedAt: family.adminVerifiedAt?.getTime(),
+    });
   }
 }

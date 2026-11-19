@@ -3,6 +3,9 @@ import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { OPTIONAL_AUTH_KEY } from '../decorators/optional-auth.decorator';
+import { AuthUser, authSession } from '../decorators/current-user.decorator';
+import { BusinessException, ErrorCode } from '../exceptions/business.exception';
+import { ALLOW_PENDING_ADMIN_VERIFICATION } from '../security/admin-verification';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -21,10 +24,14 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     return super.canActivate(context);
   }
 
-  handleRequest<TUser = any>(err: any, user: any): TUser {
+  handleRequest<TUser = any>(err: any, user: AuthUser | false, _info: unknown, context: ExecutionContext): TUser {
     if (err || !user) {
       throw new UnauthorizedException({ code: 2001, message: '未登录或登录已过期' });
     }
-    return user as TUser;
+    if (authSession(user)?.adminVerificationRequired &&
+        !this.reflector.get<boolean>(ALLOW_PENDING_ADMIN_VERIFICATION, context.getHandler())) {
+      throw new BusinessException(ErrorCode.ADMIN_VERIFICATION_REQUIRED, '请先完成管理员两步验证', 403);
+    }
+    return user as unknown as TUser;
   }
 }

@@ -23,6 +23,8 @@
       </section>
 
       <section v-show="section === 'security'" id="qac-panel-security" class="qac-panel qac-security-grid" role="tabpanel" aria-labelledby="qac-tab-security">
+        <AdminVerificationCard v-if="profile.role === 'ADMIN' || profile.role === 'SUPER'" :active="section === 'security'"
+          :blocked="profileSaving || passwordSaving || sessionBusy || identityBusy || avatarBusy || avatarEditing" />
         <AccountSessionsCard :profile="profile" :blocked="profileSaving||passwordSaving||identityBusy||avatarBusy||avatarEditing" @busy="sessionBusy=$event" @profile-received="applyProfile($event,false)" />
         <EmailVerificationCard v-if="profile.email" v-model:code="emailCode" :email="profile.email" :owner-key="profile.id" :verified-at="profile.emailVerifiedAt || ''" :delivery-ready="emailReady" :disabled="profileSaving || passwordSaving || sessionBusy ||identityBusy" @verified="emailVerified" />
         <InitialPasswordCard :profile="profile" :active="section==='security'" :blocked="profileSaving||passwordSaving||sessionBusy||phoneBusy||externalBusy||avatarBusy||avatarEditing" @busy="initialBusy=$event" @profile-received="applyProfile($event,false)"/>
@@ -56,6 +58,7 @@ import ClientIcon from '../reference/ClientIcon.vue';
 import BrandLoader from './BrandLoader.vue';
 import EmailVerificationCard from '../auth/EmailVerificationCard.vue';
 import PhoneIdentityCard from '../auth/PhoneIdentityCard.vue';
+import AdminVerificationCard from '../auth/AdminVerificationCard.vue';
 import ExternalIdentityCard from '../auth/ExternalIdentityCard.vue';
 import InitialPasswordCard from '../auth/InitialPasswordCard.vue';
 import './account-studio.css';

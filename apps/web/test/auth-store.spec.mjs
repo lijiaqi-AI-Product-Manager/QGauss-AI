@@ -58,6 +58,21 @@ test('credential renewal preserves account identity while a fresh sign-in change
   globalThis.fetch=async()=>okResponse('r2');assert.equal(await auth.refresh(),true);assert.equal(auth.identityRevision,identity);assert.ok(auth.sessionRevision>revision);
   auth.apply({accessToken:'a3',refreshToken:'r3',user:{id:'u1'}});assert.ok(auth.identityRevision>identity);
 });
+test('verified credentials replace the pending login only for the same account and identity', () => {
+  const auth = useAuth();
+  auth.acceptLogin({ accessToken: 'pending-a', refreshToken: 'pending-r', user: { id: 'admin' }, adminVerificationRequired: true }, { remember: false });
+  const identity = auth.identityRevision;
+  assert.equal(auth.adminVerificationRequired, true);
+  const verified = { accessToken: 'verified-a', refreshToken: 'verified-r', user: { id: 'admin' }, adminVerificationRequired: false };
+  assert.equal(auth.acceptVerifiedSession(verified, identity - 1), false);
+  assert.equal(auth.acceptVerifiedSession({ ...verified, user: { id: 'other' } }, identity), false);
+  assert.equal(auth.acceptVerifiedSession(verified, identity), true);
+  assert.equal(auth.adminVerificationRequired, false);
+  assert.equal(auth.identityRevision, identity);
+  assert.equal(session.get(KEY), 'verified-r');
+  auth.clearLocal();
+  assert.equal(auth.acceptVerifiedSession(verified, identity), false);
+});
 test('password-change notice contains only a known status and clears after sign-in', async () => {
   const auth=useAuth();auth.apply({accessToken:'a',refreshToken:'r',user:{id:'u1'}});auth.clearLocal('password-changed');assert.equal(auth.sessionNotice,'password-changed');assert.equal(auth.isLoggedIn,false);
   globalThis.fetch=async()=>({ok:true,status:201,text:async()=>JSON.stringify({code:0,data:{accessToken:'new',refreshToken:'new-r',user:{id:'u1'}}})});
