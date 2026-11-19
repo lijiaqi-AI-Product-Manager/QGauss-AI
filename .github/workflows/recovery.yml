@@ -1,0 +1,89 @@
+name: QGauss backup recovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/recovery.yml'
+      - 'apps/api/prisma/**'
+      - 'apps/api/scripts/operations/**'
+      - 'apps/api/src/**'
+      - 'apps/api/test/restore-transfer.mjs'
+      - 'apps/api/package.json'
+      - 'package.json'
+      - 'package-lock.json'
+  pull_request:
+    paths:
+      - '.github/workflows/recovery.yml'
+      - 'apps/api/prisma/**'
+      - 'apps/api/scripts/operations/**'
+      - 'apps/api/src/**'
+      - 'apps/api/test/restore-transfer.mjs'
+      - 'apps/api/package.json'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recovery-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: file:./schema-only.db
+
+jobs:
+  create-test-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate -w @qgauss/api
+      - run: npm run build:api
+      - run: node apps/api/test/restore-transfer.mjs backup "$RUNNER_TEMP/qgauss-transfer"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: qgauss-synthetic-backup
+          path: ${{ runner.temp }}/qgauss-transfer/package
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: qgauss-synthetic-recovery-key
+          path: ${{ runner.temp }}/qgauss-transfer/check-key
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-restored-workspace:
+    runs-on: ubuntu-latest
+    needs: create-test-backup
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run prisma:generate -w @qgauss/api
+      - run: npm run build:api
+      - uses: actions/download-artifact@v8
+        with:
+          name: qgauss-synthetic-backup
+          path: ${{ runner.temp }}/qgauss-transfer/package
+      - uses: actions/download-artifact@v8
+        with:
+          name: qgauss-synthetic-recovery-key
+          path: ${{ runner.temp }}/qgauss-transfer/check-key
+      - run: node apps/api/test/restore-transfer.mjs restore "$RUNNER_TEMP/qgauss-transfer"

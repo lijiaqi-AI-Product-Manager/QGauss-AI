@@ -13,10 +13,11 @@ import { createRequire } from 'node:module';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { DatabaseSync } from 'node:sqlite';
+import { parseEnv } from 'node:util';
 import {SqliteClient as PrismaClient} from '../dist/common/prisma/sqlite-client.js';
 import bcrypt from 'bcryptjs';
 import leases from '../prisma/data-lease.cjs';
-import { createEncryptedBackup, verifyEncryptedBackup, restoreEncryptedBackup, recoverAdministrator, inspectLocalDatabase } from '../scripts/operations/operations.mjs';
+import { createEncryptedBackup, verifyEncryptedBackup, restoreEncryptedBackup, prepareRestoredEnvironment, recoverAdministrator, inspectLocalDatabase } from '../scripts/operations/operations.mjs';
 import { generateBackupKey, portablePath, validateManifest } from '../scripts/operations/archive.mjs';
 import { SecretBox } from '../dist/common/crypto/secret-box.js';
 import { PrismaService } from '../dist/common/prisma/prisma.service.js';
@@ -147,10 +148,17 @@ test('弱密码、备份失败或审计写入失败都不会部分更换管理�
   const user=await f.prisma.user.findUnique({where:{id:f.user.id}});assert.equal(user.passwordHash,f.user.passwordHash);assert.equal(user.tokenVersion,0);assert.equal((await verifyEncryptedBackup({input:f.options.output,keyFile:f.options.keyFile})).verified,true);
 });
 
-test('恢复副本可启动真实 API，原账户可登录、历史可读、附件可下载且初始化仍关闭',{timeout:45000},async()=>{
-  const f=await fixture();await createEncryptedBackup(f.options);const destination=join(f.root,'drill');await restoreEncryptedBackup({input:f.options.output,keyFile:f.options.keyFile,destination});
+test('恢复启动配置可在新目录启动，原账户、历史及附件可读',{timeout:45000},async()=>{
+  const f=await fixture();await createEncryptedBackup(f.options);const destination=join(f.root,'新站点 恢复');await restoreEncryptedBackup({input:f.options.output,keyFile:f.options.keyFile,destination});
+  const prepared=await prepareRestoredEnvironment({destination}),config=join(destination,prepared.file);
+  assert.equal(prepared.automaticStartup,false);
+  const restoredEnv=parseEnv(await readFile(config,'utf8'));
+  assert.equal(restoredEnv.APP_ENCRYPTION_KEY,f.env.APP_ENCRYPTION_KEY);
+  assert.equal(restoredEnv.DATABASE_FILE,join(destination,'bundle/database/qgauss.db'));
+  assert.equal(restoredEnv.STORAGE_DIR,join(destination,'bundle/storage'));
   const listener=createServer();listener.listen(0,'127.0.0.1');await once(listener,'listening');const port=listener.address().port;await new Promise(resolve=>listener.close(resolve));
-  const child=spawn(process.execPath,[join(apiRoot,'dist/main.js')],{cwd:apiRoot,env:{...process.env,...f.env,PORT:String(port),DATABASE_URL:'file:'+join(destination,'bundle/database/qgauss.db').replace(/\\/g,'/'),STORAGE_DIR:join(destination,'bundle/storage'),MAIL_SMTP_HOST:''},stdio:['ignore','pipe','pipe'],windowsHide:true});children.push(child);let output='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);
+  const env={...process.env};for(const key of Object.keys(restoredEnv))delete env[key];
+  const child=spawn(process.execPath,['--env-file',config,join(apiRoot,'dist/main.js')],{cwd:destination,env:{...env,PORT:String(port),SMS_ENABLED:'false',EXTERNAL_ENABLED:'false'},stdio:['ignore','pipe','pipe'],windowsHide:true});children.push(child);let output='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>output+=chunk);
   const base='http://127.0.0.1:'+port+'/api';let ready=false;
   try{
     const deadline=Date.now()+30000;
@@ -160,6 +168,27 @@ test('恢复副本可启动真实 API，原账户可登录、历史可读、附�
     const file=await fetch(base+'/upload/'+f.upload.id+'/raw',{headers});assert.equal(file.status,200);assert.deepEqual(Buffer.from(await file.arrayBuffer()),f.contents);
     assert.equal((await(await fetch(base+'/installation/status')).json()).data.required,false);
   }finally{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await once(child,'exit');}}
+});
+
+test('恢复配置核对文件内容并只生成一个独立副本',async()=>{
+  const f=await fixture(),original=(await readFile(f.options.envFile,'utf8'))+'SAMPLE_TEXT="文字 # 一行\n下一行"\n';
+  await writeFile(f.options.envFile,original);
+  await createEncryptedBackup(f.options);
+  const destination=join(f.root,'prepare'),envPath=join(destination,'.env.recovered');
+  await restoreEncryptedBackup({input:f.options.output,keyFile:f.options.keyFile,destination});
+  const attachment=join(destination,'bundle/storage/2026/11/attachment.txt');
+  await writeFile(attachment,Buffer.alloc(f.contents.length));
+  await assert.rejects(()=>prepareRestoredEnvironment({destination}),/恢复文件内容已变化/);
+  await assert.rejects(()=>readFile(envPath),{code:'ENOENT'});
+  await writeFile(attachment,f.contents);
+  const attempts=await Promise.allSettled([prepareRestoredEnvironment({destination}),prepareRestoredEnvironment({destination})]);
+  assert.equal(attempts.filter(result=>result.status==='fulfilled').length,1);
+  const generated=await readFile(envPath,'utf8'),parsed=parseEnv(generated);
+  assert.equal(parsed.SAMPLE_TEXT,'文字 # 一行\n下一行');
+  assert.equal(parsed.JWT_SECRET,f.env.JWT_SECRET);
+  assert.equal(await readFile(join(destination,'bundle/environment/original.env'),'utf8'),original);
+  await assert.rejects(()=>prepareRestoredEnvironment({destination}),/目标已经存在/);
+  assert.equal(await readFile(envPath,'utf8'),generated);
 });
 
 test('维护 CLI 只接受文件路径、不提供明文密码参数，输出不含配置或渠道凭据',async()=>{
