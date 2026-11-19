@@ -2,20 +2,52 @@
   <div class="qg-client-shell" :class="{ 'is-floating': floating && appearance.variant !== 'play', 'is-feature-page': !isChat, 'is-immersive': immersive && isChat, 'drawer-open': clientNavigationOpen }">
     <AmbientScene />
     <nav class="qgd-primary-navigation" :style="{'--qgc-tool-space':toolSpace+'px'}" :class="{ 'qgd-liquid': appearance.variant === 'orbit' }" :aria-label="t('shell.primaryNavigation')"><router-link class="qgd-rail-logo" to="/chat" :aria-label="t('shell.home')"><img src="/brand/qgauss-mark.svg" alt="" /><b>QGauss</b></router-link><div ref="primaryNavigation" :class="{ 'qgd-liquid': appearance.variant === 'play' }"><MenuLink v-for="item in navigation" :key="item.id||item.path" :row="item" :active="navActive(item.path)" layout="rail"/></div><button type="button" :aria-label="t('shell.appearance')" @click="appearance.open = true"><ClientIcon name="palette" /></button></nav>
-    <button v-if="clientNavigationOpen" class="qgc-drawer-mask" type="button" :aria-label="t('shell.closeNavigation')" @click="clientNavigationOpen = false"></button>
-    <aside ref="sidebarElement" class="qgc-sidebar" :aria-label="'QGauss AI ' + t('shell.navigation')" :inert="mobile && !clientNavigationOpen" :aria-hidden="mobile && !clientNavigationOpen ? 'true' : undefined">
-      <router-link class="qgc-brand" to="/chat" aria-label="QGauss AI"><img src="/brand/qgauss-mark.svg" alt="" /><span><b>QGauss AI</b><small>{{ t('shell.slogan') }}</small></span></router-link>
-      <nav v-if="favoriteNavigation.length" class="qgc-pinned-nav" :aria-label="t('shell.quickNavigation')"><MenuLink v-for="item in favoriteNavigation" :key="item.id||item.path" :row="item" :active="navActive(item.path)"/></nav>
-      <p v-if="navigationError" class="qgc-navigation-state" role="status">{{nt(navigationError)}}<button type="button" :disabled="navigationLoading" @click="$emit('refresh-navigation')">{{nt('重新读取')}}</button></p><div v-if="isChat" id="qg-chat-history" class="qgc-history"></div>
-      <nav v-else class="qgc-nav" :aria-label="t('shell.navigation')"><MenuLink v-for="item in navigation" :key="item.id||item.path" :row="item" :active="navActive(item.path)"/></nav>
-      <footer class="qgc-side-footer">
-        <button type="button" @click="dialog = 'navigation'"><ClientIcon name="plus" /><span>{{ t('shell.addMenu') }}</span></button>
-        <button type="button" @click="dialog = 'about'"><ClientIcon name="info" /><span>{{ t('shell.about') }}</span></button>
-      </footer>
-    </aside>
-    <header class="qgc-header" :inert="mobile && clientNavigationOpen">
+    <div id="qgc-desktop-sidebar"></div>
+    <dialog id="qgc-mobile-drawer" ref="drawerElement" class="qgc-drawer" :aria-label="t('shell.navigation')"
+      @cancel.prevent="dismissDrawer" @close="drawerClosed" @click.self="dismissDrawer"
+      @keydown.esc.capture="keepDrawerBehindPopup" @keydown.tab="keepDrawerFocus">
+      <div id="qgc-mobile-sidebar" class="qgc-drawer-body"></div>
+    </dialog>
+    <Teleport defer :to="mobile ? '#qgc-mobile-sidebar' : '#qgc-desktop-sidebar'">
+      <aside class="qgc-sidebar" :aria-label="t('shell.navigation')">
+        <div class="qgc-sidebar-heading">
+          <router-link class="qgc-brand" to="/chat" aria-label="QGauss AI" @click="closeDrawer">
+            <img src="/brand/qgauss-mark.svg" alt="" /><span><b>QGauss AI</b><small>{{ t('shell.slogan') }}</small></span>
+          </router-link>
+          <button v-if="mobile" class="qgc-drawer-close" type="button" autofocus :aria-label="t('shell.closeNavigation')" @click="closeDrawer">
+            <ClientIcon name="close" />
+          </button>
+        </div>
+        <div v-if="mobile && isChat" class="qgc-drawer-tabs" role="group" :aria-label="t('shell.navigation')">
+          <button type="button" :aria-pressed="clientNavigationPane === 'pages'" @click="clientNavigationPane = 'pages'">
+            <ClientIcon name="apps" />{{ t('shell.allPages') }}
+          </button>
+          <button type="button" :aria-pressed="clientNavigationPane === 'history'" @click="clientNavigationPane = 'history'">
+            <ClientIcon name="chat" />{{ t('shell.chatHistory') }}
+          </button>
+        </div>
+        <nav v-if="favoriteNavigation.length" class="qgc-pinned-nav" :aria-label="t('shell.quickNavigation')">
+          <MenuLink v-for="item in favoriteNavigation" :key="item.id||item.path" :row="item" :active="navActive(item.path)" @navigate="closeDrawer" />
+        </nav>
+        <p v-if="navigationError" class="qgc-navigation-state" role="status">{{nt(navigationError)}}<button type="button" :disabled="navigationLoading" @click="$emit('refresh-navigation')">{{nt('重新读取')}}</button></p>
+        <div v-if="isChat" v-show="!mobile || clientNavigationPane === 'history'" id="qg-chat-history" class="qgc-history"></div>
+        <nav v-if="!isChat || (mobile && clientNavigationPane === 'pages')" class="qgc-nav" :class="{ 'qgc-drawer-pages': mobile }" :aria-label="t('shell.allPages')">
+          <MenuLink v-for="item in navigation" :key="item.id||item.path" :row="item" :active="navActive(item.path)" @navigate="closeDrawer" />
+        </nav>
+        <footer class="qgc-side-footer">
+          <button type="button" @click="dialog = 'navigation'"><ClientIcon name="plus" /><span>{{ t('shell.addMenu') }}</span></button>
+          <button type="button" @click="dialog = 'about'"><ClientIcon name="info" /><span>{{ t('shell.about') }}</span></button>
+        </footer>
+      </aside>
+      <div v-if="isChat" id="qg-chat-history-overlays"></div>
+    </Teleport>
+    <header class="qgc-header">
       <div class="qgc-header-left">
-        <button ref="layoutButton" class="qgc-layout-toggle" type="button" :aria-label="mobile ? t('shell.openNavigation') : t('shell.toggleSidebar')" :aria-expanded="mobile ? clientNavigationOpen : undefined" @click="toggleLayout"><img v-if="mobile" src="/brand/qgauss-mark.svg" alt="" /><ClientIcon v-else name="layout" /></button>
+        <button class="qgc-layout-toggle" type="button" :aria-label="mobile ? t('shell.openNavigation') : t('shell.toggleSidebar')"
+          :aria-expanded="mobile ? clientNavigationOpen : undefined" :aria-haspopup="mobile ? 'dialog' : undefined"
+          :aria-controls="mobile ? 'qgc-mobile-drawer' : undefined" @click="toggleLayout">
+          <img v-if="mobile" src="/brand/qgauss-mark.svg" alt="" /><ClientIcon v-else name="layout" />
+        </button>
         <div ref="navPopupRoot" class="qgc-page-nav">
           <button class="qgc-page-title" type="button" :aria-expanded="menu === 'navigation'" @click="toggleMenu('navigation')">{{ pageTitle }}</button>
           <nav v-if="menu === 'navigation'" class="qgc-popover qgc-nav-popover" :aria-label="t('shell.switchPage')"><MenuLink v-for="item in navigation" :key="item.id||item.path" :row="item" :active="navActive(item.path)" @navigate="menu=''"/></nav>
@@ -30,8 +62,16 @@
         <router-link v-else class="qgc-login" :to="{ path: '/login', query: { redirect: route.fullPath } }">{{ t('shell.login') }}</router-link>
       </div>
     </header>
-    <main class="qgc-content" :inert="mobile && clientNavigationOpen"><slot /></main>
-    <nav v-if="mobile" ref="mobileNavigation" class="qgc-mobile-nav qgd-liquid" :aria-label="t('shell.mobileNavigation')" :inert="clientNavigationOpen"><MenuLink v-for="item in navigation.filter(item=>item.path!=='/statistic')" :key="item.id||item.path" :row="item" :active="navActive(item.path)" layout="tab"/></nav>
+    <main class="qgc-content"><slot /></main>
+    <nav v-if="mobile" class="qgc-mobile-nav qgd-liquid" :aria-label="t('shell.mobileNavigation')">
+      <div ref="mobileNavigation" class="qgc-mobile-entries">
+        <MenuLink v-for="item in navigation.filter(item=>item.path!=='/statistic')" :key="item.id||item.path" :row="item" :active="navActive(item.path)" layout="tab" />
+      </div>
+      <button class="qgc-dock-more" type="button" aria-haspopup="dialog" aria-controls="qgc-mobile-drawer"
+        :aria-expanded="clientNavigationOpen" @click="openClientNavigation('pages', $event.currentTarget)">
+        <ClientIcon name="apps" /><span>{{ t('shell.morePages') }}</span>
+      </button>
+    </nav>
     <dialog ref="dialogElement" class="qgc-dialog" :aria-label="dialogTitle" @cancel.prevent="dialog = ''">
       <div class="qgc-dialog-heading"><h2>{{ dialogTitle }}</h2><button type="button" :aria-label="t('shell.close')" @click="dialog = ''"><ClientIcon name="close" /></button></div>
       <template v-if="dialog === 'notice'"><p class="qgc-notice-content">{{ siteConfig['site.announcement'] || t('shell.noNotice') }}</p></template>
@@ -64,11 +104,11 @@ const props = defineProps({ menus: { type: Array, default: () => [] }, siteConfi
 const emit = defineEmits(['logout', 'dismiss-announcement','refresh-navigation']);
 const route = useRoute(), auth = useAuth();
 const appearance = useAppearance();
-const { immersive, clientNavigationOpen, clientChatTitle } = useUi();
+const { immersive, clientNavigationOpen, clientNavigationPane, openClientNavigation, clientChatTitle } = useUi();
 const { isDark, toggle: toggleTheme } = useTheme();
 const media = window.matchMedia('(max-width:639px)'), mobile = ref(media.matches);
 function updateMobile(event) { mobile.value = event.matches; clientNavigationOpen.value = false; }
-const floating = ref(false), menu = ref(''), dialog = ref(''), dialogElement = ref(null), toolsRoot = ref(null), navPopupRoot = ref(null), sidebarElement = ref(null), layoutButton = ref(null);
+const floating = ref(false), menu = ref(''), dialog = ref(''), dialogElement = ref(null), drawerElement = ref(null), toolsRoot = ref(null), navPopupRoot = ref(null);
 const primaryNavigation=ref(null),mobileNavigation=ref(null),toolSpace=ref(240);let toolsObserver;
 const favorites = ref([]);
 try { floating.value = localStorage.getItem('qg:client-layout') === 'floating'; } catch { /* 只影响布局偏好保存 */ }
@@ -91,22 +131,51 @@ function toggleFavorite(item) {
   try { localStorage.setItem('qg:client-favorites', JSON.stringify(favorites.value)); } catch { /* 当前界面仍使用所选菜单 */ }
 }
 function toggleMenu(next) { menu.value = menu.value === next ? '' : next; }
-function toggleLayout() {
-  if (mobile.value) { clientNavigationOpen.value = !clientNavigationOpen.value; return; }
+function toggleLayout(event) {
+  if (mobile.value) {
+    if (clientNavigationOpen.value) closeDrawer();
+    else openClientNavigation('pages', event.currentTarget);
+    return;
+  }
   floating.value = !floating.value;
   try { localStorage.setItem('qg:client-layout', floating.value ? 'floating' : 'workbench'); } catch { /* 忽略 */ }
 }
 function outside(event) { if (!toolsRoot.value?.contains(event.target) && !navPopupRoot.value?.contains(event.target)) menu.value = ''; }
-function keyboard(event) { if (event.key === 'Escape') { menu.value = ''; clientNavigationOpen.value = false; } }
+function keyboard(event) { if (event.key === 'Escape') menu.value = ''; }
+function closeDrawer() { clientNavigationOpen.value = false; }
+function drawerClosed() { if (!drawerElement.value?.open) closeDrawer(); }
+function historyPopupVisible() {
+  const popups = drawerElement.value?.querySelectorAll('#qg-chat-history-overlays :is(.el-dropdown__popper,.el-overlay.is-message-box)');
+  return popups && [...popups].some(node => node.getClientRects().length);
+}
+function dismissDrawer() { if (!historyPopupVisible()) closeDrawer(); }
+function keepDrawerBehindPopup(event) { if (historyPopupVisible()) event.preventDefault(); }
+function keepDrawerFocus(event) {
+  const drawer = drawerElement.value;
+  if (!drawer?.open || event.defaultPrevented || historyPopupVisible()) return;
+  const controls = [...drawer.querySelectorAll('a[href],button,input,select,textarea,[tabindex]')].filter(node =>
+    node.tabIndex >= 0 && !node.matches(':disabled') && !node.closest('[inert],[aria-hidden="true"]') &&
+    node.getClientRects().length && getComputedStyle(node).visibility === 'visible',
+  );
+  const first = controls[0], last = controls.at(-1);
+  if ((event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first)?.focus();
+  }
+}
 async function revealNavigation(){await nextTick();for(const nav of [primaryNavigation.value,mobileNavigation.value])nav?.querySelector('[aria-current=page]')?.scrollIntoView?.({block:'nearest',inline:'nearest',behavior:'auto'});}
 watch([()=>route.path,()=>appearance.variant,mobile,()=>navigation.value.map(row=>row.path).join('|')],()=>void revealNavigation());
 watch(() => route.fullPath, () => { menu.value = ''; clientNavigationOpen.value = false; });
-watch(clientNavigationOpen, async (open) => {
-  if (!mobile.value) return;
-  await nextTick();
-  if (open) sidebarElement.value?.querySelector('a,button')?.focus();
-  else layoutButton.value?.focus();
-});
+watch([mobile, clientNavigationOpen], ([narrow, requested]) => {
+  const drawer = drawerElement.value;
+  if (!drawer) return;
+  if (narrow && requested && !drawer.open) {
+    menu.value = '';
+    drawer.showModal();
+  } else if ((!narrow || !requested) && drawer.open) {
+    drawer.close();
+  }
+}, { flush: 'post' });
 watch(dialog, async (kind, old) => {
   menu.value = '';
   if (old === 'notice' && !kind) emit('dismiss-announcement');
@@ -116,5 +185,5 @@ watch(dialog, async (kind, old) => {
   else if (!kind && dialogElement.value.open) dialogElement.value.close();
 });
 onMounted(() => {if(typeof ResizeObserver!=='undefined'&&toolsRoot.value){toolsObserver=new ResizeObserver(()=>{toolSpace.value=Math.ceil(toolsRoot.value?.getBoundingClientRect().width||240);});toolsObserver.observe(toolsRoot.value);}void revealNavigation();media.addEventListener('change', updateMobile); document.addEventListener('pointerdown', outside); document.addEventListener('keydown', keyboard); });
-onBeforeUnmount(() => {toolsObserver?.disconnect();media.removeEventListener('change', updateMobile); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', keyboard); });
+onBeforeUnmount(() => {closeDrawer();drawerElement.value?.close();toolsObserver?.disconnect();media.removeEventListener('change', updateMobile); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', keyboard); });
 </script>
